@@ -20,7 +20,7 @@ In:
 - Packages `cmd/`, `config/`, `logx/`, `localapi/`, `svc/`.
 - Local API with one route, `GET /status`.
 - Makefile, golangci-lint config, go-winres resources, go-win7 fetch + checksum, GoReleaser,
-  GitHub Actions CI with a service smoke job.
+  a minimal GitHub Actions CI (D-009).
 
 Out (later milestones): identity, discovery, the LAN listener (config carries `listen` but the
 agent does not open it), firewall rules (M1, D-007), tray (M5), `test-integration` (M2),
@@ -145,14 +145,9 @@ PRD's section 25 list is in the repo.
 - **golangci-lint:** `.golangci.yml` (v2) with the `standard` set plus `errorlint`,
   `misspell`, `gofmt` formatter.
 - **CI** (`.github/workflows/ci.yml`, on push to `master` and PRs, docs-only changes skipped,
-  stale runs cancelled):
-  - `test`: ubuntu + macos with `-race`, windows without.
-  - `lint`: golangci-lint.
-  - `build`: ubuntu, `goreleaser release --snapshot --clean` (includes both win7 assets).
-  - `smoke`: windows-latest, ubuntu-latest, macos-latest. Build the host binary, then with
-    admin/sudo: `service install --role node`, `service status`, `doctor`,
-    `service uninstall`, and `service status` again must exit 1. Windows runners are
-    Windows Server, the closest CI stand-in for Windows 10/11.
+  stale runs cancelled): one ubuntu job, about 1–2 minutes — `go vet` for linux, darwin and
+  windows, golangci-lint, `go test -race` (D-009). The build matrix runs locally with
+  `make build-all`; service install is smoke-tested by hand (macOS locally, Windows 7 VM).
 - **Windows 7 smoke** (manual, D-005): VM with Windows 7 SP1 + KB3125574 on the owner's
   Windows 11 PC. Copy `sevjala-win7-amd64.exe` (and `-386.exe` on a 32-bit VM); from an
   Administrator prompt run `version`, `service install --role node`, `service status`,
@@ -169,7 +164,7 @@ PRD's section 25 list is in the repo.
   client `GET /status` returns the fields; unknown path → 404; endpoint derivation for
   default vs custom data dir.
 - `cmd`: status/doctor rendering from fixed inputs; `--role` validation exit codes.
-- `svc`: install/uninstall is proven by the CI smoke job, not unit tests.
+- `svc`: install/uninstall is proven by the manual smokes (macOS, Windows 7 VM), not unit tests.
 - TDD per package (superpowers:test-driven-development).
 
 ## Decisions recorded with this spec

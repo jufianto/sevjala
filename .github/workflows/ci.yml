@@ -15,88 +15,20 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: .tool-versions
-      - name: test (race)
-        if: runner.os != 'Windows'
-        run: go test -race ./...
-      - name: test
-        if: runner.os == 'Windows'
-        run: go test ./...
-
-  lint:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: .tool-versions
+      - name: vet (linux, darwin, windows)
+        run: |
+          go vet ./...
+          GOOS=darwin go vet ./...
+          GOOS=windows go vet ./...
       - uses: golangci/golangci-lint-action@v8
         with:
           version: v2.14.0
-
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: .tool-versions
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          version: "~> v2"
-          args: release --snapshot --clean
-      - run: cat dist/checksums.txt
-
-  smoke:
-    needs: test
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: .tool-versions
-      - name: smoke (unix)
-        if: runner.os != 'Windows'
-        run: |
-          set -x
-          CGO_ENABLED=0 go build -o sevjala .
-          sudo ./sevjala service install --role node
-          sudo ./sevjala service status
-          sudo ./sevjala doctor
-          sudo ./sevjala service uninstall
-          if sudo ./sevjala service status; then echo "status must fail after uninstall"; exit 1; fi
-      - name: smoke (windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          go build -o sevjala.exe .
-          .\sevjala.exe service install --role node; if ($LASTEXITCODE) { exit 1 }
-          .\sevjala.exe service status; if ($LASTEXITCODE) { exit 1 }
-          .\sevjala.exe doctor; if ($LASTEXITCODE) { exit 1 }
-          .\sevjala.exe service uninstall; if ($LASTEXITCODE) { exit 1 }
-          .\sevjala.exe service status
-          if ($LASTEXITCODE -eq 0) { throw "status must fail after uninstall" }
-          exit 0
-      - name: agent log on failure (unix)
-        if: failure() && runner.os != 'Windows'
-        run: sudo find /var/lib/sevjala "/Library/Application Support/Sevjala" -name 'sevjala.log*' -exec cat {} + 2>/dev/null || true
-      - name: agent log on failure (windows)
-        if: failure() && runner.os == 'Windows'
-        shell: pwsh
-        run: Get-Content "$env:ProgramData\Sevjala\logs\sevjala.log" -ErrorAction SilentlyContinue
+      - name: test
+        run: go test -race ./...
