@@ -133,7 +133,7 @@ PRD's section 25 list is in the repo.
   exit 1. Idempotent: skips the download when the unpacked SDK's checksum stamp matches.
 - **GoReleaser** (`.goreleaser.yaml`, v2): build `stock` (windows/amd64, darwin/amd64,
   darwin/arm64, linux/amd64) and build `win7` (windows/amd64, windows/386) with
-  `tool: .cache/go-win7/go/bin/go` and `GOTOOLCHAIN=local`. All `CGO_ENABLED=0`, `-trimpath`,
+  `tool: .cache/go-win7/bin/go` and `GOTOOLCHAIN=local`. All `CGO_ENABLED=0`, `-trimpath`,
   ldflags set the version. Before-hooks: fetch go-win7, run go-winres. Archives use format
   `binary` named as the blueprint's assets (`sevjala-windows-amd64.exe`,
   `sevjala-win7-amd64.exe`, `sevjala-win7-386.exe`, `sevjala-darwin-arm64`,
