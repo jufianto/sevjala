@@ -26,7 +26,7 @@ func LockDataDir(dir string) error {
 	if err != nil {
 		return err
 	}
-	if !trusted(owner) {
+	if !trusted(owner) && !isProcessUser(owner) {
 		return fmt.Errorf("refusing %s: owned by %s, not Administrators or SYSTEM; remove it or take ownership as an administrator first", dir, account(owner))
 	}
 	want, err := windows.SecurityDescriptorFromString(lockedSDDL)
@@ -95,4 +95,17 @@ func account(s *windows.SID) string {
 		return s.String()
 	}
 	return dom + `\` + acc
+}
+
+// isProcessUser accepts a dir owned by the administrator running install: with
+// UAC off (or the built-in Administrator) Windows 7 makes the user, not the
+// Administrators group, the owner of what it creates.
+func isProcessUser(s *windows.SID) bool {
+	var t windows.Token
+	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &t); err != nil {
+		return false
+	}
+	defer t.Close()
+	u, err := t.GetTokenUser()
+	return err == nil && s.Equals(u.User.Sid)
 }
