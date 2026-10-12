@@ -87,9 +87,14 @@ func (c *Controller) AddAgent(ctx context.Context, addr string) (localapi.Discov
 		Version: info.Version, FP: info.FP}
 	a, err := c.Store.Agent(ctx, info.AgentID)
 	switch {
-	case err == nil:
-		d.Paired = a.FP == info.FP
-	case !errors.Is(err, store.ErrNotFound):
+	case err == nil && a.FP == info.FP:
+		d.Paired = true
+		host, portStr, _ := net.SplitHostPort(addr)
+		port, _ := strconv.Atoi(portStr)
+		if err := c.Store.UpdateAddress(ctx, a.AgentID, info.Hostname, host, port); err != nil {
+			return localapi.Discovered{}, err
+		}
+	case err != nil && !errors.Is(err, store.ErrNotFound):
 		return localapi.Discovered{}, err
 	}
 	c.remember(d)
@@ -113,6 +118,11 @@ func (c *Controller) Pair(ctx context.Context, agent, code string) (localapi.Age
 	}
 	if _, err := c.LAN.Pair(ctx, d.Addr, d.FP, code); err != nil {
 		c.Log.Warn("pairing failed", logx.Event(logx.EventPairRejected), "agent_id", d.AgentID, "addr", d.Addr, "err", err)
+		if errors.Is(err, lanapi.ErrRejected) {
+			return localapi.Agent{}, localapi.Errorf(http.StatusBadGateway,
+				"pair %s: it has no active pairing code (expired after 10 minutes, already used, burnt by %d wrong codes, or the node restarted); run 'sevjala code' on it again",
+				d.Hostname, pairing.MaxAttempts)
+		}
 		return localapi.Agent{}, localapi.Errorf(http.StatusBadGateway, "pair %s: %v", d.Hostname, err)
 	}
 	host, portStr, _ := net.SplitHostPort(d.Addr)

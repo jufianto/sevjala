@@ -94,7 +94,7 @@ sevjala discover                      # B listed, PAIRED yes
 # C (stranger controller)
 sevjala service install --role controller
 sevjala agents add <B ip>
-sevjala pair <B> --code 123456        # "rejected this controller's certificate", exit 1
+sevjala pair <B> --code 123456        # "has no active pairing code", exit 1; B logs peer_rejected (TLS)
 # B: restart the service, then on A
 sevjala ping <B>                      # still answers
 ```
@@ -102,6 +102,8 @@ sevjala ping <B>                      # still answers
 Windows checks on each Windows PC:
 
 - `sevjala doctor` shows `ok lockdown`, `ok lan api`, `ok firewall`.
+- Install once more on a Win7 PC with UAC turned off (or as the built-in Administrator): it must
+  succeed and `doctor` must show `ok lockdown` (the new folder is owned by that user at first).
 - `icacls C:\ProgramData\Sevjala` lists only `NT AUTHORITY\SYSTEM` and `BUILTIN\Administrators`.
 - `netsh advfirewall firewall show rule name=Sevjala-LAN-API` and `…name=Sevjala-Discovery` exist;
   after `sevjala service uninstall` both are gone.

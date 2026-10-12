@@ -201,3 +201,38 @@ func TestDiscoverRefreshesPairedAddress(t *testing.T) {
 		t.Errorf("ping after rediscovery: %v", err)
 	}
 }
+
+// agents add is the fallback when broadcast cannot reach a node, so it must
+// heal a DHCP change just like discover does.
+func TestAddAgentRefreshesPairedAddress(t *testing.T) {
+	ctx := context.Background()
+	node := startAgent(t, "node", "PC-VLAN")
+	ctrl := newController(t)
+	ctrl.AddAgent(ctx, node.lan.Addr())
+	code, _, _ := node.codes.Issue()
+	if _, err := ctrl.Pair(ctx, "PC-VLAN", code); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctrl.Store.UpdateAddress(ctx, node.id.AgentID, "PC-VLAN", "10.255.255.1", 1); err != nil {
+		t.Fatal(err)
+	}
+	if d, err := ctrl.AddAgent(ctx, node.lan.Addr()); err != nil || !d.Paired {
+		t.Fatalf("re-add: %+v %v", d, err)
+	}
+	if _, err := ctrl.Ping(ctx, "PC-VLAN"); err != nil {
+		t.Errorf("ping after re-add: %v", err)
+	}
+}
+
+// With no active code the node fails the handshake; the operator must be told
+// to get a new code, not that the certificate was rejected.
+func TestPairWithoutActiveCodeSaysWhy(t *testing.T) {
+	ctx := context.Background()
+	node := startAgent(t, "node", "PC-LATE")
+	ctrl := newController(t, node.disco)
+	ctrl.Discover(ctx)
+	_, err := ctrl.Pair(ctx, "PC-LATE", "123456")
+	if err == nil || !strings.Contains(err.Error(), "no active pairing code") || !strings.Contains(err.Error(), "sevjala code") {
+		t.Errorf("err = %v", err)
+	}
+}
