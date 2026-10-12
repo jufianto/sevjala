@@ -22,7 +22,7 @@ func TestStaleSocketRemoved(t *testing.T) {
 	ln.(*net.UnixListener).SetUnlinkOnClose(false)
 	ln.Close()
 
-	srv, err := Start(ep, NewHandler(func() Status { return Status{} }), discard)
+	srv, err := Start(ep, NewHandler(&fakeBackend{}), discard)
 	if err != nil {
 		t.Fatalf("stale socket blocked Start: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestSocketPermissions(t *testing.T) {
 
 func TestStartErrorsOnBadEndpoint(t *testing.T) {
 	ep := filepath.Join(testDir(t), "missing-dir", "sevjala.sock")
-	if _, err := Start(ep, NewHandler(func() Status { return Status{} }), discard); err == nil {
+	if _, err := Start(ep, NewHandler(&fakeBackend{}), discard); err == nil {
 		t.Fatal("Start succeeded in a missing directory")
 	}
 }

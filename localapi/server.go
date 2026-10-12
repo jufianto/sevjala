@@ -11,23 +11,73 @@ import (
 	"time"
 )
 
-type Status struct {
-	Version string `json:"version"`
-	Role    string `json:"role"`
-	PID     int    `json:"pid"`
-	UptimeS int64  `json:"uptime_s"`
-	DataDir string `json:"data_dir"`
-}
+const maxBody = 4 << 10
 
-func NewHandler(status func() Status) http.Handler {
+func NewHandler(b Backend) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /status", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, status())
+		writeJSON(w, http.StatusOK, b.Status())
+	})
+	mux.HandleFunc("POST /code", func(w http.ResponseWriter, _ *http.Request) {
+		c, err := b.Code()
+		reply(w, c, err)
+	})
+	mux.HandleFunc("POST /discover", func(w http.ResponseWriter, r *http.Request) {
+		ds, err := b.Discover(r.Context())
+		reply(w, listOf(ds), err)
+	})
+	mux.HandleFunc("GET /agents", func(w http.ResponseWriter, r *http.Request) {
+		as, err := b.Agents(r.Context())
+		reply(w, listOf(as), err)
+	})
+	mux.HandleFunc("POST /agents", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Addr string `json:"addr"`
+		}
+		if decode(w, r, &req) {
+			d, err := b.AddAgent(r.Context(), req.Addr)
+			reply(w, d, err)
+		}
+	})
+	mux.HandleFunc("POST /pair", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Agent string `json:"agent"`
+			Code  string `json:"code"`
+		}
+		if decode(w, r, &req) {
+			a, err := b.Pair(r.Context(), req.Agent, req.Code)
+			reply(w, a, err)
+		}
+	})
+	mux.HandleFunc("POST /agents/{agent}/ping", func(w http.ResponseWriter, r *http.Request) {
+		p, err := b.Ping(r.Context(), r.PathValue("agent"))
+		reply(w, p, err)
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 	})
 	return mux
+}
+
+func decode(w http.ResponseWriter, r *http.Request, v any) bool {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody)).Decode(v); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request: " + err.Error()})
+		return false
+	}
+	return true
+}
+
+func reply(w http.ResponseWriter, v any, err error) {
+	if err != nil {
+		code := http.StatusInternalServerError
+		var e *Error
+		if errors.As(err, &e) {
+			code = e.Code
+		}
+		writeJSON(w, code, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
