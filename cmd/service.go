@@ -83,6 +83,9 @@ func newServiceInstallCmd(g *globals) *cobra.Command {
 			if err := checkNotInstalled(s); err != nil {
 				return fail(err)
 			}
+			if err := svc.LockDataDir(dataDir); err != nil {
+				return fail(err)
+			}
 			created, err := svc.PrepareDataDir(dataDir, role)
 			if err != nil {
 				return fail(err)
@@ -100,6 +103,16 @@ func newServiceInstallCmd(g *globals) *cobra.Command {
 				} else {
 					fmt.Fprintf(out, "add operators to group %s to use the CLI without sudo\n", config.SocketGroup)
 				}
+			}
+			cfg, err := config.Load(config.Path(dataDir))
+			if err != nil {
+				return fail(err)
+			}
+			if err := svc.AddFirewallRules(cfg.ListenPort(), cfg.DiscoveryPort); err != nil {
+				return failf("firewall: %w", err)
+			}
+			if runtime.GOOS == "windows" {
+				fmt.Fprintf(out, "opened the Windows firewall for %d/tcp and %d/udp\n", cfg.ListenPort(), cfg.DiscoveryPort)
 			}
 			exe, _ := os.Executable()
 			if err := s.Install(); err != nil {
@@ -146,6 +159,7 @@ func newServiceUninstallCmd(g *globals) *cobra.Command {
 			if err := s.Uninstall(); err != nil {
 				return failf("uninstall service: %w", err)
 			}
+			svc.RemoveFirewallRules()
 			fmt.Fprintf(c.OutOrStdout(), "uninstalled service %s; data kept in %s\n", svc.Name, dataDir)
 			return nil
 		},
