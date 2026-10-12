@@ -19,6 +19,13 @@ const (
 	EventAgentStopped       = "agent_stopped"
 	EventServiceInstalled   = "service_installed"
 	EventServiceUninstalled = "service_uninstalled"
+	EventIdentityCreated    = "identity_created"
+	EventDiscoveryRun       = "discovery_run"
+	EventAgentAdded         = "agent_added"
+	EventPairCodeIssued     = "pair_code_issued"
+	EventPairSucceeded      = "pair_succeeded"
+	EventPairRejected       = "pair_rejected"
+	EventPeerRejected       = "peer_rejected"
 )
 
 func Event(name string) slog.Attr { return slog.String("event", name) }

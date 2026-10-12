@@ -15,6 +15,7 @@ const (
 	RoleNode             = "node"
 	DefaultListen        = "0.0.0.0:17891"
 	DefaultDiscoveryPort = 17890
+	DefaultLANPort       = 17891
 )
 
 type Config struct {
@@ -75,6 +76,13 @@ func (c Config) Validate() error {
 		return fmt.Errorf("discovery_port %d: must be 1-65535", c.DiscoveryPort)
 	}
 	return nil
+}
+
+// ListenPort is the TCP port of Listen; Validate guarantees it parses.
+func (c Config) ListenPort() int {
+	_, port, _ := net.SplitHostPort(c.Listen)
+	p, _ := strconv.Atoi(port)
+	return p
 }
 
 // Load reads and validates a config file; keys it omits keep their defaults.

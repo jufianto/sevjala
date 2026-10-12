@@ -112,3 +112,14 @@ func TestWriteRoundTrip(t *testing.T) {
 		t.Errorf("round trip = %+v", got)
 	}
 }
+
+func TestListenPort(t *testing.T) {
+	if got := Default(RoleNode).ListenPort(); got != DefaultLANPort {
+		t.Errorf("ListenPort = %d, want %d", got, DefaultLANPort)
+	}
+	c := Default(RoleNode)
+	c.Listen = "192.168.1.5:9000"
+	if got := c.ListenPort(); got != 9000 {
+		t.Errorf("ListenPort = %d, want 9000", got)
+	}
+}
