@@ -13,7 +13,7 @@ Hard-to-reverse choices beyond the blueprint get an [ADR](./adr/README.md).
 | D-005 | 2026-10-12 | Win7 smoke is manual on a Windows 7 SP1 + KB3125574 VM (on a Windows 11 host), transcript pasted in the PR; no `smoke-win7` CI job. CI smoke covers Windows Server, Ubuntu, macOS runners. | No Win7 CI runner exists; the owner has the VM. |
 | D-006 | 2026-10-12 | `logx` uses its own size-based rotating writer (10 MiB × 10 files), no lumberjack. | The requirement is size × count only; keeps the dependency list to the blueprint's. |
 | D-007 | 2026-10-12 | Windows firewall rules for 17890/udp and 17891/tcp are added by `service install` from M1, not P0. | P0 opens no LAN port. |
-| D-008 | 2026-10-12 | `--data-dir` / `SEVJALA_DATA_DIR` overrides the data dir; a non-default data dir also moves the local endpoint (`<data-dir>/sevjala.sock`, or `\\.\pipe\sevjala-<hash>`). `service install` creates group `sevjala` and adds `$SUDO_USER` on macOS/Linux. | Dev and tests run without root and never collide; the CLI works without sudo after install. |
+| D-008 | 2026-10-12 | `--data-dir` / `SEVJALA_DATA_DIR` overrides the data dir; a non-default data dir also moves the local endpoint (`<data-dir>/sevjala.sock`, or `\\.\pipe\sevjala-<hash>`). `service install` creates group `sevjala` and adds `$SUDO_USER` on macOS/Linux. | Dev and tests run without root and never collide; the CLI works without sudo after install. On Windows a custom pipe keeps the default DACL so an un-elevated developer reaches their own agent. |
 
 ## Open questions
 

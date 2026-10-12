@@ -18,3 +18,27 @@ Until M1 implements them, the blueprint is the contract:
 
 When a milestone implements a format, move its exact definition here (field types,
 required/optional, error responses) and leave a link in the blueprint.
+
+## Local API (implemented)
+
+Transport: HTTP/1.1 over `\\.\pipe\sevjala` (Windows, SDDL `D:P(A;;GA;;;BA)(A;;GA;;;SY)`) or
+`/var/run/sevjala.sock` (macOS/Linux, `0660 root:sevjala`). A non-default data dir uses
+`<data-dir>/sevjala.sock` or `\\.\pipe\sevjala-<first 8 hex of sha256(data dir)>` (default DACL).
+
+### `GET /status` (since P0)
+
+`200 application/json`
+
+```json
+{"version": "0.1.0", "role": "node", "pid": 4120, "uptime_s": 133, "data_dir": "C:\\ProgramData\\Sevjala"}
+```
+
+| Field | Type | Meaning |
+|---|---|---|
+| `version` | string | agent build version (`dev` for local builds) |
+| `role` | string | `controller` or `node` |
+| `pid` | int | agent process id |
+| `uptime_s` | int | seconds since the agent started |
+| `data_dir` | string | absolute data dir |
+
+Any other path: `404 {"error":"not found"}`.

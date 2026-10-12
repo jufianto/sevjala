@@ -78,8 +78,9 @@ data dir  C:\ProgramData\Sevjala
 `Platform()`). `agent` is `answering …` or `not answering (<error>)`. Exit 0 only when the
 service is running **and** the agent answers.
 
-Privileges: on Windows, `status` and `doctor` need an Administrator prompt (the pipe ACL
-allows only Administrators + SYSTEM). On macOS/Linux, members of `sevjala` reach the socket
+Privileges: `doctor` needs sudo / an Administrator prompt everywhere (it writes a probe file
+into the data dir); on Windows `status` does too (the pipe ACL allows only Administrators +
+SYSTEM). On macOS/Linux, members of `sevjala` reach the socket
 without sudo. If the service-manager query itself is refused unprivileged (e.g. `launchctl`
 not listing system daemons to a normal user), `service` shows `unknown (run with sudo for
 the service state)`; the agent check still runs, and an answering agent counts as running
@@ -97,7 +98,8 @@ service mode.
   (Administrators + SYSTEM); Unix `/var/run/sevjala.sock`.
 - When `--data-dir` is not the OS default (dev, tests), the endpoint moves with it: Unix
   `<data-dir>/sevjala.sock`, Windows `\\.\pipe\sevjala-<first 8 hex of sha256(abs data dir)>`.
-  One knob, and two dev agents never collide.
+  One knob, and two dev agents never collide. On Windows the custom pipe keeps the default
+  DACL so an un-elevated developer can reach their own agent.
 - Unix socket: remove a stale socket before listening; `chmod 0660`; `chown root:sevjala`
   when the group exists, else leave `0600` root-only and log a warning.
 - `GET /status` → `200 {"version":"…","role":"node","pid":4120,"uptime_s":133,"data_dir":"…"}`.
@@ -136,8 +138,8 @@ PRD's section 25 list is in the repo.
   `binary` named as the blueprint's assets (`sevjala-windows-amd64.exe`,
   `sevjala-win7-amd64.exe`, `sevjala-win7-386.exe`, `sevjala-darwin-arm64`,
   `sevjala-darwin-amd64`, `sevjala-linux-amd64`), plus `checksums.txt`.
-- **Makefile:** `build` (host binary `./sevjala`), `build-all` (`goreleaser build --snapshot
-  --clean`), `build-win7` (fetch + `goreleaser build --snapshot --clean --id win7`), `test`
+- **Makefile:** `build` (host binary `./sevjala`), `build-all` (`goreleaser release --snapshot
+  --clean`: names the assets and writes `checksums.txt`, publishes nothing), `build-win7` (fetch + `goreleaser build --snapshot --clean --id win7`), `test`
   (`go test ./...`, adds `-race` on darwin/linux), `lint` (`golangci-lint run`), `release`
   (`goreleaser release --clean`). `build-win7` and `build-all` run on macOS/Linux hosts only.
 - **golangci-lint:** `.golangci.yml` (v2) with the `standard` set plus `errorlint`,
@@ -146,7 +148,7 @@ PRD's section 25 list is in the repo.
   stale runs cancelled):
   - `test`: ubuntu + macos with `-race`, windows without.
   - `lint`: golangci-lint.
-  - `build`: ubuntu, `make build-all` (includes both win7 assets).
+  - `build`: ubuntu, `goreleaser release --snapshot --clean` (includes both win7 assets).
   - `smoke`: windows-latest, ubuntu-latest, macos-latest. Build the host binary, then with
     admin/sudo: `service install --role node`, `service status`, `doctor`,
     `service uninstall`, and `service status` again must exit 1. Windows runners are
