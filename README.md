@@ -18,6 +18,20 @@ sudo ./sevjala doctor
 sudo ./sevjala service uninstall             # keeps the data dir
 ```
 
+Pair a node with the controller (same LAN; the node's firewall must allow 17890/udp and
+17891/tcp, which `service install` opens on Windows):
+
+```sh
+# on the controller (sudo / Administrator prompt)
+sevjala discover                       # lists nodes; or: sevjala agents add 192.168.1.21
+# on the node
+sevjala code                           # prints a 6-digit code, valid 10 minutes
+# back on the controller
+sevjala pair <agent> --code 123456     # <agent>: id prefix from discover, or hostname
+sevjala ping <agent>
+sevjala agents
+```
+
 Build: `make build` (host), `make build-all` (every asset incl. Windows 7), `make test`, `make lint`.
 
 Design: [docs/BLUEPRINT.md](docs/BLUEPRINT.md) · docs index: [docs/README.md](docs/README.md)

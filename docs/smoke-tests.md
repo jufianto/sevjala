@@ -1,6 +1,6 @@
 # Manual smoke tests
 
-Checks that CI cannot run: they need root, a service manager, or real machines. Paste each
+Checks that CI cannot run: they need root, a service manager, or real machines (P0, M1). Paste each
 transcript into the milestone's PR. Pending ones are listed in [PROGRESS.md](./PROGRESS.md).
 
 ## P0 — service install and status
@@ -67,3 +67,46 @@ data dir  C:\ProgramData\Sevjala
 ```
 
 The platform in brackets is `darwin-launchd` on macOS and `linux-systemd` on Linux.
+
+## M1 — discover, pair, ping across two PCs
+
+Exit criterion: discover → pair → ping across two real PCs; an unpaired peer is rejected at TLS.
+
+Setup: PC A (controller) and PC B (node) on the same LAN (the Win7 VM needs **bridged**
+networking). A third machine C as a stranger controller is optional but proves the rejection.
+Run every command from an Administrator prompt / with sudo.
+
+```sh
+# A
+sevjala service install --role controller
+# B
+sevjala service install --role node
+# A
+sevjala discover                      # B listed, PAIRED no
+# B
+sevjala code                          # note the code and B's 8-char id
+# A
+sevjala pair <B id or hostname> --code 000000   # wrong code → "wrong pairing code", exit 1
+sevjala pair <B id or hostname> --code <code>   # "paired with B (…) sha256:…"
+sevjala ping <B>                      # "answered in N ms: node …, healthy"
+sevjala agents                        # B online, LAST SEEN now
+sevjala discover                      # B listed, PAIRED yes
+# C (stranger controller)
+sevjala service install --role controller
+sevjala agents add <B ip>
+sevjala pair <B> --code 123456        # "rejected this controller's certificate", exit 1
+# B: restart the service, then on A
+sevjala ping <B>                      # still answers
+```
+
+Windows checks on each Windows PC:
+
+- `sevjala doctor` shows `ok lockdown`, `ok lan api`, `ok firewall`.
+- `icacls C:\ProgramData\Sevjala` lists only `NT AUTHORITY\SYSTEM` and `BUILTIN\Administrators`.
+- `netsh advfirewall firewall show rule name=Sevjala-LAN-API` and `…name=Sevjala-Discovery` exist;
+  after `sevjala service uninstall` both are gone.
+
+macOS/Linux: `sudo sevjala doctor` shows `ok lockdown` (`ls -ld` on the data dir: `drwx------ root`).
+
+Logs on B (`<data dir>/logs/sevjala.log`) contain `pair_code_issued`, `pair_rejected`,
+`pair_succeeded`, `peer_rejected` and never the code itself.
