@@ -71,3 +71,38 @@ func TestReopenAppends(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestFailedRenameKeepsOldLogs(t *testing.T) {
+	path := filepath.Join(t.TempDir(), FileName)
+	os.WriteFile(path+".1", []byte("old1"), 0o644)
+	os.WriteFile(path+".2", []byte("old2"), 0o644)
+
+	rename = func(from, to string) error {
+		if from == path {
+			return os.ErrPermission
+		}
+		return os.Rename(from, to)
+	}
+	t.Cleanup(func() { rename = os.Rename })
+
+	w, err := NewRotatingWriter(path, 100, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []string{"a", "b", "c"} {
+		if _, err := w.Write([]byte(strings.Repeat(c, 60))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w.Close()
+
+	if got := read(t, path+".1"); got != "old1" {
+		t.Errorf(".1 = %q, want old1 kept", got)
+	}
+	if got := read(t, path+".2"); got != "old2" {
+		t.Errorf(".2 = %q, want old2 kept", got)
+	}
+	if got := read(t, path); got != strings.Repeat("a", 60)+strings.Repeat("b", 60)+strings.Repeat("c", 60) {
+		t.Errorf("current = %.10q…, want all writes appended", got)
+	}
+}

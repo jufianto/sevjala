@@ -6,6 +6,9 @@ import (
 	"sync"
 )
 
+// rename is swapped in tests to simulate a log file held open on Windows.
+var rename = os.Rename
+
 // RotatingWriter appends to path and, when a write would pass maxBytes,
 // shifts path → path.1 → … → path.<keep-1>, dropping the oldest.
 type RotatingWriter struct {
@@ -58,15 +61,25 @@ func (w *RotatingWriter) Write(p []byte) (int, error) {
 }
 
 // rotate closes before renaming because Windows cannot rename an open file.
-// Rename failures are skipped so logging continues in the current file.
+// The current file is moved aside first; if that fails (another process holds
+// it), the old logs are left alone and rotation is retried after another
+// maxBytes.
 func (w *RotatingWriter) rotate() error {
 	w.f.Close()
 	w.f = nil
+	moved := w.path + ".rotating"
+	if err := rename(w.path, moved); err != nil {
+		if err := w.open(); err != nil {
+			return err
+		}
+		w.size = 0
+		return nil
+	}
 	_ = os.Remove(fmt.Sprintf("%s.%d", w.path, w.keep-1))
 	for i := w.keep - 2; i >= 1; i-- {
-		_ = os.Rename(fmt.Sprintf("%s.%d", w.path, i), fmt.Sprintf("%s.%d", w.path, i+1))
+		_ = rename(fmt.Sprintf("%s.%d", w.path, i), fmt.Sprintf("%s.%d", w.path, i+1))
 	}
-	_ = os.Rename(w.path, w.path+".1")
+	_ = rename(moved, w.path+".1")
 	return w.open()
 }
 
