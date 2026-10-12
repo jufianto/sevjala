@@ -1,0 +1,15 @@
+version: "2"
+linters:
+  default: standard
+  enable:
+    - errorlint
+    - misspell
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters: [errcheck]
+formatters:
+  enable:
+    - gofmt
