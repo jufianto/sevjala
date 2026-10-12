@@ -76,12 +76,14 @@ certificate requested but not required. Handshake rule on the node:
 | another certificate while a pairing code is active | accepted; only `/identity` and `/pair` succeed |
 | another certificate otherwise | handshake fails (`bad certificate` alert), event `peer_rejected` |
 
-Errors are `{"error": "<message>"}`. Request bodies are capped at 4 KiB.
+Session tickets are disabled (a resumed session would skip the certificate check) and idle
+connections close after 1 minute; every route but `/identity` and `/pair` re-checks the client
+certificate against the paired controller. Errors are `{"error": "<message>"}`. Request bodies are capped at 4 KiB.
 
 | Route | Auth | Success | Errors |
 |---|---|---|---|
 | `GET /identity` | none | `{"agent_id","hostname","role","version","fp"}` | — |
-| `POST /pair` | client cert | `{"agent_id","fp"}` (the node) | 409 on a controller; 403 no cert, cert fp ≠ `controller_fp`, no active code, wrong proof, burnt code; 400 bad JSON |
+| `POST /pair` | client cert | `{"agent_id","fp"}` (the node) | 403 cert fp ≠ `controller_fp`, wrong proof, the proof that burns the code, no cert; 400 bad JSON; 409 on a controller (reachable only without a cert). With no active code a new controller never gets here: its handshake fails. |
 | `GET /status` | paired controller cert | see below | 403 otherwise |
 | anything else | | | 404 `not found` |
 

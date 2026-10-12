@@ -2,6 +2,7 @@ package lanapi
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -194,5 +195,36 @@ func TestClientPinsServer(t *testing.T) {
 	_, err := controller(t).Status(context.Background(), n.srv.Addr(), "sha256:wrong")
 	if err == nil || !strings.Contains(err.Error(), "does not match the pinned") {
 		t.Errorf("err = %v", err)
+	}
+}
+
+type clock struct{ t time.Time }
+
+func (c *clock) now() time.Time { return c.t }
+
+// A stranger admitted during a pairing window must not get back in by resuming
+// that TLS session after the code is gone.
+func TestResumedSessionStillRejected(t *testing.T) {
+	clk := &clock{t: time.Now()}
+	id, dir := newID(t)
+	codes := pairing.New(clk.now)
+	s := start(t, "node", dir, id, codes)
+	stranger := controller(t)
+	cache := tls.NewLRUClientSessionCache(4)
+	client := func() *http.Client {
+		hc := stranger.http(id.FP, true, nil)
+		hc.Transport.(*http.Transport).TLSClientConfig.ClientSessionCache = cache
+		return hc
+	}
+	codes.Issue()
+	var info IdentityInfo
+	if err := stranger.do(context.Background(), client(), http.MethodGet, s.Addr(), "/identity", nil, &info); err != nil {
+		t.Fatal(err)
+	}
+	clk.t = clk.t.Add(pairing.TTL + time.Minute)
+	var st Status
+	err := stranger.do(context.Background(), client(), http.MethodGet, s.Addr(), "/status", nil, &st)
+	if !errors.Is(err, ErrRejected) {
+		t.Fatalf("after the code expired: %v, want a TLS rejection", err)
 	}
 }

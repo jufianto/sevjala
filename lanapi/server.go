@@ -53,6 +53,8 @@ func Start(opt Options) (*Server, error) {
 		MinVersion:   tls.VersionTLS12,
 		Certificates: []tls.Certificate{opt.Identity.Cert},
 		ClientAuth:   tls.RequestClientCert,
+		// A resumed session skips VerifyPeerCertificate, which is the pairing gate.
+		SessionTicketsDisabled: true,
 	}
 	// A per-connection config lets the rejection log carry the remote address.
 	base.GetConfigForClient = func(h *tls.ClientHelloInfo) (*tls.Config, error) {
@@ -69,6 +71,7 @@ func Start(opt Options) (*Server, error) {
 	s.srv = &http.Server{
 		Handler:           s.routes(),
 		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       time.Minute,
 		ErrorLog:          slog.NewLogLogger(opt.Log.Handler(), slog.LevelDebug),
 	}
 	go func() {
@@ -128,7 +131,7 @@ func (s *Server) routes() http.Handler {
 			Role: s.opt.Role, Version: s.opt.Version, FP: s.opt.Identity.FP})
 	})
 	mux.HandleFunc("POST /pair", s.pair)
-	mux.HandleFunc("GET /status", s.status)
+	mux.HandleFunc("GET /status", s.pairedOnly(s.status))
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")
 	})
@@ -178,11 +181,19 @@ func (s *Server) reject(r *http.Request, reason string) {
 	s.opt.Log.Warn("pairing rejected", logx.Event(logx.EventPairRejected), "reason", reason, "remote", r.RemoteAddr)
 }
 
-func (s *Server) status(w http.ResponseWriter, r *http.Request) {
-	if fp := peerFP(r); fp == "" || fp != s.controllerFP() {
-		writeError(w, http.StatusForbidden, "not paired with this controller")
-		return
+// pairedOnly guards every route but /identity and /pair: a connection admitted
+// during a pairing window still carries a stranger's certificate.
+func (s *Server) pairedOnly(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if fp := peerFP(r); fp == "" || fp != s.controllerFP() {
+			writeError(w, http.StatusForbidden, "not paired with this controller")
+			return
+		}
+		h(w, r)
 	}
+}
+
+func (s *Server) status(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, Status{
 		AgentID:  s.opt.Identity.AgentID,
 		Role:     s.opt.Role,
