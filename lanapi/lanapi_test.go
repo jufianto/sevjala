@@ -1,0 +1,198 @@
+package lanapi
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jufianto/sevjala/identity"
+	"github.com/jufianto/sevjala/pairing"
+)
+
+var discard = slog.New(slog.DiscardHandler)
+
+type agent struct {
+	dir   string
+	id    *identity.Identity
+	codes *pairing.Codes
+	srv   *Server
+}
+
+func newID(t *testing.T) (*identity.Identity, string) {
+	t.Helper()
+	dir := t.TempDir()
+	id, _, err := identity.LoadOrCreate(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id, dir
+}
+
+func start(t *testing.T, role, dir string, id *identity.Identity, codes *pairing.Codes) *Server {
+	t.Helper()
+	s, err := Start(Options{Addr: "127.0.0.1:0", DataDir: dir, Identity: id, Role: role, Version: "test",
+		Hostname: "host-" + role, Started: time.Now(), Codes: codes, Log: discard})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Shutdown(context.Background()) })
+	return s
+}
+
+func startNode(t *testing.T) agent {
+	id, dir := newID(t)
+	codes := pairing.New(time.Now)
+	return agent{dir: dir, id: id, codes: codes, srv: start(t, "node", dir, id, codes)}
+}
+
+func controller(t *testing.T) *Client {
+	id, _ := newID(t)
+	return NewClient(id)
+}
+
+func pair(t *testing.T, c *Client, n agent) {
+	t.Helper()
+	code, _, _ := n.codes.Issue()
+	if _, err := c.Pair(context.Background(), n.srv.Addr(), n.id.FP, code); err != nil {
+		t.Fatalf("pair: %v", err)
+	}
+}
+
+func httpCode(err error) int {
+	var he *HTTPError
+	if errors.As(err, &he) {
+		return he.Code
+	}
+	return 0
+}
+
+func TestIdentityWithoutClientCert(t *testing.T) {
+	n := startNode(t)
+	info, err := controller(t).Identity(context.Background(), n.srv.Addr())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.AgentID != n.id.AgentID || info.FP != n.id.FP || info.Role != "node" || info.Hostname != "host-node" {
+		t.Errorf("identity %+v", info)
+	}
+}
+
+func TestPairThenStatus(t *testing.T) {
+	n := startNode(t)
+	c := controller(t)
+	pair(t, c, n)
+	st, err := c.Status(context.Background(), n.srv.Addr(), n.id.FP)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.AgentID != n.id.AgentID || st.Health != "healthy" || st.Backups == nil || st.Problems == nil {
+		t.Errorf("status %+v", st)
+	}
+	p, err := identity.LoadController(n.dir)
+	if err != nil || p == nil || p.FP != c.self.FP || p.AgentID != c.self.AgentID {
+		t.Errorf("saved peer %+v %v", p, err)
+	}
+}
+
+func TestUnpairedControllerRejectedAtTLS(t *testing.T) {
+	n := startNode(t)
+	pair(t, controller(t), n)
+	_, err := controller(t).Status(context.Background(), n.srv.Addr(), n.id.FP)
+	if !errors.Is(err, ErrRejected) {
+		t.Fatalf("err = %v, want ErrRejected", err)
+	}
+	if httpCode(err) != 0 {
+		t.Error("rejection reached HTTP")
+	}
+}
+
+func TestPairFailures(t *testing.T) {
+	n := startNode(t)
+	c := controller(t)
+	ctx := context.Background()
+
+	if _, err := c.Pair(ctx, n.srv.Addr(), n.id.FP, "123456"); !errors.Is(err, ErrRejected) {
+		t.Errorf("no active code: err = %v, want a TLS rejection", err)
+	}
+
+	code, _, _ := n.codes.Issue()
+	wrong := "000000"
+	if code == wrong {
+		wrong = "111111"
+	}
+	if _, err := c.Pair(ctx, n.srv.Addr(), n.id.FP, wrong); httpCode(err) != http.StatusForbidden || !strings.Contains(err.Error(), "wrong pairing code") {
+		t.Errorf("wrong code: %v", err)
+	}
+	if _, err := c.Status(ctx, n.srv.Addr(), n.id.FP); httpCode(err) != http.StatusForbidden {
+		t.Errorf("status while only a code is active: %v", err)
+	}
+
+	other, _ := newID(t)
+	body := PairRequest{ControllerID: other.AgentID, ControllerFP: other.FP, Proof: pairing.Proof(code, other.FP, n.id.FP)}
+	var out PairResponse
+	err := c.do(ctx, c.http(n.id.FP, true, nil), http.MethodPost, n.srv.Addr(), "/pair", body, &out)
+	if httpCode(err) != http.StatusForbidden || !strings.Contains(err.Error(), "does not match") {
+		t.Errorf("cert/body fp mismatch: %v", err)
+	}
+}
+
+func TestStatusWithoutCertIs403(t *testing.T) {
+	n := startNode(t)
+	c := controller(t)
+	var st Status
+	err := c.do(context.Background(), c.http(n.id.FP, false, nil), http.MethodGet, n.srv.Addr(), "/status", nil, &st)
+	if httpCode(err) != http.StatusForbidden {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestRepairReplacesController(t *testing.T) {
+	n := startNode(t)
+	a, b := controller(t), controller(t)
+	pair(t, a, n)
+	pair(t, b, n)
+	if _, err := b.Status(context.Background(), n.srv.Addr(), n.id.FP); err != nil {
+		t.Errorf("new controller: %v", err)
+	}
+	if _, err := a.Status(context.Background(), n.srv.Addr(), n.id.FP); !errors.Is(err, ErrRejected) {
+		t.Errorf("old controller: %v", err)
+	}
+}
+
+func TestPairingSurvivesRestart(t *testing.T) {
+	n := startNode(t)
+	c := controller(t)
+	pair(t, c, n)
+	n.srv.Shutdown(context.Background())
+	again := start(t, "node", n.dir, n.id, pairing.New(time.Now))
+	if _, err := c.Status(context.Background(), again.Addr(), n.id.FP); err != nil {
+		t.Errorf("paired controller after restart: %v", err)
+	}
+	if _, err := controller(t).Status(context.Background(), again.Addr(), n.id.FP); !errors.Is(err, ErrRejected) {
+		t.Errorf("stranger after restart: %v", err)
+	}
+}
+
+func TestControllerRefusesPair(t *testing.T) {
+	id, dir := newID(t)
+	s := start(t, "controller", dir, id, nil)
+	c := controller(t)
+	var out PairResponse
+	err := c.do(context.Background(), c.http(id.FP, false, nil), http.MethodPost, s.Addr(), "/pair", PairRequest{}, &out)
+	if httpCode(err) != http.StatusConflict {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestClientPinsServer(t *testing.T) {
+	n := startNode(t)
+	pair(t, controller(t), n)
+	_, err := controller(t).Status(context.Background(), n.srv.Addr(), "sha256:wrong")
+	if err == nil || !strings.Contains(err.Error(), "does not match the pinned") {
+		t.Errorf("err = %v", err)
+	}
+}
