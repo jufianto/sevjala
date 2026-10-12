@@ -6,8 +6,11 @@ import (
 	"context"
 	"net"
 	"os"
+	"os/user"
 	"path/filepath"
 	"testing"
+
+	"github.com/jufianto/sevjala/config"
 )
 
 func TestStaleSocketRemoved(t *testing.T) {
@@ -36,7 +39,7 @@ func TestSocketPermissions(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := os.FileMode(0o600)
-	if os.Geteuid() == 0 {
+	if _, err := user.LookupGroup(config.SocketGroup); err == nil && os.Geteuid() == 0 {
 		want = 0o660
 	}
 	if info.Mode().Perm() != want {
