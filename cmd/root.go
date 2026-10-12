@@ -7,6 +7,8 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+
+	"github.com/jufianto/sevjala/config"
 )
 
 var version = "dev"
@@ -38,6 +40,10 @@ func usagef(format string, a ...any) error {
 
 type globals struct {
 	dataDirFlag string
+}
+
+func (g *globals) dataDir() (string, error) {
+	return config.ResolveDataDir(g.dataDirFlag)
 }
 
 func newRootCmd() *cobra.Command {
