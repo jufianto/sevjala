@@ -1,0 +1,46 @@
+version: 2
+project_name: sevjala
+
+before:
+  hooks:
+    - scripts/fetch-go-win7.sh
+    - go tool go-winres make --arch amd64,386 --product-version {{ .Version }} --file-version {{ .Major }}.{{ .Minor }}.{{ .Patch }}.0
+
+builds:
+  - id: stock
+    binary: sevjala
+    env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X github.com/jufianto/sevjala/cmd.version={{ .Version }}"]
+    goos: [windows, darwin, linux]
+    goarch: [amd64, arm64]
+    ignore:
+      - {goos: windows, goarch: arm64}
+      - {goos: linux, goarch: arm64}
+  - id: win7
+    binary: sevjala
+    tool: .cache/go-win7/bin/go
+    env: [CGO_ENABLED=0, GOTOOLCHAIN=local]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X github.com/jufianto/sevjala/cmd.version={{ .Version }}"]
+    goos: [windows]
+    goarch: [amd64, "386"]
+
+archives:
+  - id: stock
+    ids: [stock]
+    formats: [binary]
+    name_template: "sevjala-{{ .Os }}-{{ .Arch }}"
+  - id: win7
+    ids: [win7]
+    formats: [binary]
+    name_template: "sevjala-win7-{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-dev"
+
+changelog:
+  disable: true
