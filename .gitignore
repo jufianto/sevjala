@@ -1,0 +1,32 @@
+# Build output
+/sevjala
+/sevjala.exe
+/dist/
+*.test
+*.out
+coverage.*
+
+# go-win7 SDK download (verified by checksum, never committed)
+/.cache/
+
+# Local agent data, never commit a real database, backup or key
+*.db
+*.db-wal
+*.db-shm
+*.sql.gz
+*.part
+*.pem
+*.key
+
+# Frontend (Phase 2)
+ui/node_modules/
+ui/dist/
+
+# Agent scratch
+.superpowers/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
