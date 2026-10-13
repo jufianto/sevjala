@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/jufianto/sevjala/inventory"
 )
 
 type Client struct {
@@ -95,13 +97,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		var e struct {
-			Error string `json:"error"`
-		}
-		if json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(&e) != nil || e.Error == "" {
-			e.Error = fmt.Sprintf("%s %s: %s", method, path, resp.Status)
-		}
-		return &Error{Code: resp.StatusCode, Msg: e.Error}
+		return replyError(resp, method, path)
 	}
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
 		return fmt.Errorf("%s %s: %w", method, path, err)
@@ -168,4 +164,39 @@ func (c *Client) RunRetention(ctx context.Context, dryRun bool) (RetentionPlan, 
 	var p RetentionPlan
 	long := &Client{hc: &http.Client{Transport: c.hc.Transport}}
 	return p, long.do(ctx, http.MethodPost, "/retention/run", map[string]bool{"dry_run": dryRun}, &p)
+}
+
+// Held lists the backups this PC holds, oldest first.
+func (c *Client) Held(ctx context.Context) ([]inventory.Manifest, error) {
+	var out heldList
+	err := c.do(ctx, http.MethodGet, "/held", nil, &out)
+	return out.Backups, err
+}
+
+// OpenHeld streams one held backup; only ctx bounds it, and a stream shorter
+// than the backup fails on read.
+func (c *Client) OpenHeld(ctx context.Context, id string) (io.ReadCloser, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://sevjala/held/"+url.PathEscape(id), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := (&http.Client{Transport: c.hc.Transport}).Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		defer resp.Body.Close()
+		return nil, replyError(resp, http.MethodGet, "/held/"+id)
+	}
+	return resp.Body, nil
+}
+
+func replyError(resp *http.Response, method, path string) error {
+	var e struct {
+		Error string `json:"error"`
+	}
+	if json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(&e) != nil || e.Error == "" {
+		e.Error = fmt.Sprintf("%s %s: %s", method, path, resp.Status)
+	}
+	return &Error{Code: resp.StatusCode, Msg: e.Error}
 }

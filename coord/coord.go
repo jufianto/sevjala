@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/jufianto/sevjala/inventory"
 	"github.com/jufianto/sevjala/localapi"
 	"github.com/jufianto/sevjala/logx"
 	"github.com/jufianto/sevjala/pairing"
@@ -81,6 +82,7 @@ type Node struct {
 	AgentID string
 	FP      string
 	Codes   *pairing.Codes
+	Store   *inventory.Store
 	Log     *slog.Logger
 }
 

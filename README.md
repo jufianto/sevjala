@@ -71,7 +71,7 @@ Every command explains itself with examples: `sevjala <command> --help`.
 | Install & status | `setup`, `service install/start/stop/status/uninstall`, `doctor`, `version` |
 | Connect PCs | `discover`, `code` (on the backup PC), `pair`, `agents`, `agents add/remove`, `ping` |
 | Database | `db detect`, `db set` |
-| Backups | `backup now`, `backups list [--matrix]` |
+| Backups | `backup now`, `backups list [--matrix]`, `backups export <backup\|latest> --to FOLDER` (copy one out, no sudo needed on macOS/Linux) |
 | Schedules & cleanup | `policy list/add/set/remove`, `retention run [--dry-run]` |
 
 Build: `make build` (host), `make build-all` (every asset incl. Windows 7), `make test`,

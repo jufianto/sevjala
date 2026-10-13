@@ -5,10 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
+
+	"github.com/jufianto/sevjala/inventory"
 )
 
 const maxBody = 4 << 10
@@ -122,6 +126,24 @@ func NewHandler(b Backend) http.Handler {
 	})
 	mux.HandleFunc("DELETE /policies/{name}", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, struct{}{}, b.RemovePolicy(r.Context(), r.PathValue("name")))
+	})
+	mux.HandleFunc("GET /held", func(w http.ResponseWriter, r *http.Request) {
+		ms, err := b.Held(r.Context())
+		if ms == nil {
+			ms = []inventory.Manifest{}
+		}
+		reply(w, heldList{Backups: ms}, err)
+	})
+	mux.HandleFunc("GET /held/{id}", func(w http.ResponseWriter, r *http.Request) {
+		m, rc, err := b.OpenHeld(r.Context(), r.PathValue("id"))
+		if err != nil {
+			reply(w, nil, err)
+			return
+		}
+		defer rc.Close()
+		w.Header().Set("Content-Type", "application/gzip")
+		w.Header().Set("Content-Length", strconv.FormatInt(m.Size, 10))
+		_, _ = io.Copy(w, rc)
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})

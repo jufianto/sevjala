@@ -250,6 +250,8 @@ on a node`); a LAN failure behind a route is 502. Bodies are capped at 4 KiB.
 | `PATCH /policies/{name}` (M3) | controller | `PolicyChange`; omitted fields keep their value | `Policy`; 404 unknown |
 | `DELETE /policies/{name}` (M3) | controller | — | `{}`; 404 unknown, 409 for `manual`. Backups carrying the tag are kept. |
 | `POST /retention/run` (M3) | controller | `{"dry_run":bool}` | `RetentionPlan` |
+| `GET /held` | both | — | `{"backups":[Manifest…]}`, oldest first: the complete backups this PC holds (a node's store, the controller's staging). Read-only: unlike the scan behind the LAN `GET /status`, it removes nothing and reports no problems. |
+| `GET /held/{id}` | both | — | The `.sql.gz` bytes, `Content-Length` = manifest size. 400 not a backup id, 404 not here, 409 being received or deleted (a node holds the backup until the stream ends, so a `DELETE` from the controller waits) or damaged. The CLI checks size and sha256 itself. |
 | anything else | | | 404 `not found` |
 
 `Discovered`: `{"agent_id","hostname","addr":"ip:port","role","version","os","fp","paired":bool}`.

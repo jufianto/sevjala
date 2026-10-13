@@ -119,6 +119,20 @@ sudo shasum -a 256 "/Library/Application Support/Sevjala/store/"BK-*.sql.gz
 **Expect:** one `BK-….sql.gz` and its `.json`; the hash equals the `sha256` in the `.json`
 and in `sevjala backups list` on Windows.
 
+Copy the newest one out without sudo (setup added you to the `sevjala` group; log out and
+back in once after the first install):
+
+```sh
+sevjala backups list
+sevjala backups export latest --to ~/Desktop
+ls ~/Desktop/<your database>
+```
+
+**Expect:** `backups list` shows what the Mac holds; `export` prints "sha256 checked" and the
+path; `~/Desktop/<your database>/` has `2026-…_hh-mm-ss.sql.gz` and `.json`, owned by you. Running the
+same export again refuses: "already exists; add --force". On Windows the same command copies
+from staging (Administrator prompt).
+
 ## 8. Leave it running (about 1 hour)
 
 ```bat

@@ -3,7 +3,10 @@ package localapi
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
+
+	"github.com/jufianto/sevjala/inventory"
 )
 
 type Status struct {
@@ -77,6 +80,10 @@ type Backend interface {
 	AddPolicy(ctx context.Context, p PolicyChange) (Policy, error)
 	SetPolicy(ctx context.Context, name string, p PolicyChange) (Policy, error)
 	RemovePolicy(ctx context.Context, name string) error
+	// Held and OpenHeld read this PC's own backups: a node's store or the
+	// controller's staging.
+	Held(ctx context.Context) ([]inventory.Manifest, error)
+	OpenHeld(ctx context.Context, id string) (inventory.Manifest, io.ReadCloser, error)
 }
 
 // Error carries an HTTP status across the pipe; Msg is shown to the operator.
@@ -177,6 +184,10 @@ type backupJobs struct {
 
 type backupList struct {
 	Backups []Backup `json:"backups"`
+}
+
+type heldList struct {
+	Backups []inventory.Manifest `json:"backups"`
 }
 
 type PolicyTarget struct {

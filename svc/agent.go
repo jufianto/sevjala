@@ -92,7 +92,7 @@ func (a *Agent) start() error {
 			return err
 		}
 		codes = pairing.New(time.Now)
-		backend.Node = &coord.Node{AgentID: id.AgentID, FP: id.FP, Codes: codes, Log: a.log}
+		backend.Node = &coord.Node{AgentID: id.AgentID, FP: id.FP, Codes: codes, Store: a.inv, Log: a.log}
 	case config.RoleController:
 		if a.store, err = store.Open(filepath.Join(a.DataDir, store.FileName)); err != nil {
 			return err

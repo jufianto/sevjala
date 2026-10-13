@@ -15,6 +15,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/jufianto/sevjala/config"
 	"github.com/jufianto/sevjala/inventory"
 	"github.com/jufianto/sevjala/localapi"
 )
@@ -137,17 +138,35 @@ func backupLines(b localapi.Backup) (lines string, done, good bool) {
 }
 
 func newBackupsCmd(g *globals) *cobra.Command {
-	c := &cobra.Command{Use: "backups", Short: "List backups and where their copies are (controller)"}
+	c := &cobra.Command{Use: "backups", Short: "List backups, and copy one out into a folder"}
 	var matrix, all bool
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "List backups and where their copies are",
-		Long:  `COPIES counts the backup PCs holding a verified copy. --matrix shows one column per PC.`,
+		Long: `On the controller: every backup and where its copies are. COPIES counts the backup PCs
+holding a verified copy; --matrix shows one column per PC.
+On a backup PC: the backups this PC holds.`,
 		Example: `  sevjala backups list
   sevjala backups list --matrix
   sevjala backups list --all       (also expired backups)`,
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
+			st, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) (localapi.Status, error) {
+				return cl.Status(ctx)
+			})
+			if err != nil {
+				return err
+			}
+			if st.Role == config.RoleNode {
+				held, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) ([]inventory.Manifest, error) {
+					return cl.Held(ctx)
+				})
+				if err != nil {
+					return err
+				}
+				renderHeld(c.OutOrStdout(), held)
+				return nil
+			}
 			bs, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) ([]localapi.Backup, error) {
 				return cl.Backups(ctx, all)
 			})
@@ -174,7 +193,7 @@ func newBackupsCmd(g *globals) *cobra.Command {
 	}
 	list.Flags().BoolVar(&matrix, "matrix", false, "one column per node")
 	list.Flags().BoolVar(&all, "all", false, "include expired backups (no copy left anywhere)")
-	c.AddCommand(list)
+	c.AddCommand(list, newBackupsExportCmd(g))
 	return c
 }
 
