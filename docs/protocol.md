@@ -362,5 +362,5 @@ Copy states add `corrupt` (the node reports it corrupt or with another sha256) a
 (removed by retention). The backup state ignores `deleted` copies: `created` while any copy is
 `pending` or `transferring` or none is left, `distributed` when every remaining copy is
 `verified`, else `partial`; `expired` (no copy and no staging file left) is set by
-reconciliation and never changes back. Agents' `state` is `online`, `warning`, `offline` or
+reconciliation and is undone only when a node shows a verified copy again. Agents' `state` is `online`, `warning`, `offline` or
 `error`, with `free_bytes` and `last_seen` from the last answered poll.

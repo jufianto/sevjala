@@ -222,6 +222,10 @@ logs `retention_delete` ("corrupt: replaced from staging") and the copy is `v` a
 the right sha256. Do the same to an old backup no longer staged: it is kept and listed by
 `retention run --dry-run` as "corrupt, no staging copy to replace it".
 
+Clock moved back: set the controller PC's clock back one day (as after a dead CMOS battery).
+`retention run --dry-run` keeps everything with "a backup is dated after now (clock moved
+back) …"; backups still run and are sent. Set the clock right: the next run trims normally.
+
 Policies:
 
 ```sh
