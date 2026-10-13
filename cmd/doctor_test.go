@@ -17,17 +17,18 @@ import (
 	"github.com/jufianto/sevjala/config"
 	"github.com/jufianto/sevjala/identity"
 	"github.com/jufianto/sevjala/lanapi"
+	"github.com/jufianto/sevjala/localapi"
 )
 
 func TestCheckDataDir(t *testing.T) {
 	dir := t.TempDir()
-	if r := checkDataDir(dir); !r.OK {
+	if r := checkWritable("data dir", dir); !r.OK {
 		t.Errorf("writable dir: %+v", r)
 	}
 	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
 		t.Errorf("probe file left behind: %v", entries)
 	}
-	if r := checkDataDir(filepath.Join(dir, "missing")); r.OK {
+	if r := checkWritable("data dir", filepath.Join(dir, "missing")); r.OK {
 		t.Errorf("missing dir passed: %+v", r)
 	}
 }
@@ -102,5 +103,49 @@ func TestCheckIdentityAndLAN(t *testing.T) {
 	cfg.Listen = "127.0.0.1:1"
 	if r := checkLAN(cfg, id); r.OK {
 		t.Errorf("closed port passed: %+v", r)
+	}
+}
+
+func TestStoreCheck(t *testing.T) {
+	tests := []struct {
+		name     string
+		s        *localapi.StoreInfo
+		ok, warn bool
+	}{
+		{"healthy", &localapi.StoreInfo{Path: "/s", FreeBytes: 10 << 30}, true, false},
+		{"under the floor", &localapi.StoreInfo{Path: "/s", FreeBytes: 1 << 30}, false, false},
+		{"problems", &localapi.StoreInfo{Path: "/s", FreeBytes: 10 << 30, Problems: []string{"x: manifest without its backup file"}}, false, true},
+		{"missing", nil, false, false},
+	}
+	for _, tt := range tests {
+		if r := storeCheck(tt.s, 2<<30); r.OK != tt.ok || r.Warn != tt.warn {
+			t.Errorf("%s: %+v", tt.name, r)
+		}
+	}
+}
+
+func TestDatabaseChecks(t *testing.T) {
+	d := localapi.Detection{Dumper: "/x/mysqldump", ServerVersion: "10.4.32-MariaDB", Flavour: "MariaDB",
+		Databases: []localapi.DBDatabase{{Name: "shop", Consistency: "--single-transaction", Configured: true}}}
+	rs := databaseChecks(d, nil)
+	if len(rs) != 2 || !rs[0].OK || !rs[1].OK || !strings.Contains(rs[1].Detail, "shop single-transaction") {
+		t.Errorf("%+v", rs)
+	}
+	d.Databases[0].Configured = false
+	if rs := databaseChecks(d, nil); !rs[1].Warn {
+		t.Errorf("nothing configured: %+v", rs)
+	}
+	if rs := databaseChecks(localapi.Detection{}, errors.New("Access denied")); len(rs) != 1 || rs[0].OK || rs[0].Warn {
+		t.Errorf("error: %+v", rs)
+	}
+}
+
+func TestRenderChecksWarnDoesNotFail(t *testing.T) {
+	var b bytes.Buffer
+	if !renderChecks(&b, []checkResult{{Name: "a", OK: true}, {Name: "b", Warn: true, Detail: "hmm"}}) {
+		t.Error("a warning failed doctor")
+	}
+	if !strings.Contains(b.String(), "WARN  b") {
+		t.Errorf("%q", b.String())
 	}
 }

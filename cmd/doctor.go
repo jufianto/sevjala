@@ -8,6 +8,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -22,16 +23,17 @@ import (
 type checkResult struct {
 	Name, Detail string
 	OK           bool
+	Warn         bool // not OK, but shown as WARN and does not fail doctor
 }
 
-func checkDataDir(dir string) checkResult {
+func checkWritable(name, dir string) checkResult {
 	f, err := os.CreateTemp(dir, ".doctor-*")
 	if err != nil {
-		return checkResult{Name: "data dir", Detail: fmt.Sprintf("%s not writable: %v", dir, err)}
+		return checkResult{Name: name, Detail: fmt.Sprintf("%s not writable: %v", dir, err)}
 	}
 	f.Close()
 	_ = os.Remove(f.Name())
-	return checkResult{Name: "data dir", Detail: dir, OK: true}
+	return checkResult{Name: name, Detail: dir, OK: true}
 }
 
 func checkConfig(dataDir string) (checkResult, *config.Config) {
@@ -101,7 +103,11 @@ func renderChecks(w io.Writer, rs []checkResult) bool {
 	all := true
 	for _, r := range rs {
 		mark := "ok"
-		if !r.OK {
+		switch {
+		case r.OK:
+		case r.Warn:
+			mark = "WARN"
+		default:
 			mark, all = "FAIL", false
 		}
 		fmt.Fprintf(w, "%-6s%-12s%s\n", mark, r.Name, r.Detail)
@@ -109,10 +115,43 @@ func renderChecks(w io.Writer, rs []checkResult) bool {
 	return all
 }
 
+// databaseChecks reports what the agent sees through 'db detect'.
+func databaseChecks(d localapi.Detection, err error) []checkResult {
+	if err != nil {
+		return []checkResult{{Name: "database", Detail: err.Error()}}
+	}
+	server := d.Flavour + " " + d.ServerVersion
+	var parts []string
+	for _, db := range d.Databases {
+		if db.Configured {
+			parts = append(parts, db.Name+" "+strings.TrimPrefix(db.Consistency, "--"))
+		}
+	}
+	dbCheck := checkResult{Name: "database", Detail: server + " · " + strings.Join(parts, ", "), OK: true}
+	if len(parts) == 0 {
+		dbCheck = checkResult{Name: "database", Detail: server + "; nothing to back up yet: sevjala db set --db <name>", Warn: true}
+	}
+	return []checkResult{{Name: "dumper", Detail: d.Dumper, OK: true}, dbCheck}
+}
+
+func storeCheck(s *localapi.StoreInfo, minFree int64) checkResult {
+	if s == nil {
+		return checkResult{Name: "store", Detail: "the agent reported no store"}
+	}
+	detail := fmt.Sprintf("%s · %s free · %d backups", s.Path, humanBytes(s.FreeBytes), s.Backups)
+	switch {
+	case s.FreeBytes < minFree:
+		return checkResult{Name: "store", Detail: detail + " · under the " + humanBytes(minFree) + " floor"}
+	case len(s.Problems) > 0:
+		return checkResult{Name: "store", Detail: detail + " · " + strings.Join(s.Problems, "; "), Warn: true}
+	}
+	return checkResult{Name: "store", Detail: detail, OK: true}
+}
+
 func newDoctorCmd(g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",
-		Short: "Check the data dir, config, identity, service, local and LAN APIs",
+		Short: "Check the data dir, config, identity, service, APIs, database or store",
 		Args:  cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			dataDir, err := g.dataDir()
@@ -128,10 +167,22 @@ func newDoctorCmd(g *globals) *cobra.Command {
 			v := buildStatusView(s, st, apiErr, dataDir, svc.IsAdmin())
 			cfgCheck, cfg := checkConfig(dataDir)
 			idCheck, id := checkIdentity(dataDir)
-			rs := []checkResult{checkDataDir(dataDir), checkLockdown(dataDir), cfgCheck, idCheck}
+			rs := []checkResult{checkWritable("data dir", dataDir), checkLockdown(dataDir), cfgCheck, idCheck}
 			rs = append(rs, serviceChecks(v, endpoint)...)
 			if cfg != nil {
 				rs = append(rs, checkLAN(*cfg, id))
+				if apiErr == nil {
+					switch cfg.Role {
+					case config.RoleController:
+						rs = append(rs, checkWritable("staging", config.StagingDir(dataDir)))
+						ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+						d, err := localapi.NewClient(endpoint).DetectDatabase(ctx)
+						cancel()
+						rs = append(rs, databaseChecks(d, err)...)
+					case config.RoleNode:
+						rs = append(rs, storeCheck(st.Store, cfg.Node.Store.MinFreeBytes))
+					}
+				}
 			}
 			if runtime.GOOS == "windows" {
 				rs = append(rs, checkFirewall())
