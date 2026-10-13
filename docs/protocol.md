@@ -239,6 +239,7 @@ on a node`); a LAN failure behind a route is 502. Bodies are capped at 4 KiB.
 | `GET /agents` (M1) | controller | — | `{"agents":[Agent…]}` |
 | `POST /pair` (M1) | controller | `{"agent":"<agent>","code":"123456","fp":"<at least 16 hex>"}` (`fp` since M2: `sha256:`, spaces, `-` and `:` ignored, any case; must prefix the discovered fingerprint, else 409 before anything is sent) | `Agent` |
 | `POST /agents/{agent}/ping` (M1) | controller | — | `{"agent":Agent,"rtt_ms":4,"uptime_s":7380,"health":"healthy"}` |
+| `DELETE /agents/{agent}[?force=true]` | controller | — | `Agent` removed. 409 while a policy sends only to it, or (without `force`) while a live backup's only verified copy is on it. Drops its copy records and its policy destinations; nothing is sent to the node. |
 | `POST /db/detect` (M2) | controller | — | `Detection` |
 | `PUT /db` (M2) | controller | `DBSettings`; tested against the server before anything is saved | `Detection` |
 | `POST /backup/now` (M2) | controller | `{"db":"<name or empty for all configured>","tags":["…"]}` | `{"backups":[{"backup_id","database"}]}`; 409 while that database is dumping |

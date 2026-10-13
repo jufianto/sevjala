@@ -104,3 +104,57 @@ func TestBackupGoesOnlyToItsPolicyDestinations(t *testing.T) {
 		t.Errorf("copies %+v, %v", b.Copies, err)
 	}
 }
+
+func TestRemoveAgent(t *testing.T) {
+	dumptest.Use(t, dumptest.OK)
+	ctx := context.Background()
+	ctrl := newController(t)
+	pc1, pc2 := startAgent(t, "node", "PC-1"), startAgent(t, "node", "PC-2")
+	pairNode(t, ctrl, pc1)
+	pairNode(t, ctrl, pc2)
+	ctrl.PollAll(ctx)
+
+	if _, err := ctrl.SetPolicy(ctx, "daily", localapi.PolicyChange{To: []string{"PC-1"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ctrl.RemoveAgent(ctx, "PC-1", true); !is409(err, "policy daily sends only to PC-1") {
+		t.Errorf("sole destination of a policy: %v", err)
+	}
+	if _, err := ctrl.SetPolicy(ctx, "daily", localapi.PolicyChange{To: []string{"PC-1", "PC-2"}}); err != nil {
+		t.Fatal(err)
+	}
+	id := backupAt(t, ctrl, tick0, store.BackupDistributed, "daily")
+	if err := ctrl.Store.MarkCopy(ctx, id, pc2.id.AgentID, store.CopyDeleted, "test", tick0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ctrl.RemoveAgent(ctx, "PC-1", false); !is409(err, "1 backup has its only copy on PC-1") || !is409(err, "--force") {
+		t.Errorf("only copy: %v", err)
+	}
+
+	a, err := ctrl.RemoveAgent(ctx, "PC-1", true)
+	if err != nil || a.Hostname != "PC-1" {
+		t.Fatalf("remove: %+v, %v", a, err)
+	}
+	as, _ := ctrl.Agents(ctx)
+	if len(as) != 1 || as[0].Hostname != "PC-2" {
+		t.Errorf("agents after remove %+v", as)
+	}
+	if _, ok := ctrl.pollSnapshot()[pc1.id.AgentID]; ok {
+		t.Error("poll state kept for the removed node")
+	}
+	b, _ := ctrl.Backup(ctx, id)
+	for _, c := range b.Copies {
+		if c.AgentID == pc1.id.AgentID {
+			t.Errorf("copy record kept: %+v", c)
+		}
+	}
+	if p, _ := ctrl.Store.Policy(ctx, "daily"); !slices.Equal(p.Destinations, []string{pc2.id.AgentID}) {
+		t.Errorf("daily destinations %q", p.Destinations)
+	}
+	if len(stored(t, pc1)) == 0 {
+		t.Error("the node's files must stay")
+	}
+	if _, err := ctrl.RemoveAgent(ctx, "PC-1", true); err == nil {
+		t.Error("removing twice succeeded")
+	}
+}

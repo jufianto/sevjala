@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -102,5 +103,62 @@ func TestNewerSchemaRefused(t *testing.T) {
 	s.Close()
 	if _, err := Open(path); err == nil || !strings.Contains(err.Error(), "newer") {
 		t.Errorf("err = %v", err)
+	}
+}
+
+func TestRemoveAgent(t *testing.T) {
+	s, _ := open(t)
+	ctx := context.Background()
+	at := time.Date(2026, 10, 13, 11, 0, 0, 0, time.UTC)
+	for _, id := range []string{"n1", "n2"} {
+		if err := s.UpsertAgent(ctx, agent(id, "PC-"+id)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// BK-1 only on n1; BK-2 on both; BK-3 on n1 but expired.
+	for _, id := range []string{"BK-1", "BK-2", "BK-3"} {
+		if err := s.InsertBackup(ctx, backup(id), []string{"n1", "n2"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.MarkCopy(ctx, id, "n1", CopyVerified, "", at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.MarkCopy(ctx, "BK-2", "n2", CopyVerified, "", at); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Expire(ctx, "BK-3"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InsertPolicy(ctx, Policy{Name: "offsite", Cron: "0 2 * * *", Keep: 3, Destinations: []string{"n1", "n2"}, Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	only, err := s.OnlyCopies(ctx, "n1")
+	if err != nil || !reflect.DeepEqual(only, []string{"BK-1"}) {
+		t.Fatalf("only copies %q %v, want BK-1", only, err)
+	}
+	if err := s.RemoveAgent(ctx, "n1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Agent(ctx, "n1"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("agent still there: %v", err)
+	}
+	for _, id := range []string{"BK-1", "BK-2"} {
+		b, err := s.Backup(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, c := range b.Copies {
+			if c.AgentID == "n1" {
+				t.Errorf("%s keeps a copy on the removed node", id)
+			}
+		}
+	}
+	if p, _ := s.Policy(ctx, "offsite"); !reflect.DeepEqual(p.Destinations, []string{"n2"}) {
+		t.Errorf("destinations %q, want n2 only", p.Destinations)
+	}
+	if err := s.RemoveAgent(ctx, "n1"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("second remove: %v", err)
 	}
 }

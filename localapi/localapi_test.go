@@ -45,7 +45,7 @@ type fakeBackend struct {
 	gotDB                             string
 	gotTags                           []string
 	gotName                           string
-	gotAll, gotDryRun                 bool
+	gotAll, gotDryRun, gotForce       bool
 	gotPolicy                         PolicyChange
 }
 
@@ -72,6 +72,13 @@ func (f *fakeBackend) AddAgent(_ context.Context, addr string) (Discovered, erro
 func (f *fakeBackend) Pair(_ context.Context, agent, code, fp string) (Agent, error) {
 	f.mu.Lock()
 	f.gotAgent, f.gotCode, f.gotFP = agent, code, fp
+	f.mu.Unlock()
+	return Agent{AgentID: agent}, f.err
+}
+
+func (f *fakeBackend) RemoveAgent(_ context.Context, agent string, force bool) (Agent, error) {
+	f.mu.Lock()
+	f.gotForce = force
 	f.mu.Unlock()
 	return Agent{AgentID: agent}, f.err
 }
@@ -178,6 +185,14 @@ func TestRoutesRoundTrip(t *testing.T) {
 	if p, err := c.Ping(ctx, "BACKUP PC/1"); err != nil || p.Agent.AgentID != "BACKUP PC/1" || p.RTTMs != 3 {
 		t.Errorf("Ping: %+v %v", p, err)
 	}
+	if a, err := c.RemoveAgent(ctx, "BACKUP PC/1", true); err != nil || a.AgentID != "BACKUP PC/1" {
+		t.Errorf("RemoveAgent: %+v %v", a, err)
+	}
+	f.mu.Lock()
+	if !f.gotForce {
+		t.Error("force did not reach the backend")
+	}
+	f.mu.Unlock()
 }
 
 func TestErrorsTravel(t *testing.T) {

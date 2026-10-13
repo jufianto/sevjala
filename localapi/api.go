@@ -66,6 +66,7 @@ type Backend interface {
 	Pair(ctx context.Context, agent, code, fp string) (Agent, error)
 	Agents(ctx context.Context) ([]Agent, error)
 	Ping(ctx context.Context, agent string) (Ping, error)
+	RemoveAgent(ctx context.Context, agent string, force bool) (Agent, error)
 	DetectDatabase(ctx context.Context) (Detection, error)
 	SetDatabase(ctx context.Context, s DBSettings) (Detection, error)
 	BackupNow(ctx context.Context, db string, tags []string) ([]BackupJob, error)

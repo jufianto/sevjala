@@ -22,6 +22,7 @@ const (
 	EventIdentityCreated    = "identity_created"
 	EventDiscoveryRun       = "discovery_run"
 	EventAgentAdded         = "agent_added"
+	EventAgentRemoved       = "agent_removed"
 	EventPairCodeIssued     = "pair_code_issued"
 	EventPairSucceeded      = "pair_succeeded"
 	EventPairRejected       = "pair_rejected"

@@ -54,6 +54,10 @@ func NewHandler(b Backend) http.Handler {
 		p, err := b.Ping(r.Context(), r.PathValue("agent"))
 		reply(w, p, err)
 	})
+	mux.HandleFunc("DELETE /agents/{agent}", func(w http.ResponseWriter, r *http.Request) {
+		a, err := b.RemoveAgent(r.Context(), r.PathValue("agent"), r.URL.Query().Get("force") == "true")
+		reply(w, a, err)
+	})
 	mux.HandleFunc("POST /db/detect", func(w http.ResponseWriter, r *http.Request) {
 		d, err := b.DetectDatabase(r.Context())
 		reply(w, d, err)

@@ -202,6 +202,26 @@ func newAgentsCmd(g *globals) *cobra.Command {
 			return nil
 		},
 	})
+	var force bool
+	remove := &cobra.Command{
+		Use:   "remove <agent> [--force]",
+		Short: "Stop backing up to a node; its files stay on that PC (controller)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(c *cobra.Command, args []string) error {
+			a, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) (localapi.Agent, error) {
+				return cl.RemoveAgent(ctx, args[0], force)
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(c.OutOrStdout(), "removed %s (%s); its backup files stay on that PC.\n"+
+				"To use it again: sevjala agents add <its IP>, then the pair line from 'sevjala code' on it.\n",
+				a.Hostname, shortID(a.AgentID))
+			return nil
+		},
+	}
+	remove.Flags().BoolVar(&force, "force", false, "remove even if some backups have their only copy on that node")
+	c.AddCommand(remove)
 	return c
 }
 

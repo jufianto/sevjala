@@ -49,6 +49,13 @@ func (s *Service) AddAgent(ctx context.Context, addr string) (localapi.Discovere
 	return s.Controller.AddAgent(ctx, addr)
 }
 
+func (s *Service) RemoveAgent(ctx context.Context, agent string, force bool) (localapi.Agent, error) {
+	if s.Controller == nil {
+		return localapi.Agent{}, errNotController
+	}
+	return s.Controller.RemoveAgent(ctx, agent, force)
+}
+
 func (s *Service) Pair(ctx context.Context, agent, code, fp string) (localapi.Agent, error) {
 	if s.Controller == nil {
 		return localapi.Agent{}, errNotController

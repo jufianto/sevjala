@@ -156,6 +156,7 @@ Choose **Exit**. Do not uninstall yet if you want to keep testing.
 ## 11. Clean up
 
 ```sh
+sevjala agents remove <node-id>        # Windows: stop backing up to the Mac (its files stay)
 sudo sevjala service uninstall          # Mac
 ```
 

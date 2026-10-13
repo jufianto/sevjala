@@ -54,6 +54,15 @@ func (c *Client) Pair(ctx context.Context, agent, code, fp string) (Agent, error
 	return a, c.do(ctx, http.MethodPost, "/pair", map[string]string{"agent": agent, "code": code, "fp": fp}, &a)
 }
 
+func (c *Client) RemoveAgent(ctx context.Context, agent string, force bool) (Agent, error) {
+	var a Agent
+	path := "/agents/" + url.PathEscape(agent)
+	if force {
+		path += "?force=true"
+	}
+	return a, c.do(ctx, http.MethodDelete, path, nil, &a)
+}
+
 func (c *Client) Agents(ctx context.Context) ([]Agent, error) {
 	var l list[Agent]
 	return l.Agents, c.do(ctx, http.MethodGet, "/agents", nil, &l)

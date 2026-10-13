@@ -179,6 +179,61 @@ func (c *Controller) Pair(ctx context.Context, agent, code, fp string) (localapi
 	return toAPI(a), nil
 }
 
+// RemoveAgent forgets a paired node. It refuses while a policy sends only to
+// that node, and, unless forced, while a backup's only copy is there: the
+// files stay on the node but this controller stops tracking them.
+func (c *Controller) RemoveAgent(ctx context.Context, agent string, force bool) (localapi.Agent, error) {
+	c.reconcileMu.Lock()
+	defer c.reconcileMu.Unlock()
+	as, err := c.Store.Agents(ctx)
+	if err != nil {
+		return localapi.Agent{}, err
+	}
+	a, err := resolve(as, agent, func(a store.Agent) (string, string) { return a.AgentID, a.Hostname }, pairedHint)
+	if err != nil {
+		return localapi.Agent{}, err
+	}
+	ps, err := c.Store.Policies(ctx)
+	if err != nil {
+		return localapi.Agent{}, err
+	}
+	for _, p := range ps {
+		if slices.Equal(p.Destinations, []string{a.AgentID}) {
+			return localapi.Agent{}, localapi.Errorf(http.StatusConflict,
+				"policy %s sends only to %s; send it elsewhere first: sevjala policy set %s --to <node>[,<node>] (or --to all)",
+				p.Name, a.Hostname, p.Name)
+		}
+	}
+	only, err := c.Store.OnlyCopies(ctx, a.AgentID)
+	if err != nil {
+		return localapi.Agent{}, err
+	}
+	if len(only) > 0 && !force {
+		backups := "backups have their"
+		if len(only) == 1 {
+			backups = "backup has its"
+		}
+		return localapi.Agent{}, localapi.Errorf(http.StatusConflict,
+			"%d %s only copy on %s; they stay on that PC, but this controller would stop tracking them. Remove anyway with: sevjala agents remove %s --force",
+			len(only), backups, a.Hostname, agent)
+	}
+	if err := c.Store.RemoveAgent(ctx, a.AgentID); err != nil {
+		return localapi.Agent{}, err
+	}
+	c.pollMu.Lock()
+	delete(c.nodes, a.AgentID)
+	c.pollMu.Unlock()
+	c.mu.Lock()
+	if d, ok := c.seen[a.AgentID]; ok {
+		d.Paired = false
+		c.seen[a.AgentID] = d
+	}
+	c.mu.Unlock()
+	c.Log.Info("agent removed", logx.Event(logx.EventAgentRemoved), "agent_id", a.AgentID, "hostname", a.Hostname,
+		"only_copies", len(only))
+	return toAPI(a), nil
+}
+
 func (c *Controller) Agents(ctx context.Context) ([]localapi.Agent, error) {
 	as, err := c.Store.Agents(ctx)
 	if err != nil {

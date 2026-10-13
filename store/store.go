@@ -5,8 +5,10 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -226,4 +228,105 @@ func (s *Store) RecordPoll(ctx context.Context, id, state, version string, freeB
 // SetAgentState changes only the state (offline, error); the last poll's data stays.
 func (s *Store) SetAgentState(ctx context.Context, id, state string) error {
 	return s.update(ctx, id, `UPDATE agents SET state = ? WHERE agent_id = ?`, state, id)
+}
+
+// OnlyCopies lists the live backups whose only verified copy is on agent id.
+func (s *Store) OnlyCopies(ctx context.Context, id string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT b.backup_id FROM backups b
+		JOIN backup_copies c ON c.backup_id = b.backup_id AND c.agent_id = ?1 AND c.state = 'verified'
+		WHERE b.state <> 'expired' AND NOT EXISTS (SELECT 1 FROM backup_copies o
+			WHERE o.backup_id = b.backup_id AND o.agent_id <> ?1 AND o.state = 'verified')
+		ORDER BY b.backup_id`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var b string
+		if err := rows.Scan(&b); err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+// RemoveAgent forgets a node: its row, its copy records and its place in
+// policy destinations. Files on the node are untouched.
+func (s *Store) RemoveAgent(ctx context.Context, id string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx, `DELETE FROM agents WHERE agent_id = ?`, id)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n == 0 {
+		return fmt.Errorf("agent %s: %w", id, ErrNotFound)
+	}
+	var backups []string
+	rows, err := tx.QueryContext(ctx, `DELETE FROM backup_copies WHERE agent_id = ? RETURNING backup_id`, id)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var b string
+		if err := rows.Scan(&b); err != nil {
+			rows.Close()
+			return err
+		}
+		backups = append(backups, b)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, b := range backups {
+		if err := recompute(ctx, tx, b); err != nil {
+			return err
+		}
+	}
+	if err := dropDestination(ctx, tx, id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func dropDestination(ctx context.Context, tx *sql.Tx, id string) error {
+	rows, err := tx.QueryContext(ctx, `SELECT name, destinations FROM policies`)
+	if err != nil {
+		return err
+	}
+	changed := map[string]string{}
+	for rows.Next() {
+		var name, raw string
+		if err := rows.Scan(&name, &raw); err != nil {
+			rows.Close()
+			return err
+		}
+		var dest []string
+		if err := json.Unmarshal([]byte(raw), &dest); err != nil {
+			rows.Close()
+			return fmt.Errorf("policy %s destinations: %w", name, err)
+		}
+		if i := slices.Index(dest, id); i >= 0 {
+			b, _ := json.Marshal(slices.Delete(dest, i, i+1))
+			changed[name] = string(b)
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for name, dest := range changed {
+		if _, err := tx.ExecContext(ctx, `UPDATE policies SET destinations = ? WHERE name = ?`, dest, name); err != nil {
+			return err
+		}
+	}
+	return nil
 }

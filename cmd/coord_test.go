@@ -91,6 +91,7 @@ func TestCoordUsageErrors(t *testing.T) {
 		{[]string{"pair", "--code", "123456"}, "accepts 1 arg"},
 		{[]string{"ping"}, "accepts 1 arg"},
 		{[]string{"agents", "add"}, "accepts 1 arg"},
+		{[]string{"agents", "remove"}, "accepts 1 arg"},
 	}
 	for _, tt := range tests {
 		var out, errOut bytes.Buffer
