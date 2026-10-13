@@ -86,7 +86,7 @@ func TestRenderBackupsAndMatrix(t *testing.T) {
 		Copies: []localapi.BackupCopy{{Hostname: "PC-1", State: "verified"}, {Hostname: "PC-2", State: "offline"},
 			{Hostname: "PC-3", State: "corrupt"}, {Hostname: "PC-4", State: "deleted"}}}}
 	var b bytes.Buffer
-	renderBackups(&b, bs)
+	renderBackups(&b, bs, nil)
 	if out := b.String(); !strings.Contains(out, "1/3 verified") || !strings.Contains(out, "2026-10-13 10:15") || !strings.Contains(out, "manual") {
 		t.Errorf("list:\n%s", out)
 	}
@@ -101,8 +101,27 @@ func TestRenderBackupsAndMatrix(t *testing.T) {
 		t.Errorf("windows matrix:\n%s", out)
 	}
 	b.Reset()
-	renderBackups(&b, nil)
+	renderBackups(&b, nil, nil)
 	if !strings.Contains(b.String(), "sevjala backup now") {
 		t.Errorf("empty list: %q", b.String())
+	}
+}
+
+func TestRenderBackupsOrdersTagsAndExplainsStates(t *testing.T) {
+	bs := []localapi.Backup{
+		{BackupID: "BK-2", Tags: []string{"daily", "frequent", "hourly", "monthly", "yearend"}, State: "distributed"},
+		{BackupID: "BK-1", Tags: []string{"manual"}, State: "partial"},
+	}
+	var b bytes.Buffer
+	renderBackups(&b, bs, []string{"frequent", "hourly", "daily", "monthly", "manual"})
+	out := b.String()
+	if !strings.Contains(out, "frequent,hourly,daily,monthly,yearend") {
+		t.Errorf("tags not in policy order:\n%s", out)
+	}
+	if !strings.Contains(out, "distributed = on every backup PC it should be on") || !strings.Contains(out, "partial = ") {
+		t.Errorf("no legend for the states shown:\n%s", out)
+	}
+	if strings.Contains(out, "expired = ") {
+		t.Errorf("legend explains a state not shown:\n%s", out)
 	}
 }

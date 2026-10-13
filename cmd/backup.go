@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -24,9 +25,11 @@ func newBackupCmd(g *globals) *cobra.Command {
 	var tags []string
 	now := &cobra.Command{
 		Use:   "now",
-		Short: "Back up the database now and send it to the backup PCs", Long: `Shows progress until every copy is verified. Tag it with a policy to keep it as long
+		Short: "Back up the database now and send it to the backup PCs",
+		Long: `Shows progress until every copy is verified. Tag it with a policy to keep it as long
 as that policy keeps backups (default tag: manual). Ctrl-C stops watching; the backup
-carries on.`, Example: `  sevjala backup now
+carries on.`,
+		Example: `  sevjala backup now
   sevjala backup now --db shop
   sevjala backup now --tag weekly`,
 		Args: cobra.NoArgs,
@@ -138,7 +141,9 @@ func newBackupsCmd(g *globals) *cobra.Command {
 	var matrix, all bool
 	list := &cobra.Command{
 		Use:   "list",
-		Short: "List backups and where their copies are", Long: `COPIES counts the backup PCs holding a verified copy. --matrix shows one column per PC.`, Example: `  sevjala backups list
+		Short: "List backups and where their copies are",
+		Long:  `COPIES counts the backup PCs holding a verified copy. --matrix shows one column per PC.`,
+		Example: `  sevjala backups list
   sevjala backups list --matrix
   sevjala backups list --all       (also expired backups)`,
 		Args: cobra.NoArgs,
@@ -151,9 +156,19 @@ func newBackupsCmd(g *globals) *cobra.Command {
 			}
 			if matrix {
 				renderMatrix(c.OutOrStdout(), bs, runtime.GOOS)
-			} else {
-				renderBackups(c.OutOrStdout(), bs)
+				return nil
 			}
+			ps, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) ([]localapi.Policy, error) {
+				return cl.Policies(ctx)
+			})
+			if err != nil {
+				return err
+			}
+			order := make([]string, len(ps))
+			for i, p := range ps {
+				order[i] = p.Name
+			}
+			renderBackups(c.OutOrStdout(), bs, order)
 			return nil
 		},
 	}
@@ -163,13 +178,26 @@ func newBackupsCmd(g *globals) *cobra.Command {
 	return c
 }
 
-func renderBackups(w io.Writer, bs []localapi.Backup) {
+// stateMeaning explains the STATE column under the list.
+var stateMeaning = []struct{ state, meaning string }{
+	{"distributed", "on every backup PC it should be on"},
+	{"created", "copies are still being sent"},
+	{"partial", "some copies are missing or failed; retention sends them again"},
+	{"dumping", "the database is being dumped"},
+	{"failed", "the dump failed; sevjala doctor checks the database"},
+	{"expired", "no copy is left anywhere"},
+}
+
+// renderBackups lists tags in the order of policies (policy list order),
+// other tags after them.
+func renderBackups(w io.Writer, bs []localapi.Backup, policies []string) {
 	if len(bs) == 0 {
 		fmt.Fprintln(w, "no backups yet; run 'sevjala backup now'")
 		return
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "BACKUP\tDATABASE\tCREATED\tSIZE\tTAGS\tSTATE\tCOPIES")
+	shown := map[string]bool{}
 	for _, b := range bs {
 		created := "-"
 		if !b.CreatedAt.IsZero() {
@@ -186,9 +214,31 @@ func renderBackups(w io.Writer, bs []localapi.Backup) {
 			live++
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%d/%d verified\n", b.BackupID, b.Database, created, inventory.HumanBytes(b.Size),
-			strings.Join(b.Tags, ","), b.State, verified, live)
+			strings.Join(byPolicy(b.Tags, policies), ","), b.State, verified, live)
+		shown[b.State] = true
 	}
 	tw.Flush()
+	var legend []string
+	for _, s := range stateMeaning {
+		if shown[s.state] {
+			legend = append(legend, s.state+" = "+s.meaning)
+		}
+	}
+	if len(legend) > 0 {
+		fmt.Fprintf(w, "\n%s\n", strings.Join(legend, "\n"))
+	}
+}
+
+func byPolicy(tags, policies []string) []string {
+	out := slices.Clone(tags)
+	rank := func(t string) int {
+		if i := slices.Index(policies, t); i >= 0 {
+			return i
+		}
+		return len(policies)
+	}
+	slices.SortStableFunc(out, func(a, b string) int { return cmp.Or(rank(a)-rank(b), strings.Compare(a, b)) })
+	return out
 }
 
 // renderMatrix uses ASCII marks on Windows, whose console code pages lack ✓.
