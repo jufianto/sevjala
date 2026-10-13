@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jufianto/sevjala/inventory"
 	"github.com/jufianto/sevjala/lanapi"
 	"github.com/jufianto/sevjala/localapi"
 	"github.com/jufianto/sevjala/store"
@@ -86,6 +88,7 @@ func is409(err error, msg string) bool {
 // after one attempt, an unreachable node ends it offline after the retries.
 func TestClassifyPushErrors(t *testing.T) {
 	dial := &net.OpError{Op: "dial", Err: errors.New("connection refused")}
+	_, refused := newController(t).LAN.Status(context.Background(), closedAddr(t), "sha256:x")
 	tests := []struct {
 		name, want string
 		err        error
@@ -99,6 +102,7 @@ func TestClassifyPushErrors(t *testing.T) {
 		{"mismatch is retried", "failed 3", &lanapi.HTTPError{Code: http.StatusUnprocessableEntity}},
 		{"busy is retried", "failed 3", &lanapi.HTTPError{Code: http.StatusServiceUnavailable}},
 		{"dial", "offline 3", fmt.Errorf("put: %w", dial)},
+		{"refused, worded for operators", "offline 3", refused},
 		{"other", "failed 3", errors.New("EOF")},
 	}
 	for _, tt := range tests {
@@ -117,6 +121,49 @@ func TestClassifyPushErrors(t *testing.T) {
 			p.Enqueue(transfer.Job{BackupID: "b", AgentID: "n"})
 			if got := <-done; got != tt.want {
 				t.Errorf("got %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+func closedAddr(t *testing.T) string {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	return l.Addr().String()
+}
+
+// A node that does not answer is named once, in words an operator can act on.
+func TestUnreachableAgentMessages(t *testing.T) {
+	ctx := context.Background()
+	ctrl := newController(t)
+	addr := closedAddr(t)
+	host, portStr, _ := net.SplitHostPort(addr)
+	port, _ := strconv.Atoi(portStr)
+	if err := ctrl.Store.UpsertAgent(ctx, store.Agent{AgentID: "a1", Hostname: "NODE-PC", LastIP: host, Port: port,
+		FP: "sha256:x", Role: "node", State: "online"}); err != nil {
+		t.Fatal(err)
+	}
+	nothing := "nothing answers at " + addr + ": is Sevjala installed and running on that PC?"
+	_, addErr := ctrl.AddAgent(ctx, addr)
+	_, pingErr := ctrl.Ping(ctx, "NODE-PC")
+	pushErr := classify(ctrl.LAN.PutBackup(ctx, addr, "sha256:x", inventory.Manifest{BackupID: "b"}, strings.NewReader("")))
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"agents add", addErr, nothing},
+		{"ping", pingErr, "NODE-PC: " + nothing},
+		{"push", pushErr, nothing},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.err == nil || tt.err.Error() != tt.want {
+				t.Errorf("err = %v, want %q", tt.err, tt.want)
 			}
 		})
 	}

@@ -223,7 +223,7 @@ func (s *Server) status(w http.ResponseWriter, _ *http.Request) {
 		} else {
 			st.Store.FreeBytes = free
 			if free < st.Store.MinFreeBytes {
-				st.Problems = append(st.Problems, fmt.Sprintf("free space %d is below the floor %d", free, st.Store.MinFreeBytes))
+				st.Problems = append(st.Problems, fmt.Sprintf("only %s free, below the %s this PC keeps free", inventory.HumanBytes(free), inventory.HumanBytes(st.Store.MinFreeBytes)))
 			}
 		}
 	}

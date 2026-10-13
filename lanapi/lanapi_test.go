@@ -203,8 +203,8 @@ func TestClientPinsServer(t *testing.T) {
 	n := startNode(t)
 	pair(t, controller(t), n)
 	_, err := controller(t).Status(context.Background(), n.srv.Addr(), "sha256:wrong")
-	if err == nil || !strings.Contains(err.Error(), "does not match the pinned") {
-		t.Errorf("err = %v", err)
+	if want := "this node's identity changed since pairing (reinstalled, or another PC now has its address): pair it again"; !errors.Is(err, ErrPinMismatch) || err.Error() != want {
+		t.Errorf("err = %v, want %q", err, want)
 	}
 }
 
@@ -546,7 +546,7 @@ func TestStatusReportsLowSpace(t *testing.T) {
 		t.Fatal(err)
 	}
 	if s.Store == nil || s.Store.MinFreeBytes != 1<<62 || s.Health != "warning" || len(s.Problems) != 1 ||
-		!strings.Contains(s.Problems[0], "below the floor") {
+		!strings.HasPrefix(s.Problems[0], "only ") || !strings.HasSuffix(s.Problems[0], " free, below the 4.0 EiB this PC keeps free") {
 		t.Errorf("status %+v", s)
 	}
 }

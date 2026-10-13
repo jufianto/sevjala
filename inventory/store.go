@@ -142,7 +142,7 @@ func (s *Store) Receive(m Manifest, sha string, size int64, body io.Reader) erro
 		}
 	}
 	if free, err := s.free(s.dir); err == nil && free-size < s.minFree {
-		return fmt.Errorf("%w: %d bytes free, the backup needs %d and %d must stay free", ErrNoSpace, free, size, s.minFree)
+		return fmt.Errorf("%w: %s free, the backup needs %s and %s must stay free", ErrNoSpace, HumanBytes(free), HumanBytes(size), HumanBytes(s.minFree))
 	}
 	part := s.path(id, PartExt)
 	f, err := os.OpenFile(part, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
@@ -260,4 +260,18 @@ func (s *Store) Scan() (Inventory, error) {
 	s.removed = nil
 	s.mu.Unlock()
 	return inv, nil
+}
+
+// HumanBytes writes n in binary units with one decimal, e.g. "1.2 GiB".
+func HumanBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for m := n / unit; m >= unit; m /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
 }

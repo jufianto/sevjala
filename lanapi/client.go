@@ -52,10 +52,15 @@ func (c *Client) Identity(ctx context.Context, addr string) (IdentityInfo, error
 	var tlsFP string
 	var info IdentityInfo
 	if err := c.do(ctx, c.http("", false, &tlsFP), http.MethodGet, addr, "/identity", nil, &info); err != nil {
+		// Any agent answers /identity: an error status or a body that is not JSON comes from something else.
+		var le *lanError
+		if !errors.As(err, &le) {
+			err = &lanError{msg: addr + " is not a Sevjala agent", err: err}
+		}
 		return IdentityInfo{}, err
 	}
 	if info.FP != tlsFP {
-		return IdentityInfo{}, fmt.Errorf("%s: /identity says %s but its certificate is %s", addr, info.FP, tlsFP)
+		return IdentityInfo{}, fmt.Errorf("%s answered with a different identity than its certificate: it may not be a Sevjala agent", addr)
 	}
 	return info, nil
 }
@@ -92,7 +97,7 @@ func (c *Client) transport(wantFP string, withCert bool, gotFP *string) *http.Tr
 		InsecureSkipVerify: true, // no CA: VerifyPeerCertificate pins the fingerprint instead
 		VerifyPeerCertificate: func(raw [][]byte, _ [][]*x509.Certificate) error {
 			if len(raw) == 0 {
-				return errors.New("server sent no certificate")
+				return errNoCert
 			}
 			fp := identity.Fingerprint(raw[0])
 			if gotFP != nil {
@@ -121,7 +126,7 @@ func (c *Client) do(ctx context.Context, hc *http.Client, method, addr, path str
 	}
 	req, err := http.NewRequestWithContext(ctx, method, "https://"+addr+path, rd)
 	if err != nil {
-		return err
+		return plain(addr, err)
 	}
 	return send(hc, req, addr, out)
 }
@@ -133,7 +138,7 @@ func send(hc *http.Client, req *http.Request, addr string, out any) error {
 		if strings.Contains(err.Error(), "tls: bad certificate") {
 			return fmt.Errorf("%s %w", addr, ErrRejected)
 		}
-		return err
+		return plain(addr, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {

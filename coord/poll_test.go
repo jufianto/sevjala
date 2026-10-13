@@ -82,7 +82,7 @@ func TestPollWarnsOnLowSpace(t *testing.T) {
 	n.inv = mustInventory(t, n.dir, 1<<62)
 	n.restart(t, ctrl)
 	ctrl.PollAll(ctx)
-	if a := agentByHost(t, ctrl, "PC-1"); a.State != store.AgentWarning || !strings.Contains(a.Problem, "below the floor") {
+	if a := agentByHost(t, ctrl, "PC-1"); a.State != store.AgentWarning || !strings.HasSuffix(a.Problem, "below the 4.0 EiB this PC keeps free") {
 		t.Errorf("low space %+v", a)
 	}
 }

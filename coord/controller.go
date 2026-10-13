@@ -106,7 +106,7 @@ func (c *Controller) AddAgent(ctx context.Context, addr string) (localapi.Discov
 	}
 	info, err := c.LAN.Identity(ctx, addr)
 	if err != nil {
-		return localapi.Discovered{}, localapi.Errorf(http.StatusBadGateway, "%s: %v", addr, err)
+		return localapi.Discovered{}, localapi.Errorf(http.StatusBadGateway, "%v", err)
 	}
 	if info.AgentID == c.Self.AgentID {
 		return localapi.Discovered{}, localapi.Errorf(http.StatusBadRequest, "%s is this controller", addr)
@@ -206,7 +206,7 @@ func (c *Controller) Ping(ctx context.Context, agent string) (localapi.Ping, err
 	start := time.Now()
 	st, err := c.LAN.Status(ctx, addr, a.FP)
 	if err != nil {
-		return localapi.Ping{}, localapi.Errorf(http.StatusBadGateway, "%s (%s): %v", a.Hostname, addr, err)
+		return localapi.Ping{}, localapi.Errorf(http.StatusBadGateway, "%s: %v", a.Hostname, err)
 	}
 	rtt := time.Since(start)
 	now := time.Now().UTC().Truncate(time.Second)

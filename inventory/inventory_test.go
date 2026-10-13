@@ -172,7 +172,8 @@ func TestReceiveNoSpace(t *testing.T) {
 	s.minFree = 50
 	s.free = func(string) (int64, error) { return 100, nil }
 	data := bytes.Repeat([]byte("x"), 60)
-	if err := receive(s, manifestFor(testID, data), data); !errors.Is(err, ErrNoSpace) {
+	if err := receive(s, manifestFor(testID, data), data); !errors.Is(err, ErrNoSpace) ||
+		err.Error() != "not enough free space: 100 B free, the backup needs 60 B and 50 B must stay free" {
 		t.Errorf("err = %v", err)
 	}
 }
@@ -314,5 +315,25 @@ func TestDeleteRefuses(t *testing.T) {
 	}
 	if _, err := s.Delete(testID); !errors.Is(err, ErrBusy) {
 		t.Errorf("in flight: %v", err)
+	}
+}
+
+func TestHumanBytes(t *testing.T) {
+	tests := []struct {
+		n    int64
+		want string
+	}{
+		{0, "0 B"},
+		{1023, "1023 B"},
+		{1024, "1.0 KiB"},
+		{1 << 30, "1.0 GiB"},
+		{1288490189, "1.2 GiB"},
+		{5 << 30, "5.0 GiB"},
+		{1 << 62, "4.0 EiB"},
+	}
+	for _, tt := range tests {
+		if got := HumanBytes(tt.n); got != tt.want {
+			t.Errorf("HumanBytes(%d) = %q, want %q", tt.n, got, tt.want)
+		}
 	}
 }
