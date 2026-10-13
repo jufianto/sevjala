@@ -40,7 +40,7 @@ checksum:
   name_template: checksums.txt
 
 snapshot:
-  version_template: "{{ incpatch .Version }}-dev"
+  version_template: '{{ with index .Env "SEVJALA_VERSION" }}{{ . }}{{ else }}{{ incpatch .Version }}-dev{{ end }}'
 
 changelog:
   disable: true
