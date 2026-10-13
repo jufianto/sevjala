@@ -25,13 +25,26 @@ Pair a node with the controller (same LAN; the node's firewall must allow 17890/
 # on the controller (sudo / Administrator prompt)
 sevjala discover                       # lists nodes; or: sevjala agents add 192.168.1.21
 # on the node
-sevjala code                           # prints a 6-digit code, valid 10 minutes
-# back on the controller
-sevjala pair <agent> --code 123456     # <agent>: id prefix from discover, or hostname
+sevjala code                           # prints a 6-digit code (valid 10 minutes) and a fingerprint
+# back on the controller: the pair command `code` printed
+sevjala pair <agent> --code 123456 --fp 3f2a9b1c77de0a41   # <agent>: id prefix or hostname
 sevjala ping <agent>
 sevjala agents
 ```
 
-Build: `make build` (host), `make build-all` (every asset incl. Windows 7), `make test`, `make lint`.
+First backup (controller; `mysqldump` from XAMPP or PATH):
+
+```sh
+sevjala db detect                      # finds mysqldump, lists databases and their dump mode
+sevjala db set --db shop --password    # tested against the server before it is saved
+sevjala backup now                     # dumps, then pushes to every paired node; waits
+sevjala backups list --matrix          # one column per node
+```
+
+The database password is kept in the OS keyring (an encrypted file on Linux without one),
+never in `config.toml`.
+
+Build: `make build` (host), `make build-all` (every asset incl. Windows 7), `make test`,
+`make test-integration` (real MariaDB 10.4 in Docker), `make lint`.
 
 Design: [docs/BLUEPRINT.md](docs/BLUEPRINT.md) · docs index: [docs/README.md](docs/README.md)

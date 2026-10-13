@@ -84,17 +84,18 @@ sevjala service install --role node
 # A
 sevjala discover                      # B listed, PAIRED no
 # B
-sevjala code                          # note the code and B's 8-char id
+sevjala code                          # note the code, B's 8-char id and fingerprint
 # A
-sevjala pair <B id or hostname> --code 000000   # wrong code → "wrong pairing code", exit 1
-sevjala pair <B id or hostname> --code <code>   # "paired with B (…) sha256:…"
+sevjala pair <B> --code <code> --fp 0000000000000000   # "do not pair", exit 1; the code still works
+sevjala pair <B> --code 000000 --fp <fp>              # wrong code → "wrong pairing code", exit 1
+sevjala pair <B> --code <code> --fp <fp>              # "paired with B (…) sha256:…"
 sevjala ping <B>                      # "answered in N ms: node …, healthy"
 sevjala agents                        # B online, LAST SEEN now
 sevjala discover                      # B listed, PAIRED yes
 # C (stranger controller)
 sevjala service install --role controller
 sevjala agents add <B ip>
-sevjala pair <B> --code 123456        # "has no active pairing code", exit 1; B logs peer_rejected (TLS)
+sevjala pair <B> --code 123456 --fp <B fp>   # "has no active pairing code", exit 1; B logs peer_rejected (TLS)
 # B: restart the service, then on A
 sevjala ping <B>                      # still answers
 ```
@@ -112,3 +113,55 @@ macOS/Linux: `sudo sevjala doctor` shows `ok lockdown` (`ls -ld` on the data dir
 
 Logs on B (`<data dir>/logs/sevjala.log`) contain `pair_code_issued`, `pair_rejected`,
 `pair_succeeded`, `peer_rejected` and never the code itself.
+
+## M2 — first backup to three PCs
+
+Exit criterion: a 300 MB XAMPP database dumped once and present, hash-verified, on three
+nodes; killing a node agent mid-transfer leaves no partial file.
+
+Already covered without real PCs (2026-10-13, Docker on the Mac): MariaDB 10.4 with a root
+password containing spaces, quotes, `$` and `ö`; a controller and three node agents in
+separate containers; 162 MiB dump → 3/3 verified with matching `sha256sum`; a frozen node
+(`docker pause`) failed after the 60 s stall and verified on the retry; a controller restart
+mid-transfer requeued the copy; stale `.part` files were removed at agent start. What
+remains is real Windows, XAMPP and three PCs.
+
+Setup: the XAMPP PC (controller, MySQL running) and three node PCs, all installed and paired
+as in M1 (`pair` now needs `--fp`). Run every command from an Administrator prompt / sudo.
+
+```sh
+# controller
+sevjala db detect                    # dumper C:\xampp\mysql\bin\mysqldump.exe, databases listed
+sevjala db set --db <name>           # add --password if root has one (prompted, not echoed)
+sevjala doctor                       # ok staging, ok dumper, ok database … single-transaction
+sevjala backup now                   # dumping… → created → three "verified"; exit code 0
+sevjala backups list --matrix        # three v (✓ on macOS/Linux)
+```
+
+On each node, the store (`C:\ProgramData\Sevjala\store`, or `<data dir>/store`) holds
+`BK-….sql.gz` and `BK-….json`. `certutil -hashfile BK-….sql.gz SHA256` (macOS
+`shasum -a 256`) equals the `sha256` in the `.json` and in `sevjala backups list` on the
+controller.
+
+Interruptions:
+
+1. Start `sevjala backup now`; while a copy shows `transferring`, run `sevjala service stop`
+   on that node. The copy turns `pending (…)` and, if the node stays down, `offline` after
+   the 30 s / 2 min / 10 min retries. `sevjala service start` on the node: its store has no
+   `.part` file, and its log shows `part_removed` if one was left.
+2. During `transferring`, run `sevjala service stop` then `start` on the controller. The copy
+   is sent again after the start and ends `verified` (`sevjala backups list`).
+3. Ctrl-C during `backup now` prints "still running in the agent"; the backup still finishes.
+
+Secrets:
+
+- Windows 7: after `db set --password`, `config.toml` has `password_ref = "keyring:db"` and
+  no password. As SYSTEM (`psexec -s cmd`), `cmdkey /list` shows `sevjala:db`.
+- macOS (sudo install): `sudo sevjala db set --password` succeeds (System keychain as root),
+  and `backup now` still works after a reboot.
+- Linux without a desktop session: the agent log shows `keyring_fallback`;
+  `/var/lib/sevjala/secrets/db.enc` and `key` are `-rw------- root`.
+- `grep -ri '<password>' <data dir>/logs <data dir>/config.toml` finds nothing on any PC.
+
+Logs: the controller has `backup_started`, `backup_created`, `transfer_started`,
+`transfer_verified`; each node has `backup_received`.
