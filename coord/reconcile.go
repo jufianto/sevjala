@@ -39,7 +39,7 @@ func (c *Controller) Reconcile(ctx context.Context, dryRun bool) (localapi.Reten
 	plan := retention.Compute(in)
 	view := planView(plan, dryRun, agents)
 	if !dryRun {
-		c.apply(ctx, plan, agents, known, in.Busy)
+		c.apply(ctx, plan, agents, known)
 	}
 	return view, nil
 }
@@ -117,7 +117,7 @@ func (c *Controller) inStaging(id string) bool {
 	return err == nil
 }
 
-func (c *Controller) apply(ctx context.Context, plan retention.Plan, agents map[string]store.Agent, known, busy map[string]bool) {
+func (c *Controller) apply(ctx context.Context, plan retention.Plan, agents map[string]store.Agent, known map[string]bool) {
 	now := time.Now().UTC().Truncate(time.Second)
 	for _, u := range plan.Updates {
 		if err := c.Store.MarkCopy(ctx, u.BackupID, u.AgentID, u.State, u.Reason, now); err != nil {
@@ -163,7 +163,7 @@ func (c *Controller) apply(ctx context.Context, plan retention.Plan, agents map[
 		}
 		c.Log.Info("staging pruned", logx.Event(logx.EventStagingPruned), "backup_id", id, "reason", "retention")
 	}
-	c.pruneOrphans(known, busy)
+	c.pruneOrphans(ctx, known)
 	for _, id := range plan.Expire {
 		if err := c.Store.Expire(ctx, id); err != nil {
 			c.Log.Error("reconcile: expire", "backup_id", id, "err", err)
@@ -194,8 +194,10 @@ func (c *Controller) unstage(id string) error {
 }
 
 // pruneOrphans removes staging files of backups the store does not know and
-// no dump holds, such as one finished as the agent stopped.
-func (c *Controller) pruneOrphans(known, busy map[string]bool) {
+// no dump holds, such as one finished as the agent stopped. known is from the
+// reconcile's snapshot, so a candidate is checked again: a dump may have
+// finished since (it adds the row before it leaves the jobs).
+func (c *Controller) pruneOrphans(ctx context.Context, known map[string]bool) {
 	es, err := os.ReadDir(c.Staging)
 	if err != nil {
 		c.Log.Error("reconcile: read staging", "err", err)
@@ -206,7 +208,10 @@ func (c *Controller) pruneOrphans(known, busy map[string]bool) {
 		if !ok {
 			id, ok = strings.CutSuffix(e.Name(), inventory.ManifestExt)
 		}
-		if !ok || !inventory.ValidID(id) || known[id] || busy[id] {
+		if !ok || !inventory.ValidID(id) || known[id] || c.busy(id) {
+			continue
+		}
+		if _, err := c.Store.Backup(ctx, id); !errors.Is(err, store.ErrNotFound) {
 			continue
 		}
 		if err := os.Remove(filepath.Join(c.Staging, e.Name())); err != nil {
@@ -237,4 +242,11 @@ func planView(p retention.Plan, dryRun bool, agents map[string]store.Agent) loca
 	}
 	return localapi.RetentionPlan{DryRun: dryRun, Deletes: conv(p.Deletes), Sends: conv(p.Sends), Kept: conv(p.Kept),
 		Unstaged: nonNil(p.Unstage), Expired: nonNil(p.Expire)}
+}
+
+func (c *Controller) busy(id string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_, ok := c.jobs[id]
+	return ok
 }

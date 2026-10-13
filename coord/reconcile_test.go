@@ -262,3 +262,14 @@ func sha256Hex(b []byte) string {
 }
 
 func bytesReader(b []byte) io.Reader { return bytes.NewReader(b) }
+
+// A dump can finish between the reconcile's snapshot and the staging prune.
+func TestPruneOrphansRechecksTheStore(t *testing.T) {
+	dumptest.Use(t, dumptest.OK)
+	ctrl := newController(t)
+	id := backupAt(t, ctrl, tick0, store.BackupCreated)
+	ctrl.pruneOrphans(context.Background(), map[string]bool{})
+	if got := names(t, ctrl.Staging); len(got) != 2 {
+		t.Errorf("staging %v, want %s's two files", got, id)
+	}
+}
