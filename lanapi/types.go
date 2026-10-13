@@ -29,6 +29,7 @@ type BackupRef struct {
 }
 
 // Status is the blueprint's GET /status; Store is absent on a controller.
+// Backups is null when the store could not be read: the inventory is unknown.
 type Status struct {
 	AgentID  string      `json:"agent_id"`
 	Role     string      `json:"role"`
@@ -53,8 +54,9 @@ type PutResponse struct {
 }
 
 type StoreInfo struct {
-	Path      string `json:"path"`
-	FreeBytes int64  `json:"free_bytes"`
+	Path         string `json:"path"`
+	FreeBytes    int64  `json:"free_bytes"`
+	MinFreeBytes int64  `json:"min_free_bytes"`
 }
 
 type DeleteRequest struct {

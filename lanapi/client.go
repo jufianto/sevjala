@@ -22,7 +22,10 @@ import (
 	"github.com/jufianto/sevjala/pairing"
 )
 
-var ErrRejected = errors.New("rejected this controller's certificate (not paired with it)")
+var (
+	ErrRejected    = errors.New("rejected this controller's certificate (not paired with it)")
+	ErrPinMismatch = errors.New("node certificate changed since pairing")
+)
 
 type HTTPError struct {
 	Code int
@@ -96,7 +99,7 @@ func (c *Client) transport(wantFP string, withCert bool, gotFP *string) *http.Tr
 				*gotFP = fp
 			}
 			if wantFP != "" && fp != wantFP {
-				return fmt.Errorf("server certificate %s does not match the pinned %s", fp, wantFP)
+				return fmt.Errorf("%w: server certificate %s does not match the pinned %s", ErrPinMismatch, fp, wantFP)
 			}
 			return nil
 		},

@@ -80,6 +80,8 @@ func (s *Store) Dir() string { return s.dir }
 
 func (s *Store) FreeBytes() (int64, error) { return s.free(s.dir) }
 
+func (s *Store) MinFree() int64 { return s.minFree }
+
 func (s *Store) path(id, ext string) string { return filepath.Join(s.dir, id+ext) }
 
 func (s *Store) claim(id string) bool {

@@ -208,8 +208,9 @@ func (s *Server) status(w http.ResponseWriter, _ *http.Request) {
 	st := Status{AgentID: s.opt.Identity.AgentID, Role: s.opt.Role, Version: s.opt.Version,
 		UptimeS: int64(time.Since(s.opt.Started).Seconds()), Health: "healthy", Backups: []BackupRef{}, Problems: []string{}}
 	if s.opt.Store != nil {
-		st.Store = &StoreInfo{Path: s.opt.Store.Dir()}
+		st.Store = &StoreInfo{Path: s.opt.Store.Dir(), MinFreeBytes: s.opt.Store.MinFree()}
 		if inv, err := s.opt.Store.Scan(); err != nil {
+			st.Backups = nil
 			st.Problems = append(st.Problems, "cannot read the store: "+err.Error())
 		} else {
 			for _, c := range inv.Backups {
@@ -221,6 +222,9 @@ func (s *Server) status(w http.ResponseWriter, _ *http.Request) {
 			st.Problems = append(st.Problems, "cannot read free space: "+err.Error())
 		} else {
 			st.Store.FreeBytes = free
+			if free < st.Store.MinFreeBytes {
+				st.Problems = append(st.Problems, fmt.Sprintf("free space %d is below the floor %d", free, st.Store.MinFreeBytes))
+			}
 		}
 	}
 	if len(st.Problems) > 0 {

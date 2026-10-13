@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -515,6 +516,68 @@ func TestControllerRefusesDelete(t *testing.T) {
 	err := c.do(context.Background(), c.http(id.FP, false, nil), http.MethodDelete, s.Addr(), "/backups/BK-20261013-101500-A8F2",
 		DeleteRequest{Reason: "x"}, &out)
 	if httpCode(err) != http.StatusForbidden {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func startNodeWithStore(t *testing.T, minFree int64) (agent, *inventory.Store) {
+	t.Helper()
+	id, dir := newID(t)
+	st, err := inventory.Open(filepath.Join(dir, "store"), minFree, discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	codes := pairing.New(time.Now)
+	s, err := Start(Options{Addr: "127.0.0.1:0", DataDir: dir, Identity: id, Role: "node", Version: "test",
+		Hostname: "host-node", Started: time.Now(), Codes: codes, Store: st, Log: discard})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Shutdown(context.Background()) })
+	return agent{dir: dir, id: id, codes: codes, srv: s}, st
+}
+
+func TestStatusReportsLowSpace(t *testing.T) {
+	n, _ := startNodeWithStore(t, 1<<62)
+	c := controller(t)
+	pair(t, c, n)
+	s, err := c.Status(context.Background(), n.srv.Addr(), n.id.FP)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Store == nil || s.Store.MinFreeBytes != 1<<62 || s.Health != "warning" || len(s.Problems) != 1 ||
+		!strings.Contains(s.Problems[0], "below the floor") {
+		t.Errorf("status %+v", s)
+	}
+}
+
+// An unreadable store is an unknown inventory, not an empty one: the
+// controller must not conclude every copy vanished.
+func TestStatusUnreadableStoreHasNoInventory(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs a non-root Unix user to make the store unreadable")
+	}
+	n, st := startNodeWithStore(t, 0)
+	c := controller(t)
+	pair(t, c, n)
+	if err := os.Chmod(st.Dir(), 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(st.Dir(), 0o700) })
+	s, err := c.Status(context.Background(), n.srv.Addr(), n.id.FP)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Backups != nil || s.Health != "warning" {
+		t.Errorf("status %+v", s)
+	}
+}
+
+func TestPinMismatchIsTyped(t *testing.T) {
+	n := startNode(t)
+	c := controller(t)
+	pair(t, c, n)
+	if _, err := c.Status(context.Background(), n.srv.Addr(), "sha256:replaced"); !errors.Is(err, ErrPinMismatch) {
 		t.Errorf("err = %v", err)
 	}
 }
