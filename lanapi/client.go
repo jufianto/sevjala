@@ -5,15 +5,20 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/jufianto/sevjala/identity"
+	"github.com/jufianto/sevjala/inventory"
 	"github.com/jufianto/sevjala/pairing"
 )
 
@@ -31,10 +36,11 @@ func (e *HTTPError) Error() string { return e.Msg }
 type Client struct {
 	self    *identity.Identity
 	Timeout time.Duration
+	Stall   time.Duration // PutBackup gives up after this long without progress
 }
 
 func NewClient(self *identity.Identity) *Client {
-	return &Client{self: self, Timeout: 10 * time.Second}
+	return &Client{self: self, Timeout: 10 * time.Second, Stall: time.Minute}
 }
 
 // Identity presents no client cert, so it works against a node paired with
@@ -64,9 +70,13 @@ func (c *Client) Status(ctx context.Context, addr, nodeFP string) (Status, error
 	return st, err
 }
 
-// http pins the server to wantFP (any server when empty) and records the
-// fingerprint it saw in gotFP.
 func (c *Client) http(wantFP string, withCert bool, gotFP *string) *http.Client {
+	return &http.Client{Timeout: c.Timeout, Transport: c.transport(wantFP, withCert, gotFP)}
+}
+
+// transport pins the server to wantFP (any server when empty) and records the
+// fingerprint it saw in gotFP.
+func (c *Client) transport(wantFP string, withCert bool, gotFP *string) *http.Transport {
 	cfg := &tls.Config{
 		MinVersion:         tls.VersionTLS12,
 		InsecureSkipVerify: true, // no CA: VerifyPeerCertificate pins the fingerprint instead
@@ -87,7 +97,7 @@ func (c *Client) http(wantFP string, withCert bool, gotFP *string) *http.Client 
 	if withCert {
 		cfg.Certificates = []tls.Certificate{c.self.Cert}
 	}
-	return &http.Client{Timeout: c.Timeout, Transport: &http.Transport{TLSClientConfig: cfg, DisableKeepAlives: true}}
+	return &http.Transport{TLSClientConfig: cfg, DisableKeepAlives: true}
 }
 
 func (c *Client) do(ctx context.Context, hc *http.Client, method, addr, path string, body, out any) error {
@@ -103,6 +113,10 @@ func (c *Client) do(ctx context.Context, hc *http.Client, method, addr, path str
 	if err != nil {
 		return err
 	}
+	return send(hc, req, addr, out)
+}
+
+func send(hc *http.Client, req *http.Request, addr string, out any) error {
 	resp, err := hc.Do(req)
 	if err != nil {
 		// The node's alert is not a typed error; this is the only signal.
@@ -122,4 +136,74 @@ func (c *Client) do(ctx context.Context, hc *http.Client, method, addr, path str
 		return &HTTPError{Code: resp.StatusCode, Msg: e.Error}
 	}
 	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+var errStalled = errors.New("transfer stalled: no progress for too long")
+
+// PutBackup streams body to the node pinned by nodeFP. There is no overall
+// timeout (files are hundreds of MB); a watchdog cancels when no bytes moved
+// for c.Stall.
+func (c *Client) PutBackup(ctx context.Context, addr, nodeFP string, m inventory.Manifest, body io.Reader) error {
+	raw, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	pr := &progressReader{r: body}
+	pr.last.Store(time.Now().UnixNano())
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		t := time.NewTicker(c.Stall / 4)
+		defer t.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-t.C:
+				if !pr.done.Load() && time.Since(time.Unix(0, pr.last.Load())) > c.Stall {
+					cancel(errStalled)
+					return
+				}
+			}
+		}
+	}()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, "https://"+addr+"/backups/"+url.PathEscape(m.BackupID), pr)
+	if err != nil {
+		return err
+	}
+	req.ContentLength = m.Size
+	req.Header.Set("Expect", "100-continue")
+	req.Header.Set(HeaderSHA256, m.SHA256)
+	req.Header.Set(HeaderSize, strconv.FormatInt(m.Size, 10))
+	req.Header.Set(HeaderManifest, base64.StdEncoding.EncodeToString(raw))
+	tr := c.transport(nodeFP, true, nil)
+	tr.ExpectContinueTimeout = 5 * time.Second
+	var out PutResponse
+	if err := send(&http.Client{Transport: tr}, req, addr, &out); err != nil {
+		if errors.Is(context.Cause(ctx), errStalled) {
+			return fmt.Errorf("%s: %w", addr, errStalled)
+		}
+		return err
+	}
+	if out.SHA256 != m.SHA256 {
+		return fmt.Errorf("%s stored sha256 %s, expected %s", addr, out.SHA256, m.SHA256)
+	}
+	return nil
+}
+
+type progressReader struct {
+	r    io.Reader
+	last atomic.Int64
+	done atomic.Bool
+}
+
+func (p *progressReader) Read(b []byte) (int, error) {
+	n, err := p.r.Read(b)
+	p.last.Store(time.Now().UnixNano())
+	if err == io.EOF {
+		p.done.Store(true)
+	}
+	return n, err
 }

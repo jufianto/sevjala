@@ -28,13 +28,31 @@ type BackupRef struct {
 	State    string `json:"state"`
 }
 
-// Status is the M1 subset of the blueprint's GET /status; M2 adds the store.
+// Status is the blueprint's GET /status; Store is absent on a controller.
 type Status struct {
 	AgentID  string      `json:"agent_id"`
 	Role     string      `json:"role"`
 	Version  string      `json:"version"`
 	UptimeS  int64       `json:"uptime_s"`
+	Store    *StoreInfo  `json:"store,omitempty"`
 	Health   string      `json:"health"`
 	Backups  []BackupRef `json:"backups"`
 	Problems []string    `json:"problems"`
+}
+
+const (
+	HeaderSHA256   = "X-Sevjala-Sha256"
+	HeaderSize     = "X-Sevjala-Size"
+	HeaderManifest = "X-Sevjala-Manifest"
+)
+
+type PutResponse struct {
+	BackupID string `json:"backup_id"`
+	SHA256   string `json:"sha256"`
+	Size     int64  `json:"size"`
+}
+
+type StoreInfo struct {
+	Path      string `json:"path"`
+	FreeBytes int64  `json:"free_bytes"`
 }

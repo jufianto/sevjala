@@ -1,16 +1,24 @@
 package lanapi
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/jufianto/sevjala/identity"
+	"github.com/jufianto/sevjala/inventory"
 	"github.com/jufianto/sevjala/pairing"
 )
 
@@ -227,4 +235,199 @@ func TestResumedSessionStillRejected(t *testing.T) {
 	if !errors.Is(err, ErrRejected) {
 		t.Fatalf("after the code expired: %v, want a TLS rejection", err)
 	}
+}
+
+func startStoreNode(t *testing.T) (agent, *inventory.Store) {
+	t.Helper()
+	id, dir := newID(t)
+	st, err := inventory.Open(filepath.Join(dir, "store"), 0, discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	codes := pairing.New(time.Now)
+	s, err := Start(Options{Addr: "127.0.0.1:0", DataDir: dir, Identity: id, Role: "node", Version: "test",
+		Hostname: "host-node", Started: time.Now(), Codes: codes, Store: st, Log: discard})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Shutdown(context.Background()) })
+	return agent{dir: dir, id: id, codes: codes, srv: s}, st
+}
+
+func backupData(t *testing.T, n int) (inventory.Manifest, []byte) {
+	t.Helper()
+	data := make([]byte, n)
+	_, _ = rand.Read(data)
+	sum := sha256.Sum256(data)
+	return inventory.Manifest{V: 1, BackupID: "BK-20261013-101500-A8F2", Database: "shop",
+		CreatedAt: time.Date(2026, 10, 13, 10, 15, 0, 0, time.UTC), SourceAgent: "c1", Size: int64(n),
+		SHA256: hex.EncodeToString(sum[:]), Tags: []string{"manual"}}, data
+}
+
+func storeFiles(t *testing.T, st *inventory.Store) []string {
+	t.Helper()
+	es, _ := os.ReadDir(st.Dir())
+	var out []string
+	for _, e := range es {
+		out = append(out, e.Name())
+	}
+	return out
+}
+
+func TestPutBackupThenStatusListsIt(t *testing.T) {
+	n, st := startStoreNode(t)
+	c := controller(t)
+	pair(t, c, n)
+	m, data := backupData(t, 1<<20)
+	if err := c.PutBackup(context.Background(), n.srv.Addr(), n.id.FP, m, bytes.NewReader(data)); err != nil {
+		t.Fatal(err)
+	}
+	s, err := c.Status(context.Background(), n.srv.Addr(), n.id.FP)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Store == nil || s.Store.Path != st.Dir() || s.Store.FreeBytes <= 0 || s.Health != "healthy" {
+		t.Errorf("status %+v", s)
+	}
+	if len(s.Backups) != 1 || s.Backups[0] != (BackupRef{BackupID: m.BackupID, Size: m.Size, SHA256: m.SHA256, State: "verified"}) {
+		t.Errorf("backups %+v", s.Backups)
+	}
+}
+
+func TestPutBackupUnpairedRejected(t *testing.T) {
+	n, st := startStoreNode(t)
+	m, data := backupData(t, 1024)
+	err := controller(t).PutBackup(context.Background(), n.srv.Addr(), n.id.FP, m, bytes.NewReader(data))
+	if !errors.Is(err, ErrRejected) {
+		t.Errorf("err = %v", err)
+	}
+	if f := storeFiles(t, st); len(f) != 0 {
+		t.Errorf("files %v", f)
+	}
+}
+
+func TestPutBackupMismatchIs422(t *testing.T) {
+	n, st := startStoreNode(t)
+	c := controller(t)
+	pair(t, c, n)
+	m, data := backupData(t, 4096)
+	data[0] ^= 0xff
+	if err := c.PutBackup(context.Background(), n.srv.Addr(), n.id.FP, m, bytes.NewReader(data)); httpCode(err) != 422 {
+		t.Errorf("err = %v", err)
+	}
+	if f := storeFiles(t, st); len(f) != 0 {
+		t.Errorf("files %v", f)
+	}
+}
+
+func TestPutBackupBadIDIs400(t *testing.T) {
+	n, _ := startStoreNode(t)
+	c := controller(t)
+	pair(t, c, n)
+	m, data := backupData(t, 16)
+	m.BackupID = "not-an-id"
+	if err := c.PutBackup(context.Background(), n.srv.Addr(), n.id.FP, m, bytes.NewReader(data)); httpCode(err) != 400 {
+		t.Errorf("err = %v", err)
+	}
+}
+
+type countingReader struct {
+	r io.Reader
+	n int
+}
+
+func (c *countingReader) Read(p []byte) (int, error) { n, err := c.r.Read(p); c.n += n; return n, err }
+
+// A retry after a lost 200 must not resend a file the node already verified.
+func TestPutBackupAgainSendsNoBody(t *testing.T) {
+	n, _ := startStoreNode(t)
+	c := controller(t)
+	pair(t, c, n)
+	m, data := backupData(t, 1<<20)
+	if err := c.PutBackup(context.Background(), n.srv.Addr(), n.id.FP, m, bytes.NewReader(data)); err != nil {
+		t.Fatal(err)
+	}
+	cr := &countingReader{r: bytes.NewReader(data)}
+	if err := c.PutBackup(context.Background(), n.srv.Addr(), n.id.FP, m, cr); err != nil {
+		t.Fatal(err)
+	}
+	if cr.n != 0 {
+		t.Errorf("resent %d bytes", cr.n)
+	}
+}
+
+type blockingReader struct {
+	first []byte
+	ctx   context.Context
+}
+
+func (b *blockingReader) Read(p []byte) (int, error) {
+	if len(b.first) > 0 {
+		n := copy(p, b.first)
+		b.first = b.first[n:]
+		return n, nil
+	}
+	<-b.ctx.Done()
+	return 0, b.ctx.Err()
+}
+
+func waitNoFiles(t *testing.T, st *inventory.Store) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for len(storeFiles(t, st)) != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("files left: %v", storeFiles(t, st))
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestPutBackupKilledMidwayLeavesNoPart(t *testing.T) {
+	n, st := startStoreNode(t)
+	c := controller(t)
+	pair(t, c, n)
+	m, data := backupData(t, 1<<20)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- c.PutBackup(ctx, n.srv.Addr(), n.id.FP, m, &blockingReader{first: data[:64<<10], ctx: ctx})
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for len(storeFiles(t, st)) == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	if err := <-done; err == nil {
+		t.Fatal("cancelled put succeeded")
+	}
+	waitNoFiles(t, st)
+}
+
+// slowReader stands in for a source that stops moving; a Read that never
+// returns would also block net/http's transport, which waits for its body writer.
+type slowReader struct {
+	r     io.Reader
+	every time.Duration
+	n     int
+}
+
+func (s *slowReader) Read(p []byte) (int, error) {
+	if s.n++; s.n > 1 {
+		time.Sleep(s.every)
+	}
+	return s.r.Read(p[:min(len(p), 1024)])
+}
+
+func TestPutBackupStallIsCancelled(t *testing.T) {
+	n, st := startStoreNode(t)
+	c := controller(t)
+	c.Stall = 200 * time.Millisecond
+	pair(t, c, n)
+	m, data := backupData(t, 1<<20)
+	start := time.Now()
+	err := c.PutBackup(context.Background(), n.srv.Addr(), n.id.FP, m, &slowReader{r: bytes.NewReader(data), every: time.Second})
+	if err == nil || !strings.Contains(err.Error(), "stalled") || time.Since(start) > 5*time.Second {
+		t.Errorf("err = %v after %v", err, time.Since(start))
+	}
+	waitNoFiles(t, st)
 }

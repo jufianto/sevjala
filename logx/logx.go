@@ -27,6 +27,8 @@ const (
 	EventPairRejected       = "pair_rejected"
 	EventPeerRejected       = "peer_rejected"
 	EventPartRemoved        = "part_removed"
+	EventBackupReceived     = "backup_received"
+	EventBackupRejected     = "backup_rejected"
 )
 
 func Event(name string) slog.Attr { return slog.String("event", name) }

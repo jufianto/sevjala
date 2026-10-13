@@ -4,21 +4,28 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/jufianto/sevjala/identity"
+	"github.com/jufianto/sevjala/inventory"
 	"github.com/jufianto/sevjala/logx"
 	"github.com/jufianto/sevjala/pairing"
 )
 
-const maxBody = 4 << 10
+const (
+	maxBody  = 4 << 10
+	bodyIdle = time.Minute
+)
 
 type Options struct {
 	Addr     string
@@ -28,7 +35,8 @@ type Options struct {
 	Version  string
 	Hostname string
 	Started  time.Time
-	Codes    *pairing.Codes // nil on a controller
+	Codes    *pairing.Codes   // nil on a controller
+	Store    *inventory.Store // nil on a controller
 	Log      *slog.Logger
 }
 
@@ -132,6 +140,7 @@ func (s *Server) routes() http.Handler {
 	})
 	mux.HandleFunc("POST /pair", s.pair)
 	mux.HandleFunc("GET /status", s.pairedOnly(s.status))
+	mux.HandleFunc("PUT /backups/{id}", s.pairedOnly(s.putBackup))
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")
 	})
@@ -194,15 +203,102 @@ func (s *Server) pairedOnly(h http.HandlerFunc) http.HandlerFunc {
 }
 
 func (s *Server) status(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, Status{
-		AgentID:  s.opt.Identity.AgentID,
-		Role:     s.opt.Role,
-		Version:  s.opt.Version,
-		UptimeS:  int64(time.Since(s.opt.Started).Seconds()),
-		Health:   "healthy",
-		Backups:  []BackupRef{},
-		Problems: []string{},
-	})
+	st := Status{AgentID: s.opt.Identity.AgentID, Role: s.opt.Role, Version: s.opt.Version,
+		UptimeS: int64(time.Since(s.opt.Started).Seconds()), Health: "healthy", Backups: []BackupRef{}, Problems: []string{}}
+	if s.opt.Store != nil {
+		st.Store = &StoreInfo{Path: s.opt.Store.Dir()}
+		if inv, err := s.opt.Store.Scan(); err != nil {
+			st.Problems = append(st.Problems, "cannot read the store: "+err.Error())
+		} else {
+			for _, c := range inv.Backups {
+				st.Backups = append(st.Backups, BackupRef{BackupID: c.BackupID, Size: c.Size, SHA256: c.SHA256, State: c.State})
+			}
+			st.Problems = append(st.Problems, inv.Problems...)
+		}
+		if free, err := s.opt.Store.FreeBytes(); err != nil {
+			st.Problems = append(st.Problems, "cannot read free space: "+err.Error())
+		} else {
+			st.Store.FreeBytes = free
+		}
+	}
+	if len(st.Problems) > 0 {
+		st.Health = "warning"
+	}
+	writeJSON(w, http.StatusOK, st)
+}
+
+// putBackup stores a pushed backup. The client sends Expect: 100-continue, so
+// a refusal before the first body read costs no body bytes.
+func (s *Server) putBackup(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Store == nil {
+		writeError(w, http.StatusConflict, "this agent is a controller; backups go to nodes")
+		return
+	}
+	id := r.PathValue("id")
+	m, sha, size, err := backupHeaders(r, id)
+	if err == nil {
+		body := &deadlineReader{r: r.Body, rc: http.NewResponseController(w)}
+		err = s.opt.Store.Receive(m, sha, size, body)
+	}
+	switch {
+	case err == nil:
+		s.opt.Log.Info("backup received", logx.Event(logx.EventBackupReceived), "backup_id", id, "size", size, "remote", r.RemoteAddr)
+	case errors.Is(err, inventory.ErrExists):
+	default:
+		s.opt.Log.Warn("backup rejected", logx.Event(logx.EventBackupRejected), "backup_id", id, "reason", err.Error(), "remote", r.RemoteAddr)
+		writeError(w, receiveStatus(err), err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, PutResponse{BackupID: id, SHA256: sha, Size: size})
+}
+
+func backupHeaders(r *http.Request, id string) (inventory.Manifest, string, int64, error) {
+	var m inventory.Manifest
+	size, err := strconv.ParseInt(r.Header.Get(HeaderSize), 10, 64)
+	if err != nil {
+		return m, "", 0, fmt.Errorf("%w: %s: %v", inventory.ErrInvalid, HeaderSize, err)
+	}
+	raw := r.Header.Get(HeaderManifest)
+	if len(raw) > 8<<10 {
+		return m, "", 0, fmt.Errorf("%w: %s over 8 KiB", inventory.ErrInvalid, HeaderManifest)
+	}
+	js, err := base64.StdEncoding.DecodeString(raw)
+	if err == nil {
+		err = json.Unmarshal(js, &m)
+	}
+	if err != nil {
+		return m, "", 0, fmt.Errorf("%w: %s: %v", inventory.ErrInvalid, HeaderManifest, err)
+	}
+	if m.BackupID != id {
+		return m, "", 0, fmt.Errorf("%w: manifest is for %q, not %q", inventory.ErrInvalid, m.BackupID, id)
+	}
+	return m, r.Header.Get(HeaderSHA256), size, nil
+}
+
+func receiveStatus(err error) int {
+	switch {
+	case errors.Is(err, inventory.ErrInvalid):
+		return http.StatusBadRequest
+	case errors.Is(err, inventory.ErrConflict):
+		return http.StatusConflict
+	case errors.Is(err, inventory.ErrMismatch):
+		return http.StatusUnprocessableEntity
+	case errors.Is(err, inventory.ErrNoSpace):
+		return http.StatusInsufficientStorage
+	}
+	return http.StatusInternalServerError
+}
+
+// deadlineReader frees the slot when the controller stalls: each read must
+// arrive within bodyIdle of the previous one.
+type deadlineReader struct {
+	r  io.Reader
+	rc *http.ResponseController
+}
+
+func (d *deadlineReader) Read(p []byte) (int, error) {
+	_ = d.rc.SetReadDeadline(time.Now().Add(bodyIdle))
+	return d.r.Read(p)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
