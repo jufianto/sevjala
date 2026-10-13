@@ -72,9 +72,9 @@ chmod +x sevjala && sudo mv sevjala /usr/local/bin/
 sudo sevjala setup              # choose 2 (node)
 ```
 
-On an Intel Mac, download `sevjala-darwin-amd64`. While v0.3.0-alpha.1 is a pre-release,
+On an Intel Mac, download `sevjala-darwin-amd64`. While v0.3.0-alpha.2 is a pre-release,
 `latest` does not point to it: use
-`https://github.com/jufianto/sevjala/releases/download/v0.3.0-alpha.1/sevjala-darwin-arm64`.
+`https://github.com/jufianto/sevjala/releases/download/v0.3.0-alpha.2/sevjala-darwin-arm64`.
 
 **Expect:** the service is installed and a pairing block is printed: an 8-character id, a
 6-digit code (valid 10 minutes) and a fingerprint. A new code: `sudo sevjala code`.
