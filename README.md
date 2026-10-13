@@ -5,7 +5,7 @@ Windows 7+, macOS and Linux. A Controller on the database server dumps, verifies
 backups over mutual TLS to paired backup PCs (Nodes); everything is operated from a CLI and
 tray, with a local browser dashboard later. No cloud, no Internet.
 
-**Status:** pre-alpha. P0 (service + local API) in progress, see [docs/PROGRESS.md](docs/PROGRESS.md).
+**Status:** pre-alpha. P0–M3 code done (scheduled backups, retention), manual smokes pending, see [docs/PROGRESS.md](docs/PROGRESS.md).
 
 ## Try it
 
@@ -43,6 +43,17 @@ sevjala backups list --matrix          # one column per node
 
 The database password is kept in the OS keyring (an encrypted file on Linux without one),
 never in `config.toml`.
+
+Unattended (controller): backups run on policy schedules (local time) and each node keeps the
+newest N per policy; a node that was off is filled in when it comes back.
+
+```sh
+sevjala policy list                    # frequent, hourly, daily, monthly, manual (backup now)
+sevjala policy add weekly --schedule @weekly --keep 4
+sevjala policy set frequent --keep 6 --to pc-2,pc-3
+sevjala retention run --dry-run        # what would be deleted or sent, and why
+sevjala backups list --all             # includes expired backups
+```
 
 Build: `make build` (host), `make build-all` (every asset incl. Windows 7), `make test`,
 `make test-integration` (real MariaDB 10.4 in Docker), `make lint`.

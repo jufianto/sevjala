@@ -87,6 +87,7 @@ except `PUT /backups/{id}`.
 | `POST /pair` | client cert | `{"agent_id","fp"}` (the node) | 403 cert fp ≠ `controller_fp`, wrong proof, the proof that burns the code, no cert; 400 bad JSON; 409 on a controller (reachable only without a cert). With no active code a new controller never gets here: its handshake fails. |
 | `GET /status` | paired controller cert | see below | 403 otherwise |
 | `PUT /backups/{id}` | paired controller cert | see below | see below |
+| `DELETE /backups/{id}` (M3) | paired controller cert | see below | see below |
 | anything else | | | 404 `not found` |
 
 `POST /pair` body: `{"controller_id":"…","controller_fp":"sha256:…","proof":"<hex>"}` with
@@ -94,11 +95,11 @@ except `PUT /backups/{id}`.
 `peers.json`, replaces any previous controller, and burns the code. Five wrong proofs burn
 the code; the code lives 10 minutes in the node agent's memory only.
 
-`GET /status` (since M2; `store` only on a node):
+`GET /status` (since M2; `store` only on a node; `min_free_bytes` since M3):
 
 ```json
 {"agent_id":"…","role":"node","version":"0.3.0","uptime_s":86400,
- "store":{"path":"C:\\ProgramData\\Sevjala\\store","free_bytes":512000000000},
+ "store":{"path":"C:\\ProgramData\\Sevjala\\store","free_bytes":512000000000,"min_free_bytes":2147483648},
  "health":"healthy",
  "backups":[{"backup_id":"BK-20261013-101500-A8F2","size":214748364,"sha256":"…","state":"verified"}],
  "problems":[]}
@@ -106,7 +107,13 @@ the code; the code lives 10 minutes in the node agent's memory only.
 
 `state` is `verified` (manifest present, file size matches) or `corrupt`; hashes are not
 recomputed here. `health` is `warning` when `problems` is not empty: a corrupt backup, an
-unreadable store, or a partial file removed since the last scan (reported once).
+unreadable store, a partial file removed since the last scan (reported once), or (since M3)
+`free space <n> is below the floor <m>`. When the store cannot be read, `backups` is `null`:
+the inventory is unknown, and the controller makes no retention decision for that node.
+
+The controller polls this route on every paired node every 15 s (since M3). An answer makes
+the node `online`, or `warning` when `health` is not `healthy`; three missed polls in a row
+make it `offline`; a TLS rejection or a changed certificate makes it `error` at once.
 
 ### `PUT /backups/{id}` (since M2)
 
@@ -164,6 +171,20 @@ Each body read must arrive within 60 s; the controller cancels after 60 s withou
 | `size`, `sha256` | of the `.sql.gz` file (gzip of the mysqldump output) |
 | `tags` | `manual` unless `backup now --tag` |
 
+### `DELETE /backups/{id}` (since M3)
+
+Paired controller only; the only way a stored backup is removed (blueprint AD-08). Body
+`{"reason":"…"}` (at most 4 KiB, the reason must not be empty). The node removes
+`<id>.sql.gz`, then `<id>.json`, syncs the directory and logs `backup_deleted` with the reason.
+
+| Status | Meaning |
+|---|---|
+| 200 `{"backup_id","deleted":bool}` | removed; `deleted` is false when nothing was there (not an error) |
+| 400 | bad id, or no reason |
+| 403 | not the paired controller |
+| 503 | the id is being received right now |
+| 409 | the agent is a controller |
+
 ## Node store (since M2)
 
 Default `<data-dir>/store` (inherits the locked data dir), or `[node.store] path`.
@@ -175,7 +196,8 @@ Default `<data-dir>/store` (inherits the locked data dir), or `[node.store] path
 | `<id>.part` | a transfer in progress; deleted on mismatch, abort, agent start, or after 1 h |
 
 A file without its manifest, a manifest without its file, a size mismatch or an unreadable
-manifest is reported `corrupt`. Nodes never delete a `.sql.gz` or `.json` on their own.
+manifest is reported `corrupt`. Nodes never delete a `.sql.gz` or `.json` on their own; only
+an authenticated `DELETE` removes them.
 
 ## Controller staging (since M2)
 
@@ -183,6 +205,12 @@ manifest is reported `corrupt`. Nodes never delete a `.sql.gz` or `.json` on the
 written as mysqldump → gzip → (file, sha256) into `<id>.part`, then renamed. A dump that
 fails, is cancelled, or prints `error` on stderr deletes its `.part`; an agent start deletes
 any `.part` left behind.
+
+Since M3, reconciliation (every 5 min) removes from staging every backup that is not among
+the newest `[controller.staging] keep` (default 12; 0 means 12) of its database, is not
+dumping, and is not still missing from a node that should hold it. It also removes
+`<id>.sql.gz`/`<id>.json` files whose id the store does not know. The backup's
+`staging_path` becomes `''`.
 
 ## Secrets (since M2)
 
@@ -214,23 +242,39 @@ on a node`); a LAN failure behind a route is 502. Bodies are capped at 4 KiB.
 | `POST /db/detect` (M2) | controller | — | `Detection` |
 | `PUT /db` (M2) | controller | `DBSettings`; tested against the server before anything is saved | `Detection` |
 | `POST /backup/now` (M2) | controller | `{"db":"<name or empty for all configured>","tags":["…"]}` | `{"backups":[{"backup_id","database"}]}`; 409 while that database is dumping |
-| `GET /backups` (M2) | controller | — | `{"backups":[Backup…]}`, newest first |
+| `GET /backups` (M2) | controller | `?all=1` (M3) includes expired backups | `{"backups":[Backup…]}`, newest first |
 | `GET /backups/{id}` (M2) | controller | — | `Backup`; 404 unknown |
+| `GET /policies` (M3) | controller | — | `{"policies":[Policy…]}` in creation order |
+| `POST /policies` (M3) | controller | `PolicyChange` with `name` and `keep` | `Policy`; 400 invalid, 409 exists |
+| `PATCH /policies/{name}` (M3) | controller | `PolicyChange`; omitted fields keep their value | `Policy`; 404 unknown |
+| `DELETE /policies/{name}` (M3) | controller | — | `{}`; 404 unknown, 409 for `manual`. Backups carrying the tag are kept. |
+| `POST /retention/run` (M3) | controller | `{"dry_run":bool}` | `RetentionPlan` |
 | anything else | | | 404 `not found` |
 
 `Discovered`: `{"agent_id","hostname","addr":"ip:port","role","version","os","fp","paired":bool}`.
-`Agent`: `{"agent_id","hostname","addr","role","version","fp","paired_at","last_seen","state"}`
-(`last_seen` omitted when never seen). `<agent>` is an exact agent_id, else a hostname (any
+`Agent`: `{"agent_id","hostname","addr","role","version","fp","paired_at","last_seen","state","free_bytes","problem"}`
+(`last_seen` omitted when never seen; `state` `online|warning|offline|error` and `free_bytes`
+from the last poll, `problem` why it warned or failed, both since M3). `<agent>` is an exact agent_id, else a hostname (any
 case), else a unique agent_id prefix of at least 4 characters; ambiguity is 409 listing the
 candidates, no match is 404.
 `Detection`: `{"dumper","client","server_version","flavour":"MariaDB|MySQL","databases":[{"name","tables","consistency":"--single-transaction|--lock-tables","non_innodb":["posts (MyISAM)"],"configured":bool}]}`.
 `DBSettings`: `{"host","port","user","password","dumper","databases":[…]}`; an omitted field keeps
 the current value, `databases` omitted or `null` keeps the list, `[]` clears it, `"password":""`
-removes the stored password. Tags match `^[a-z0-9][a-z0-9_-]{0,31}$`.
+removes the stored password. Policy names match `^[a-z0-9][a-z0-9_-]{0,31}$`; since M3 every
+tag of `backup now` must be a policy name (default `manual`).
+`Policy`: `{"name","schedule","keep","to":[{"agent_id","hostname"}],"enabled","next_run"}`;
+`schedule` is 5-field cron (`*`, `n`, `a-b`, `a,b`, `*/n`, `a-b/n`; day of week 0-7, Sunday 0
+or 7) or `@hourly|@daily|@weekly|@monthly`, in the controller's local time; `""` never fires.
+`to: []` is every paired node; `next_run` is omitted when disabled or never firing.
+`PolicyChange`: `{"name","schedule","keep","to":["<agent>"…],"enabled"}`; `keep` 1-1000; `to`
+omitted or `null` keeps the destinations, `[]` or `["all"]` is every node.
+`RetentionPlan`: `{"dry_run","deletes":[Action],"sends":[Action],"kept":[Action],"unstaged":[id],"expired":[id]}`
+with `Action` `{"backup_id","agent_id","hostname","reason"}`; a `kept` entry without
+`backup_id` is a node skipped because it has no current inventory.
 `Backup`: `{"backup_id","database","created_at","size","sha256","tags","state","error","bytes","copies":[{"agent_id","hostname","state","attempts","last_error","verified_at"}]}`;
 `state` is `dumping` (with `bytes` so far) or `failed` (with `error`) before the backup is in
-the store, then `created`, `distributed` or `partial`. Copy states: `pending`, `transferring`,
-`verified`, `failed`, `offline`.
+the store, then `created`, `distributed`, `partial` or (M3) `expired`. Copy states: `pending`,
+`transferring`, `verified`, `failed`, `offline`, and since M3 `corrupt` and `deleted`.
 
 ### `GET /status`
 
@@ -298,3 +342,25 @@ CREATE TABLE backup_copies (
 
 A backup is `created` while any copy is `pending` or `transferring`, `distributed` when every
 copy is `verified`, else `partial`. A backup with no paired nodes stays `created` in staging.
+
+Version 3 (M3) adds the policies, seeded with the defaults:
+
+```sql
+CREATE TABLE policies (
+  name         TEXT PRIMARY KEY,
+  cron         TEXT NOT NULL,             -- '' = never scheduled
+  keep         INTEGER NOT NULL,
+  destinations TEXT NOT NULL DEFAULT '[]', -- JSON array of agent_id; [] = every paired node
+  enabled      INTEGER NOT NULL DEFAULT 1  -- 0 stops scheduling; retention still applies keep
+);
+INSERT INTO policies (name, cron, keep) VALUES
+  ('frequent', '*/10 * * * *', 12), ('hourly', '0 * * * *', 24),
+  ('daily', '0 1 * * *', 30), ('monthly', '0 1 1 * *', 12), ('manual', '', 10);
+```
+
+Copy states add `corrupt` (the node reports it corrupt or with another sha256) and `deleted`
+(removed by retention). The backup state ignores `deleted` copies: `created` while any copy is
+`pending` or `transferring` or none is left, `distributed` when every remaining copy is
+`verified`, else `partial`; `expired` (no copy and no staging file left) is set by
+reconciliation and never changes back. Agents' `state` is `online`, `warning`, `offline` or
+`error`, with `free_bytes` and `last_seen` from the last answered poll.

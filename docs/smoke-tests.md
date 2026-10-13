@@ -174,3 +174,67 @@ Win7-only risks found in review (no automated coverage):
 - Re-pair one node to another controller, then `backup now` on the first: that copy must
   end `failed` after one attempt ("rejected this controller's certificate"), not retry for
   12 minutes.
+
+## M3 — unattended
+
+Exit criterion: 48 h unattended with one node powered off for 2 h; every node ends with
+exactly the policy counts, nothing deleted that a node still needed, and
+`sevjala retention run --dry-run` prints "nothing to do".
+
+Already covered without real PCs: `TestUnattended` (two in-process nodes on loopback, fast
+schedules) runs the schedule, takes a node offline and back, fills it in, trims it, replaces
+a corrupt copy and keeps exactly the newest staging files, ending with an empty dry run.
+What remains is real time, real PCs and a real power-off.
+
+Setup: the M2 setup (controller with a database chosen, three paired nodes).
+
+```sh
+# controller
+sevjala policy list                  # frequent, hourly, daily, monthly, manual; NEXT RUN filled in
+sevjala doctor                       # ok schedule (next run …), ok nodes (3 online)
+sevjala agents                 # STATE online, FREE filled in for every node
+```
+
+48 h run:
+
+1. Leave everything running. After ~1 h, `sevjala backups list --matrix` shows `frequent`
+   backups every 10 min and one `hourly`, all `v` on every node.
+2. Power one node off (not just stop the service) for 2 h. Within a minute
+   `sevjala agents` shows it `offline`. Backups keep being made; its column shows
+   pending/offline copies. Nothing on the other nodes is deleted early.
+3. Power it back on. Within 5 min its column fills in (`backfill_queued` in the controller
+   log) and then trims to the policy counts (`retention_delete`).
+4. After 48 h, on each node count the files per tag in the store (`*.json`, `tags`): at most
+   12 frequent, 24 hourly, 2 daily; staging on the controller holds at most 12 backups per
+   database. `sevjala retention run --dry-run` prints "nothing to do".
+5. Reboot the controller PC once during the run: missed slots catch up with one backup, not
+   one per missed slot (`schedule_fired` in the log).
+
+Disk full: on one node set `[node.store] min_free_bytes` above its free space and restart
+it. `sevjala agents` shows `warning` with "free space … is below the floor …";
+`retention run --dry-run` lists its missing backups as "waiting for free space"; new copies
+to it fail with 507 and are not retried in a loop. Restore the floor: within 5 min the
+copies are sent.
+
+Damaged copy: on a node, truncate the newest `BK-….sql.gz` by hand (e.g. copy the first
+half over it). Within a minute `sevjala agents` shows `warning`; within 5 min the controller
+logs `retention_delete` ("corrupt: replaced from staging") and the copy is `v` again with
+the right sha256. Do the same to an old backup no longer staged: it is kept and listed by
+`retention run --dry-run` as "corrupt, no staging copy to replace it".
+
+Policies:
+
+```sh
+sevjala policy add weekly --schedule @weekly --keep 4      # listed, NEXT RUN next Sunday 00:00
+sevjala policy set frequent --keep 6 --to <node hostname>  # dry run: other nodes lose frequent copies
+sevjala retention run --dry-run                            # shows deletes with reasons, changes nothing
+sevjala retention run                                      # applies them
+sevjala policy set frequent --keep 12 --to all
+sevjala policy remove weekly                               # its backups stay
+sevjala policy remove manual                               # refused
+sevjala backup now --tag nope                              # refused: "tag "nope" is not a policy"
+sevjala policy set daily --disable                         # ENABLED no; retention still keeps its backups
+```
+
+Logs: the controller has `schedule_fired`, `agent_online`/`agent_offline`, `backfill_queued`,
+`retention_delete`, `staging_pruned`; each node has `backup_deleted` with the reason.

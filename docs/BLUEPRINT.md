@@ -222,6 +222,10 @@ place.
 | daily | 01:00 | 30 | all nodes |
 | monthly | 1st, 01:00 | 12 | all nodes |
 
+**Amended (M3):** `frequent` also defaults to all nodes ("nearest node" dropped, D-032), and a
+built-in `manual` policy (no schedule, keep 10, all nodes) holds `backup now` backups (D-034).
+Schedules are cron in local time (D-031).
+
 A single dump at 01:00 on the 1st is tagged `frequent, hourly, daily, monthly`.
 Retention runs per tag: a backup is deletable on a node only when no tag it carries
 still needs it there.
