@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -57,12 +58,23 @@ func newRootCmd() *cobra.Command {
 	root.PersistentFlags().StringVar(&g.dataDirFlag, "data-dir", "", "data directory (default: $SEVJALA_DATA_DIR, else the OS default)")
 	root.AddCommand(newVersionCmd(), newAgentCmd(g), newServiceCmd(g), newDoctorCmd(g),
 		newDiscoverCmd(g), newCodeCmd(g), newPairCmd(g), newAgentsCmd(g), newPingCmd(g),
-		newDBCmd(g), newBackupCmd(g), newBackupsCmd(g), newPolicyCmd(g), newRetentionCmd(g))
+		newDBCmd(g), newBackupCmd(g), newBackupsCmd(g), newPolicyCmd(g), newRetentionCmd(g), newSetupCmd(g))
 	return root
 }
 
+// Execute runs the CLI. Started by a double-click on Windows, it runs setup and
+// keeps the window open until Enter, so the operator can read the result.
 func Execute() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	args, own := os.Args[1:], ownConsole()
+	if own && len(args) == 0 {
+		args = []string{"setup"}
+	}
+	code := run(args, os.Stdout, os.Stderr)
+	if own {
+		fmt.Print("\nPress Enter to close ")
+		_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
+	}
+	os.Exit(code)
 }
 
 func run(args []string, out, errOut io.Writer) int {
