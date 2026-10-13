@@ -149,3 +149,59 @@ func TestRenderChecksWarnDoesNotFail(t *testing.T) {
 		t.Errorf("%q", b.String())
 	}
 }
+
+func TestScheduleCheck(t *testing.T) {
+	next := time.Date(2026, 10, 13, 10, 20, 0, 0, time.Local)
+	ps := []localapi.Policy{
+		{Name: "frequent", Enabled: true, NextRun: next},
+		{Name: "hourly", Enabled: true, NextRun: next.Add(40 * time.Minute)},
+		{Name: "sameminute", Enabled: true, NextRun: next},
+		{Name: "manual", Enabled: true},
+	}
+	tests := []struct {
+		name      string
+		ps        []localapi.Policy
+		err       error
+		databases int
+		ok, warn  bool
+		detail    string
+	}{
+		{"next run", ps, nil, 1, true, false, "next run 2026-10-13 10:20 (frequent, sameminute)"},
+		{"no database", ps, nil, 0, false, true, "idle"},
+		{"nothing scheduled", ps[3:], nil, 1, false, true, "no enabled policy has a schedule"},
+		{"agent error", nil, errors.New("boom"), 1, false, false, "boom"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := scheduleCheck(tt.ps, tt.err, tt.databases)
+			if r.OK != tt.ok || r.Warn != tt.warn || !strings.Contains(r.Detail, tt.detail) || r.Name != "schedule" {
+				t.Errorf("%+v", r)
+			}
+		})
+	}
+}
+
+func TestNodesCheck(t *testing.T) {
+	up := localapi.Agent{Hostname: "PC-1", Role: "node", State: "online"}
+	down := localapi.Agent{Hostname: "PC-2", Role: "node", State: "offline", Problem: "connection refused"}
+	tests := []struct {
+		name     string
+		as       []localapi.Agent
+		err      error
+		ok, warn bool
+		detail   string
+	}{
+		{"all online", []localapi.Agent{up}, nil, true, false, "1 online"},
+		{"one offline", []localapi.Agent{up, down}, nil, false, true, "PC-2 offline (connection refused)"},
+		{"none paired", nil, nil, false, false, "no paired node"},
+		{"agent error", nil, errors.New("boom"), false, false, "boom"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := nodesCheck(tt.as, tt.err)
+			if r.OK != tt.ok || r.Warn != tt.warn || !strings.Contains(r.Detail, tt.detail) || r.Name != "nodes" {
+				t.Errorf("%+v", r)
+			}
+		})
+	}
+}

@@ -148,6 +148,65 @@ func storeCheck(s *localapi.StoreInfo, minFree int64) checkResult {
 	return checkResult{Name: "store", Detail: detail, OK: true}
 }
 
+// scheduleCheck shows the next scheduled run; databases is how many are configured.
+func scheduleCheck(ps []localapi.Policy, err error, databases int) checkResult {
+	r := checkResult{Name: "schedule"}
+	if err != nil {
+		r.Detail = err.Error()
+		return r
+	}
+	if databases == 0 {
+		r.Detail, r.Warn = "idle: no database configured (sevjala db set --db <name>)", true
+		return r
+	}
+	var next time.Time
+	var names []string
+	for _, p := range ps {
+		switch {
+		case !p.Enabled || p.NextRun.IsZero():
+		case next.IsZero() || p.NextRun.Before(next):
+			next, names = p.NextRun, []string{p.Name}
+		case p.NextRun.Equal(next):
+			names = append(names, p.Name)
+		}
+	}
+	if next.IsZero() {
+		r.Detail, r.Warn = "no enabled policy has a schedule (sevjala policy list)", true
+		return r
+	}
+	r.Detail, r.OK = fmt.Sprintf("next run %s (%s)", next.Local().Format("2006-01-02 15:04"), strings.Join(names, ", ")), true
+	return r
+}
+
+// nodesCheck fails without a paired node and warns about nodes that are offline or in error.
+func nodesCheck(as []localapi.Agent, err error) checkResult {
+	r := checkResult{Name: "nodes"}
+	if err != nil {
+		r.Detail = err.Error()
+		return r
+	}
+	var bad []string
+	nodes := 0
+	for _, a := range as {
+		if a.Role != config.RoleNode {
+			continue
+		}
+		nodes++
+		if a.State == "offline" || a.State == "error" {
+			bad = append(bad, fmt.Sprintf("%s %s (%s)", a.Hostname, a.State, a.Problem))
+		}
+	}
+	switch {
+	case nodes == 0:
+		r.Detail = "no paired node: sevjala discover, then sevjala pair"
+	case len(bad) > 0:
+		r.Detail, r.Warn = strings.Join(bad, "; "), true
+	default:
+		r.Detail, r.OK = fmt.Sprintf("%d online", nodes), true
+	}
+	return r
+}
+
 func newDoctorCmd(g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",
@@ -175,10 +234,14 @@ func newDoctorCmd(g *globals) *cobra.Command {
 					switch cfg.Role {
 					case config.RoleController:
 						rs = append(rs, checkWritable("staging", config.StagingDir(dataDir)))
+						cl := localapi.NewClient(endpoint)
 						ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-						d, err := localapi.NewClient(endpoint).DetectDatabase(ctx)
+						d, err := cl.DetectDatabase(ctx)
+						ps, perr := cl.Policies(ctx)
+						as, aerr := cl.Agents(ctx)
 						cancel()
 						rs = append(rs, databaseChecks(d, err)...)
+						rs = append(rs, scheduleCheck(ps, perr, len(cfg.Controller.Database.Databases)), nodesCheck(as, aerr))
 					case config.RoleNode:
 						rs = append(rs, storeCheck(st.Store, cfg.Node.Store.MinFreeBytes))
 					}
