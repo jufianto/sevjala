@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/jufianto/sevjala/localapi"
+	"github.com/jufianto/sevjala/scheduler"
 )
 
 func newPolicyCmd(g *globals) *cobra.Command {
@@ -142,12 +143,9 @@ func (f *policyFlags) change(fs *pflag.FlagSet, adding bool) (localapi.PolicyCha
 
 func renderPolicies(w io.Writer, ps []localapi.Policy) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "NAME\tSCHEDULE\tNEXT RUN\tKEEP\tTO\tENABLED")
+	fmt.Fprintln(tw, "NAME\tWHEN\tNEXT RUN\tKEEP\tTO\tENABLED")
 	for _, p := range ps {
-		sched, next, to, on := p.Schedule, "-", "all", "yes"
-		if sched == "" {
-			sched = "-"
-		}
+		sched, next, to, on := scheduler.Describe(p.Schedule), "-", "all", "yes"
 		if !p.NextRun.IsZero() {
 			next = p.NextRun.Local().Format("2006-01-02 15:04")
 		}

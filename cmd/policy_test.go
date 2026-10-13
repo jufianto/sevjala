@@ -51,10 +51,10 @@ func TestRenderPolicies(t *testing.T) {
 			To: []localapi.PolicyTarget{{Hostname: "PC-1"}, {Hostname: "PC-2"}}},
 		{Name: "manual", Keep: 10, To: []localapi.PolicyTarget{}, Enabled: true},
 	})
-	want := "NAME      SCHEDULE      NEXT RUN          KEEP  TO         ENABLED\n" +
-		"frequent  */10 * * * *  2026-10-13 10:20  12    all        yes\n" +
-		"daily     0 1 * * *     -                 30    PC-1,PC-2  no\n" +
-		"manual    -             -                 10    all        yes\n"
+	want := "NAME      WHEN                                      NEXT RUN          KEEP  TO         ENABLED\n" +
+		"frequent  every 10 minutes                          2026-10-13 10:20  12    all        yes\n" +
+		"daily     every day at 01:00                        -                 30    PC-1,PC-2  no\n" +
+		"manual    only when run by hand (backup now --tag)  -                 10    all        yes\n"
 	if b.String() != want {
 		t.Errorf("got\n%s\nwant\n%s", b.String(), want)
 	}
