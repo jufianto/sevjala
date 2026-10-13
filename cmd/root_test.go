@@ -60,3 +60,13 @@ func TestExitCodeFromErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestHelpHidesTheServiceOnlyAgentCommand(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if code := run([]string{"--help"}, &out, &errOut); code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut.String())
+	}
+	if strings.Contains(out.String(), "\n  agent ") || !strings.Contains(out.String(), "\n  agents ") {
+		t.Errorf("help must list agents, not agent:\n%s", out.String())
+	}
+}

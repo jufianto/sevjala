@@ -6,8 +6,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"io/fs"
 	"net"
 	"path/filepath"
+	"time"
 
 	"github.com/Microsoft/go-winio"
 )
@@ -23,8 +26,16 @@ func customEndpoint(dataDir string) string {
 }
 
 // Custom endpoints keep the default DACL so an un-elevated developer can
-// reach the agent they started.
+// reach the agent they started. A pipe that exists but refuses this user
+// belongs to a running agent too.
 func listen(endpoint string) (net.Listener, string, error) {
+	timeout := time.Second
+	if c, err := winio.DialPipe(endpoint, &timeout); err == nil || errors.Is(err, fs.ErrPermission) || errors.Is(err, winio.ErrTimeout) {
+		if c != nil {
+			c.Close()
+		}
+		return nil, "", ErrAlreadyRunning
+	}
 	cfg := &winio.PipeConfig{}
 	if endpoint == defaultEndpoint {
 		cfg.SecurityDescriptor = defaultSDDL

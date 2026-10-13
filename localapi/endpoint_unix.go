@@ -28,7 +28,7 @@ func customEndpoint(dataDir string) string {
 func listen(endpoint string) (net.Listener, string, error) {
 	if c, err := net.DialTimeout("unix", endpoint, time.Second); err == nil {
 		c.Close()
-		return nil, "", errors.New("another agent is already listening")
+		return nil, "", ErrAlreadyRunning
 	}
 	if err := os.Remove(endpoint); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, "", err

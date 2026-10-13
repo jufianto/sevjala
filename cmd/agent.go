@@ -14,9 +14,10 @@ import (
 func newAgentCmd(g *globals) *cobra.Command {
 	var role string
 	c := &cobra.Command{
-		Use:   "agent",
-		Short: "Run the agent in the foreground (the service runs this)",
-		Args:  cobra.NoArgs,
+		Use:    "agent",
+		Short:  "Run the agent in the foreground (the service runs this)",
+		Hidden: true,
+		Args:   cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if role != "" && !config.ValidRole(role) {
 				return usagef("--role must be %q or %q", config.RoleController, config.RoleNode)

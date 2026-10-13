@@ -132,8 +132,8 @@ func TestSecondListenerFails(t *testing.T) {
 	if srv, err := Start(ep, NewHandler(&fakeBackend{}), discard); err == nil {
 		srv.Shutdown(context.Background())
 		t.Fatal("second Start on the same endpoint succeeded")
-	} else if !strings.Contains(err.Error(), ep) {
-		t.Errorf("error %q does not name the endpoint", err)
+	} else if !strings.Contains(err.Error(), ep) || !errors.Is(err, ErrAlreadyRunning) {
+		t.Errorf("error %q does not name the endpoint or say an agent is running", err)
 	}
 }
 
