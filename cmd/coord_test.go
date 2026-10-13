@@ -2,11 +2,16 @@ package cmd
 
 import (
 	"bytes"
+	"context"
+	"fmt"
+	"io/fs"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/jufianto/sevjala/localapi"
+	"github.com/jufianto/sevjala/svc"
 )
 
 func TestRenderDiscovered(t *testing.T) {
@@ -23,7 +28,7 @@ func TestRenderDiscovered(t *testing.T) {
 	}
 	b.Reset()
 	renderDiscovered(&b, nil)
-	if !strings.Contains(b.String(), "sevjala agents add") {
+	if !strings.Contains(b.String(), "sevjala agents add") || !strings.Contains(b.String(), "sevjala pair") {
 		t.Errorf("empty: %q", b.String())
 	}
 }
@@ -33,7 +38,8 @@ func TestRenderCode(t *testing.T) {
 	renderCode(&b, localapi.Code{Code: "123456", AgentID: "3f2a9c1e-1111", FP: "sha256:3f2a9b1c77de0a41ffff",
 		ExpiresAt: time.Date(2026, 10, 12, 16, 42, 0, 0, time.Local)})
 	want := "pairing code 123456, valid until 16:42\nfingerprint  3f2a9b1c77de0a41\n" +
-		"on the controller run: sevjala pair 3f2a9c1e --code 123456 --fp 3f2a9b1c77de0a41\n"
+		"on the controller run: sevjala pair 3f2a9c1e --code 123456 --fp 3f2a9b1c77de0a41\n" +
+		"(if sevjala discover there does not list this PC, first run: sevjala agents add <this PC's IP>)\n"
 	if b.String() != want {
 		t.Errorf("got %q", b.String())
 	}
@@ -87,5 +93,16 @@ func TestCoordUsageErrors(t *testing.T) {
 		if code := run(tt.args, &out, &errOut); code != 2 || !strings.Contains(errOut.String(), tt.want) {
 			t.Errorf("%v: exit %d, stderr %q", tt.args, code, errOut.String())
 		}
+	}
+}
+
+func TestCallAgentDeniedNamesTheFix(t *testing.T) {
+	g := &globals{dataDirFlag: t.TempDir()}
+	denied := &os.PathError{Op: "open", Path: `\\.\pipe\sevjala`, Err: fs.ErrPermission}
+	_, err := callAgent(g, time.Second, func(context.Context, *localapi.Client) (struct{}, error) {
+		return struct{}{}, fmt.Errorf("post: %w", denied)
+	})
+	if err == nil || !strings.Contains(err.Error(), svc.AdminHint) || strings.Contains(err.Error(), "is the service running") {
+		t.Errorf("got %v, want the admin hint", err)
 	}
 }

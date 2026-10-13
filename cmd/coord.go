@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"text/tabwriter"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 	"github.com/jufianto/sevjala/localapi"
 	"github.com/jufianto/sevjala/pairing"
+	"github.com/jufianto/sevjala/svc"
 )
 
 // callAgent runs one local API call; an answer with an error is the agent's
@@ -30,6 +32,9 @@ func callAgent[T any](g *globals, timeout time.Duration, f func(context.Context,
 		var le *localapi.Error
 		if errors.As(err, &le) {
 			return zero, fail(le)
+		}
+		if errors.Is(err, fs.ErrPermission) {
+			return zero, failf("the agent at %s refused this user: %s (%w)", ep, svc.AdminHint, err)
 		}
 		return zero, failf("agent not answering at %s (is the service running?): %w", ep, err)
 	}
@@ -63,7 +68,9 @@ func newDiscoverCmd(g *globals) *cobra.Command {
 
 func renderDiscovered(w io.Writer, ds []localapi.Discovered) {
 	if len(ds) == 0 {
-		fmt.Fprintln(w, "no agents answered; check the firewall on the nodes, or add one with 'sevjala agents add <host:port>'")
+		fmt.Fprintln(w, "no agents answered. Discovery only reaches this network: for a node elsewhere (Tailscale, VPN,\n"+
+			"another subnet) run 'sevjala agents add <its IP>', then the 'sevjala pair …' line its 'sevjala code' shows.\n"+
+			"Otherwise check the firewall on the nodes.")
 		return
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
@@ -101,6 +108,7 @@ func renderCode(w io.Writer, c localapi.Code) {
 	fmt.Fprintf(w, "pairing code %s, valid until %s\n", c.Code, c.ExpiresAt.Local().Format("15:04"))
 	fmt.Fprintf(w, "fingerprint  %s\n", fp)
 	fmt.Fprintf(w, "on the controller run: sevjala pair %s --code %s --fp %s\n", shortID(c.AgentID), c.Code, fp)
+	fmt.Fprintln(w, "(if sevjala discover there does not list this PC, first run: sevjala agents add <this PC's IP>)")
 }
 
 func newPairCmd(g *globals) *cobra.Command {
