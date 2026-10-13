@@ -143,14 +143,14 @@ func humanBytes(n int64) string {
 
 func newBackupsCmd(g *globals) *cobra.Command {
 	c := &cobra.Command{Use: "backups", Short: "Backups the controller knows about"}
-	var matrix bool
+	var matrix, all bool
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "List backups and where their copies are",
 		Args:  cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			bs, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) ([]localapi.Backup, error) {
-				return cl.Backups(ctx, false)
+				return cl.Backups(ctx, all)
 			})
 			if err != nil {
 				return err
@@ -164,6 +164,7 @@ func newBackupsCmd(g *globals) *cobra.Command {
 		},
 	}
 	list.Flags().BoolVar(&matrix, "matrix", false, "one column per node")
+	list.Flags().BoolVar(&all, "all", false, "include expired backups (no copy left anywhere)")
 	c.AddCommand(list)
 	return c
 }
@@ -180,23 +181,29 @@ func renderBackups(w io.Writer, bs []localapi.Backup) {
 		if !b.CreatedAt.IsZero() {
 			created = b.CreatedAt.Local().Format("2006-01-02 15:04")
 		}
-		verified := 0
+		verified, live := 0, 0
 		for _, c := range b.Copies {
-			if c.State == "verified" {
+			switch c.State {
+			case "deleted":
+				continue
+			case "verified":
 				verified++
 			}
+			live++
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%d/%d verified\n", b.BackupID, b.Database, created, humanBytes(b.Size),
-			strings.Join(b.Tags, ","), b.State, verified, len(b.Copies))
+			strings.Join(b.Tags, ","), b.State, verified, live)
 	}
 	tw.Flush()
 }
 
 // renderMatrix uses ASCII marks on Windows, whose console code pages lack ✓.
 func renderMatrix(w io.Writer, bs []localapi.Backup, goos string) {
-	marks := map[string]string{"verified": "✓", "pending": "…", "transferring": "…", "failed": "✗", "offline": "○"}
+	marks := map[string]string{"verified": "✓", "pending": "…", "transferring": "…", "failed": "✗", "offline": "○",
+		"corrupt": "!", "deleted": "-"}
 	if goos == "windows" {
-		marks = map[string]string{"verified": "v", "pending": ".", "transferring": ".", "failed": "x", "offline": "o"}
+		marks = map[string]string{"verified": "v", "pending": ".", "transferring": ".", "failed": "x", "offline": "o",
+			"corrupt": "!", "deleted": "-"}
 	}
 	var hosts []string
 	for _, b := range bs {
@@ -222,6 +229,6 @@ func renderMatrix(w io.Writer, bs []localapi.Backup, goos string) {
 		fmt.Fprintf(tw, "%s\t%s\t%s\n", b.BackupID, b.Database, strings.Join(cells, "\t"))
 	}
 	tw.Flush()
-	fmt.Fprintf(w, "\n%s verified  %s pending  %s failed  %s offline  - no copy planned\n",
+	fmt.Fprintf(w, "\n%s verified  %s pending  %s failed  %s offline  ! corrupt  - no copy (deleted or not planned)\n",
 		marks["verified"], marks["pending"], marks["failed"], marks["offline"])
 }

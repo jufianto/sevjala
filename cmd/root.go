@@ -57,7 +57,7 @@ func newRootCmd() *cobra.Command {
 	root.PersistentFlags().StringVar(&g.dataDirFlag, "data-dir", "", "data directory (default: $SEVJALA_DATA_DIR, else the OS default)")
 	root.AddCommand(newVersionCmd(), newAgentCmd(g), newServiceCmd(g), newDoctorCmd(g),
 		newDiscoverCmd(g), newCodeCmd(g), newPairCmd(g), newAgentsCmd(g), newPingCmd(g),
-		newDBCmd(g), newBackupCmd(g), newBackupsCmd(g))
+		newDBCmd(g), newBackupCmd(g), newBackupsCmd(g), newPolicyCmd(g), newRetentionCmd(g))
 	return root
 }
 

@@ -175,13 +175,16 @@ func renderAgents(w io.Writer, as []localapi.Agent) {
 		return
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "AGENT\tHOSTNAME\tADDRESS\tSTATE\tLAST SEEN")
+	fmt.Fprintln(tw, "AGENT\tHOSTNAME\tADDRESS\tSTATE\tFREE\tLAST SEEN\tPROBLEM")
 	for _, a := range as {
-		seen := "never"
+		seen, free := "never", "-"
 		if !a.LastSeen.IsZero() {
 			seen = a.LastSeen.Local().Format("2006-01-02 15:04")
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", shortID(a.AgentID), a.Hostname, a.Addr, a.State, seen)
+		if a.FreeBytes > 0 {
+			free = humanBytes(a.FreeBytes)
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", shortID(a.AgentID), a.Hostname, a.Addr, a.State, free, seen, a.Problem)
 	}
 	tw.Flush()
 }

@@ -83,15 +83,16 @@ func TestWatchStopsOnCancel(t *testing.T) {
 func TestRenderBackupsAndMatrix(t *testing.T) {
 	bs := []localapi.Backup{{BackupID: "BK-20261013-101500-A8F2", Database: "shop", Size: 2048, Tags: []string{"manual"},
 		CreatedAt: time.Date(2026, 10, 13, 10, 15, 0, 0, time.Local), State: "partial",
-		Copies: []localapi.BackupCopy{{Hostname: "PC-1", State: "verified"}, {Hostname: "PC-2", State: "offline"}}}}
+		Copies: []localapi.BackupCopy{{Hostname: "PC-1", State: "verified"}, {Hostname: "PC-2", State: "offline"},
+			{Hostname: "PC-3", State: "corrupt"}, {Hostname: "PC-4", State: "deleted"}}}}
 	var b bytes.Buffer
 	renderBackups(&b, bs)
-	if out := b.String(); !strings.Contains(out, "1/2 verified") || !strings.Contains(out, "2026-10-13 10:15") || !strings.Contains(out, "manual") {
+	if out := b.String(); !strings.Contains(out, "1/3 verified") || !strings.Contains(out, "2026-10-13 10:15") || !strings.Contains(out, "manual") {
 		t.Errorf("list:\n%s", out)
 	}
 	b.Reset()
 	renderMatrix(&b, bs, "linux")
-	if out := b.String(); !strings.Contains(out, "PC-1") || !strings.Contains(out, "✓") || !strings.Contains(out, "○") {
+	if out := b.String(); !strings.Contains(out, "PC-1") || !strings.Contains(out, "✓     ○     !     -") {
 		t.Errorf("matrix:\n%s", out)
 	}
 	b.Reset()
