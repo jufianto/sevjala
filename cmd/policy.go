@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -185,7 +187,17 @@ free-space floor gets no new copies until space is freed.`}
 			if err != nil {
 				return err
 			}
-			renderPlan(c.OutOrStdout(), p)
+			var held map[string]int
+			if len(p.Deletes)+len(p.Sends)+len(p.Kept)+len(p.Unstaged)+len(p.Expired) == 0 {
+				bs, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) ([]localapi.Backup, error) {
+					return cl.Backups(ctx, false)
+				})
+				if err != nil {
+					return err
+				}
+				held = verifiedPerHost(bs)
+			}
+			renderPlan(c.OutOrStdout(), p, held)
 			return nil
 		},
 	}
@@ -194,35 +206,82 @@ free-space floor gets no new copies until space is freed.`}
 	return c
 }
 
-func renderPlan(w io.Writer, p localapi.RetentionPlan) {
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	lines := 0
-	actions := func(verb string, as []localapi.RetentionAction) {
+// renderPlan groups the plan by backup PC; with nothing to do it says what each
+// PC holds (held: hostname → verified backups), so "nothing" reads as healthy.
+func renderPlan(w io.Writer, p localapi.RetentionPlan, held map[string]int) {
+	type row struct{ verb, id, reason string }
+	byHost := map[string][]row{}
+	add := func(verb string, as []localapi.RetentionAction) {
 		for _, a := range as {
 			id := a.BackupID
 			if id == "" {
 				id = "-"
 			}
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", verb, id, a.Hostname, a.Reason)
-			lines++
+			byHost[a.Hostname] = append(byHost[a.Hostname], row{verb, id, a.Reason})
 		}
 	}
-	ids := func(verb string, ids []string) {
-		for _, id := range ids {
-			fmt.Fprintf(tw, "%s\t%s\t\t\n", verb, id)
-			lines++
+	add("delete", p.Deletes)
+	add("send", p.Sends)
+	add("keep", p.Kept)
+	var ctrl []row
+	for _, id := range p.Unstaged {
+		ctrl = append(ctrl, row{"remove from staging", id, "not among the newest kept on the controller"})
+	}
+	for _, id := range p.Expired {
+		ctrl = append(ctrl, row{"forget", id, "no copy left anywhere"})
+	}
+	if len(byHost) == 0 && len(ctrl) == 0 {
+		if len(held) == 0 {
+			fmt.Fprintln(w, "nothing to do")
+			return
+		}
+		var hs []string
+		for _, h := range slices.Sorted(maps.Keys(held)) {
+			hs = append(hs, fmt.Sprintf("%s: %s", h, plural(held[h], "backup")))
+		}
+		fmt.Fprintf(w, "nothing to do: every backup PC holds what the policies keep (%s)\n", strings.Join(hs, ", "))
+		return
+	}
+	verbW, idW := 0, 0
+	for _, rows := range append(slices.Collect(maps.Values(byHost)), ctrl) {
+		for _, r := range rows {
+			verbW, idW = max(verbW, len(r.verb)), max(idW, len(r.id))
 		}
 	}
-	actions("delete", p.Deletes)
-	actions("send", p.Sends)
-	ids("unstage", p.Unstaged)
-	ids("expire", p.Expired)
-	actions("keep", p.Kept)
-	tw.Flush()
-	switch {
-	case lines == 0:
-		fmt.Fprintln(w, "nothing to do")
-	case p.DryRun:
-		fmt.Fprintln(w, "dry run: nothing was changed")
+	section := func(title string, rows []row) {
+		fmt.Fprintln(w, title)
+		for _, r := range rows {
+			fmt.Fprintf(w, "  %-*s  %-*s  %s\n", verbW, r.verb, idW, r.id, r.reason)
+		}
 	}
+	for _, h := range slices.Sorted(maps.Keys(byHost)) {
+		section(h, byHost[h])
+	}
+	if len(ctrl) > 0 {
+		section("controller", ctrl)
+	}
+	if p.DryRun {
+		fmt.Fprintln(w, "dry run: nothing was changed. Run it without --dry-run, or wait: it runs by itself every 5 minutes.")
+	} else {
+		fmt.Fprintln(w, "done")
+	}
+}
+
+func plural(n int, word string) string {
+	if n == 1 {
+		return "1 " + word
+	}
+	return fmt.Sprintf("%d %ss", n, word)
+}
+
+func verifiedPerHost(bs []localapi.Backup) map[string]int {
+	held := map[string]int{}
+	for _, b := range bs {
+		for _, c := range b.Copies {
+			if c.State == "verified" {
+				held[c.Hostname]++
+			}
+		}
+	}
+	return held
 }

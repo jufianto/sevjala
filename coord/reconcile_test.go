@@ -78,7 +78,7 @@ func TestReconcileDeletesBeyondKeep(t *testing.T) {
 
 	plan, err := ctrl.Reconcile(ctx, true)
 	want := []localapi.RetentionAction{{BackupID: old, AgentID: n.id.AgentID, Hostname: "PC-1",
-		Reason: "retention: not among the newest 1 manual on this node"}}
+		Reason: "manual keeps only the newest 1"}}
 	if err != nil || !plan.DryRun || !slices.Equal(plan.Deletes, want) || len(plan.Sends) != 0 {
 		t.Fatalf("dry run %+v, %v", plan, err)
 	}
@@ -117,7 +117,7 @@ func TestReconcileFillsANewNode(t *testing.T) {
 	pairNode(t, ctrl, late)
 	ctrl.PollAll(ctx)
 	plan, err := ctrl.Reconcile(ctx, false)
-	if err != nil || len(plan.Sends) != 1 || plan.Sends[0].Hostname != "PC-2" || plan.Sends[0].Reason != "backfill" {
+	if err != nil || len(plan.Sends) != 1 || plan.Sends[0].Hostname != "PC-2" || plan.Sends[0].Reason != "missing on this PC" {
 		t.Fatalf("plan %+v, %v", plan, err)
 	}
 	b := waitState(t, ctrl, id, state(store.BackupDistributed))
@@ -138,7 +138,7 @@ func TestReconcileReplacesACorruptCopy(t *testing.T) {
 	}
 	ctrl.PollAll(ctx)
 	plan, err := ctrl.Reconcile(ctx, false)
-	if err != nil || len(plan.Deletes) != 1 || plan.Deletes[0].Reason != "corrupt: replaced from staging" || len(plan.Sends) != 1 {
+	if err != nil || len(plan.Deletes) != 1 || plan.Deletes[0].Reason != "damaged: replaced with a good copy" || len(plan.Sends) != 1 {
 		t.Fatalf("plan %+v, %v", plan, err)
 	}
 	waitState(t, ctrl, id, state(store.BackupDistributed))

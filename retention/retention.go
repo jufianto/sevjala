@@ -73,9 +73,9 @@ type Plan struct {
 
 const (
 	ReasonUnknown     = "not made by this controller"
-	ReasonOffline     = "no current inventory (offline, or its store cannot be read)"
-	ReasonBackfill    = "backfill"
-	ReasonStillNeeded = "a node that should hold it does not have it yet"
+	ReasonOffline     = "this PC did not report what it holds (offline, or its backup folder cannot be read)"
+	ReasonBackfill    = "missing on this PC"
+	ReasonStillNeeded = "a PC that should hold it does not have it yet"
 	ReasonClockBehind = "a backup is dated after now (clock moved back): nothing is deleted, unstaged or expired"
 )
 
@@ -208,7 +208,7 @@ func (c *computer) node(n Node) {
 				held++
 			}
 			if why[b.ID] == "" {
-				why[b.ID] = fmt.Sprintf("retention: not among the newest %d %s on this node", p.Keep, p.Name)
+				why[b.ID] = fmt.Sprintf("%s keeps only the newest %d", p.Name, p.Keep)
 			}
 		}
 	}
@@ -225,11 +225,11 @@ func (c *computer) node(n Node) {
 			}
 		case onNode && h.State != inventory.StateVerified:
 			if cp.State != store.CopyCorrupt {
-				c.update(b.ID, n.AgentID, store.CopyCorrupt, "the node reports the copy corrupt")
+				c.update(b.ID, n.AgentID, store.CopyCorrupt, "this PC reports its copy damaged")
 			}
 		case onNode:
 			if cp.State != store.CopyCorrupt {
-				c.update(b.ID, n.AgentID, store.CopyCorrupt, "the node holds another sha256")
+				c.update(b.ID, n.AgentID, store.CopyCorrupt, "this PC holds a different file (checksum mismatch)")
 			}
 		case has && cp.State == store.CopyVerified && !verifiedDuring(cp, n):
 			c.update(b.ID, n.AgentID, store.CopyFailed, "missing from the node")
@@ -250,11 +250,11 @@ func (c *computer) node(n Node) {
 			c.delete(id, n.AgentID, reason)
 		case verified(b):
 		case b.Staged:
-			if c.delete(id, n.AgentID, "corrupt: replaced from staging") {
-				c.send(id, n.AgentID, "replace corrupt copy")
+			if c.delete(id, n.AgentID, "damaged: replaced with a good copy") {
+				c.send(id, n.AgentID, "replace a damaged copy")
 			}
 		default:
-			c.plan.Kept = append(c.plan.Kept, Action{id, n.AgentID, "corrupt, no staging copy to replace it"})
+			c.plan.Kept = append(c.plan.Kept, Action{id, n.AgentID, "damaged, and the controller has no good copy left to replace it"})
 		}
 	}
 	for _, id := range slices.Sorted(maps.Keys(c.wanted(n.AgentID))) {

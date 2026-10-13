@@ -249,9 +249,9 @@ copies are sent.
 
 Damaged copy: on a node, truncate the newest `BK-….sql.gz` by hand (e.g. copy the first
 half over it). Within a minute `sevjala agents` shows `warning`; within 5 min the controller
-logs `retention_delete` ("corrupt: replaced from staging") and the copy is `v` again with
+logs `retention_delete` ("damaged: replaced with a good copy") and the copy is `v` again with
 the right sha256. Do the same to an old backup no longer staged: it is kept and listed by
-`retention run --dry-run` as "corrupt, no staging copy to replace it".
+`retention run --dry-run` as "damaged, and the controller has no good copy left to replace it".
 
 Clock moved back: set the controller PC's clock back one day (as after a dead CMOS battery).
 `retention run --dry-run` keeps everything with "a backup is dated after now (clock moved

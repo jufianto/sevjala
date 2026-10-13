@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -62,23 +63,48 @@ func TestRenderPolicies(t *testing.T) {
 
 func TestRenderPlan(t *testing.T) {
 	var b bytes.Buffer
-	renderPlan(&b, localapi.RetentionPlan{DryRun: true})
+	renderPlan(&b, localapi.RetentionPlan{DryRun: true}, map[string]int{"PC-2": 12, "PC-1": 40})
+	if want := "nothing to do: every backup PC holds what the policies keep (PC-1: 40 backups, PC-2: 12 backups)\n"; b.String() != want {
+		t.Errorf("empty:\n got %q\nwant %q", b.String(), want)
+	}
+	b.Reset()
+	renderPlan(&b, localapi.RetentionPlan{}, nil)
 	if b.String() != "nothing to do\n" {
-		t.Errorf("empty: %q", b.String())
+		t.Errorf("empty, no PCs: %q", b.String())
 	}
 	b.Reset()
 	renderPlan(&b, localapi.RetentionPlan{DryRun: true,
-		Deletes:  []localapi.RetentionAction{{BackupID: "BK-1", Hostname: "PC-2", Reason: "retention: not among the newest 30 daily on this node"}},
-		Sends:    []localapi.RetentionAction{{BackupID: "BK-2", Hostname: "PC-3", Reason: "backfill"}},
-		Kept:     []localapi.RetentionAction{{Hostname: "PC-4", Reason: "no current inventory"}},
-		Unstaged: []string{"BK-0"}, Expired: []string{"BK-0"}})
-	want := "delete   BK-1  PC-2  retention: not among the newest 30 daily on this node\n" +
-		"send     BK-2  PC-3  backfill\n" +
-		"unstage  BK-0        \n" +
-		"expire   BK-0        \n" +
-		"keep     -     PC-4  no current inventory\n" +
-		"dry run: nothing was changed\n"
+		Deletes:  []localapi.RetentionAction{{BackupID: "BK-1", Hostname: "PC-2", Reason: "daily keeps only the newest 30"}},
+		Sends:    []localapi.RetentionAction{{BackupID: "BK-2", Hostname: "PC-3", Reason: "missing on this PC"}, {BackupID: "BK-3", Hostname: "PC-2", Reason: "missing on this PC"}},
+		Kept:     []localapi.RetentionAction{{Hostname: "PC-4", Reason: "this PC did not report what it holds"}},
+		Unstaged: []string{"BK-0"}, Expired: []string{"BK-0"}}, nil)
+	want := "PC-2\n" +
+		"  delete               BK-1  daily keeps only the newest 30\n" +
+		"  send                 BK-3  missing on this PC\n" +
+		"PC-3\n" +
+		"  send                 BK-2  missing on this PC\n" +
+		"PC-4\n" +
+		"  keep                 -     this PC did not report what it holds\n" +
+		"controller\n" +
+		"  remove from staging  BK-0  not among the newest kept on the controller\n" +
+		"  forget               BK-0  no copy left anywhere\n" +
+		"dry run: nothing was changed. Run it without --dry-run, or wait: it runs by itself every 5 minutes.\n"
 	if b.String() != want {
-		t.Errorf("got\n%q\nwant\n%q", b.String(), want)
+		t.Errorf("got\n%s\nwant\n%s", b.String(), want)
+	}
+	b.Reset()
+	renderPlan(&b, localapi.RetentionPlan{Sends: []localapi.RetentionAction{{BackupID: "BK-2", Hostname: "PC-3", Reason: "missing on this PC"}}}, nil)
+	if !strings.HasSuffix(b.String(), "done\n") {
+		t.Errorf("a real run ends with done: %q", b.String())
+	}
+}
+
+func TestVerifiedPerHost(t *testing.T) {
+	got := verifiedPerHost([]localapi.Backup{
+		{Copies: []localapi.BackupCopy{{Hostname: "PC-1", State: "verified"}, {Hostname: "PC-2", State: "pending"}}},
+		{Copies: []localapi.BackupCopy{{Hostname: "PC-1", State: "verified"}, {Hostname: "PC-2", State: "verified"}}},
+	})
+	if got["PC-1"] != 2 || got["PC-2"] != 1 || len(got) != 2 {
+		t.Errorf("got %v", got)
 	}
 }

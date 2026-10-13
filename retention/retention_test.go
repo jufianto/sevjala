@@ -47,11 +47,11 @@ func TestCompute(t *testing.T) {
 	}{
 		{"keeps the newest N verified on the node", Input{Policies: keep2, Backups: []Backup{b1, b2, b3},
 			Nodes: []Node{node("A", b1, b2, b3)}, StagingKeep: 10},
-			Plan{Deletes: []Action{{id(1), "A", "retention: not among the newest 2 p on this node"}}}},
+			Plan{Deletes: []Action{{id(1), "A", "p keeps only the newest 2"}}}},
 
 		{"new backups not arriving keep the old ones", Input{Policies: keep2, Backups: []Backup{b1, b2, bk(3, "p")},
 			Nodes: []Node{node("A", b1, b2)}, StagingKeep: 10},
-			Plan{Sends: []Action{{id(3), "A", "backfill"}}}},
+			Plan{Sends: []Action{{id(3), "A", "missing on this PC"}}}},
 
 		{"missing and not staged is reported", Input{Policies: keep2, Backups: []Backup{b1, b2, unstaged(bk(3, "p"))},
 			Nodes: []Node{node("A", b1, b2)}, StagingKeep: 10},
@@ -59,8 +59,8 @@ func TestCompute(t *testing.T) {
 
 		{"a new node is filled", Input{Policies: keep2, Backups: []Backup{b1, b2, b3},
 			Nodes: []Node{node("A", b1, b2, b3), node("B")}, StagingKeep: 10},
-			Plan{Deletes: []Action{{id(1), "A", "retention: not among the newest 2 p on this node"}},
-				Sends: []Action{{id(2), "B", "backfill"}, {id(3), "B", "backfill"}}}},
+			Plan{Deletes: []Action{{id(1), "A", "p keeps only the newest 2"}},
+				Sends: []Action{{id(2), "B", "missing on this PC"}, {id(3), "B", "missing on this PC"}}}},
 
 		{"unknown backup is kept", Input{Policies: keep2, Backups: []Backup{b2, b3},
 			Nodes: []Node{node("A", b2, b3, bk(9, "p"))}, StagingKeep: 10},
@@ -81,22 +81,22 @@ func TestCompute(t *testing.T) {
 		{"corrupt and staged is replaced", Input{Policies: keep2, Backups: []Backup{b1, b2},
 			Nodes: []Node{{AgentID: "A", Polled: true, PolledAt: t0, FreeBytes: 1 << 40,
 				Actual: map[string]Held{id(1): {"verified", "sha1"}, id(2): {"corrupt", "sha2"}}}}, StagingKeep: 10},
-			Plan{Updates: []Update{{id(2), "A", "corrupt", "the node reports the copy corrupt"}},
-				Deletes: []Action{{id(2), "A", "corrupt: replaced from staging"}},
-				Sends:   []Action{{id(2), "A", "replace corrupt copy"}}}},
+			Plan{Updates: []Update{{id(2), "A", "corrupt", "this PC reports its copy damaged"}},
+				Deletes: []Action{{id(2), "A", "damaged: replaced with a good copy"}},
+				Sends:   []Action{{id(2), "A", "replace a damaged copy"}}}},
 
 		{"corrupt without staging is kept", Input{Policies: keep2, Backups: []Backup{b1, unstaged(b2)},
 			Nodes: []Node{{AgentID: "A", Polled: true, PolledAt: t0, FreeBytes: 1 << 40,
 				Actual: map[string]Held{id(1): {"verified", "sha1"}, id(2): {"corrupt", "sha2"}}}}, StagingKeep: 10},
-			Plan{Updates: []Update{{id(2), "A", "corrupt", "the node reports the copy corrupt"}},
-				Kept: []Action{{id(2), "A", "corrupt, no staging copy to replace it"}}}},
+			Plan{Updates: []Update{{id(2), "A", "corrupt", "this PC reports its copy damaged"}},
+				Kept: []Action{{id(2), "A", "damaged, and the controller has no good copy left to replace it"}}}},
 
 		{"a wrong hash is corrupt", Input{Policies: keep2, Backups: []Backup{b1},
 			Nodes: []Node{{AgentID: "A", Polled: true, PolledAt: t0, FreeBytes: 1 << 40,
 				Actual: map[string]Held{id(1): {"verified", "other"}}}}, StagingKeep: 10},
-			Plan{Updates: []Update{{id(1), "A", "corrupt", "the node holds another sha256"}},
-				Deletes: []Action{{id(1), "A", "corrupt: replaced from staging"}},
-				Sends:   []Action{{id(1), "A", "replace corrupt copy"}}}},
+			Plan{Updates: []Update{{id(1), "A", "corrupt", "this PC holds a different file (checksum mismatch)"}},
+				Deletes: []Action{{id(1), "A", "damaged: replaced with a good copy"}},
+				Sends:   []Action{{id(1), "A", "replace a damaged copy"}}}},
 
 		{"waiting for free space", Input{Policies: keep2, Backups: []Backup{bk(1, "p")},
 			Nodes: []Node{{AgentID: "A", Polled: true, PolledAt: t0, FreeBytes: 15, MinFree: 10, Actual: map[string]Held{}}}, StagingKeep: 10},
@@ -104,7 +104,7 @@ func TestCompute(t *testing.T) {
 
 		{"a copy gone from the node is failed and sent again", Input{Policies: keep2, Backups: []Backup{b1},
 			Nodes: []Node{node("A")}, StagingKeep: 10},
-			Plan{Updates: []Update{{id(1), "A", "failed", "missing from the node"}}, Sends: []Action{{id(1), "A", "backfill"}}}},
+			Plan{Updates: []Update{{id(1), "A", "failed", "missing from the node"}}, Sends: []Action{{id(1), "A", "missing on this PC"}}}},
 
 		{"a copy verified during the poll is left alone", Input{Policies: keep2,
 			Backups: []Backup{{ID: id(1), Database: "shop", SHA256: "sha1", Created: t0, Size: 10, Tags: []string{"p"}, Staged: true,
@@ -137,7 +137,7 @@ func TestCompute(t *testing.T) {
 
 		{"an unstaged backup with no copy left expires", Input{Policies: []Policy{{Name: "p", Keep: 1}},
 			Backups: []Backup{b1, b2}, Nodes: []Node{node("A", b1, b2)}, StagingKeep: 1},
-			Plan{Deletes: []Action{{id(1), "A", "retention: not among the newest 1 p on this node"}},
+			Plan{Deletes: []Action{{id(1), "A", "p keeps only the newest 1"}},
 				Unstage: []string{id(1)}, Expire: []string{id(1)}}},
 
 		{"a destination change keeps the only copy until the new node has it", Input{Policies: []Policy{{Name: "p", Keep: 2, Dest: []string{"B"}}},
@@ -147,7 +147,7 @@ func TestCompute(t *testing.T) {
 		{"an expired backup back on a node is kept", Input{Policies: keep2,
 			Backups: []Backup{func() Backup { b := unstaged(bk(1, "p")); b.Expired = true; return b }(), b2, b3},
 			Nodes:   []Node{node("A", bk(1, "p"), b2, b3)}, StagingKeep: 10},
-			Plan{Updates: []Update{{id(1), "A", "verified", ""}}, Deletes: []Action{{id(1), "A", "retention: not among the newest 2 p on this node"}}}},
+			Plan{Updates: []Update{{id(1), "A", "verified", ""}}, Deletes: []Action{{id(1), "A", "p keeps only the newest 2"}}}},
 
 		{"an expired backup within keep is not deleted", Input{Policies: []Policy{{Name: "p", Keep: 5}},
 			Backups: []Backup{func() Backup { b := unstaged(bk(1, "p")); b.Expired = true; return b }(), b2},
