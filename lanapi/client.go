@@ -180,6 +180,9 @@ func (c *Client) PutBackup(ctx context.Context, addr, nodeFP string, m inventory
 	req.Header.Set(HeaderManifest, base64.StdEncoding.EncodeToString(raw))
 	tr := c.transport(nodeFP, true, nil)
 	tr.ExpectContinueTimeout = 5 * time.Second
+	// After the last byte the node still hashes, fsyncs and renames; a node that never
+	// answers would otherwise hold this worker forever.
+	tr.ResponseHeaderTimeout = 5 * c.Stall
 	var out PutResponse
 	if err := send(&http.Client{Transport: tr}, req, addr, &out); err != nil {
 		if errors.Is(context.Cause(ctx), errStalled) {

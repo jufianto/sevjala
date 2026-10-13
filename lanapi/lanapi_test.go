@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -452,4 +453,27 @@ func TestPutBackupWhileReceivingIs503(t *testing.T) {
 	}
 	cancel()
 	<-done
+}
+
+// A node that takes every byte and then hangs (frozen process, dying disk in
+// fsync) still ACKs at the TCP level; the worker must not wait forever.
+func TestPutBackupNoAnswerAfterBodyTimesOut(t *testing.T) {
+	id, _ := newID(t)
+	hung := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		<-r.Context().Done()
+	}))
+	hung.TLS = &tls.Config{Certificates: []tls.Certificate{id.Cert}}
+	hung.StartTLS()
+	defer hung.Close()
+	c := controller(t)
+	c.Stall = 100 * time.Millisecond
+	m, data := backupData(t, 64<<10)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	start := time.Now()
+	err := c.PutBackup(ctx, hung.Listener.Addr().String(), id.FP, m, bytes.NewReader(data))
+	if err == nil || ctx.Err() != nil || time.Since(start) > 5*time.Second {
+		t.Errorf("err = %v after %v", err, time.Since(start))
+	}
 }
