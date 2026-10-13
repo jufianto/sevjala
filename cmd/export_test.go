@@ -2,9 +2,12 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -116,5 +119,60 @@ func TestExportFolderIsSafe(t *testing.T) {
 		if got := exportFolder(db); got != want {
 			t.Errorf("%q: got %q, want %q", db, got, want)
 		}
+	}
+}
+
+func TestExportAll(t *testing.T) {
+	day := time.Date(2026, 10, 14, 0, 0, 0, 0, time.Local)
+	bodies := map[string][]byte{}
+	var held []inventory.Manifest
+	for i, db := range []string{"shop", "hr", "shop"} {
+		data := []byte(fmt.Sprintf("-- dump %d\n", i))
+		m := heldBackup(fmt.Sprintf("BK-20261014-00%02d00-000%d", i*10, i), db, day.Add(time.Duration(i)*10*time.Minute), data)
+		bodies[m.BackupID] = data
+		held = append(held, m)
+	}
+	opened := 0
+	open := func(_ context.Context, id string) (io.ReadCloser, error) {
+		opened++
+		if id == "BK-20261014-001000-0001" && opened > 3 {
+			return nil, errors.New("connection dropped")
+		}
+		return io.NopCloser(bytes.NewReader(bodies[id])), nil
+	}
+	dir := t.TempDir()
+
+	var out bytes.Buffer
+	if err := exportAll(context.Background(), held, "", open, dir, false, &out); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"shop/2026-10-14_00-00-00.sql.gz", "hr/2026-10-14_00-10-00.sql.gz", "shop/2026-10-14_00-20-00.sql.gz"} {
+		if _, err := os.Stat(filepath.Join(dir, p)); err != nil {
+			t.Errorf("%s: %v", p, err)
+		}
+	}
+	if !strings.HasSuffix(out.String(), "exported 3, skipped 0 already there\n") {
+		t.Errorf("first run:\n%s", out.String())
+	}
+
+	out.Reset()
+	if err := exportAll(context.Background(), held, "", open, dir, false, &out); err != nil || opened != 3 {
+		t.Errorf("second run opened %d streams, err %v", opened, err)
+	}
+	if !strings.HasSuffix(out.String(), "exported 0, skipped 3 already there\n") {
+		t.Errorf("second run:\n%s", out.String())
+	}
+
+	out.Reset()
+	err := exportAll(context.Background(), held, "", open, dir, true, &out)
+	var ee *exitError
+	if !errors.As(err, &ee) || ee.code != 1 || !strings.Contains(out.String(), filepath.Join("hr", "2026-10-14_00-10-00.sql.gz")+": failed") ||
+		!strings.Contains(out.String(), "exported 2, skipped 0 already there, 1 failed") {
+		t.Errorf("--force with one failure: %v\n%s", err, out.String())
+	}
+
+	out.Reset()
+	if err := exportAll(context.Background(), held, "crm", open, dir, false, &out); err == nil || !strings.Contains(err.Error(), "no backups of crm") {
+		t.Errorf("unknown db: %v", err)
 	}
 }

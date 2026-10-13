@@ -26,28 +26,26 @@ func newBackupsExportCmd(g *globals) *cobra.Command {
 	var db, to string
 	var force bool
 	c := &cobra.Command{
-		Use:   "export <backup|latest>",
-		Short: "Copy a backup this PC holds into a folder you can open",
-		Long: `Copies one backup out of Sevjala's locked folder into <FOLDER>/<database>/, named by when
-it was made: 2026-10-14_00-20-00.sql.gz (the dump) and 2026-10-14_00-20-00.json (what it
-is and its sha256). The copy is checked against the sha256 while it is written, and
+		Use:   "export <backup|latest|all>",
+		Short: "Copy backups this PC holds into a folder you can open",
+		Long: `Copies backups out of Sevjala's locked folder into <FOLDER>/<database>/, each named by
+when it was made: 2026-10-14_00-20-00.sql.gz (the dump) and 2026-10-14_00-20-00.json (what
+it is and its sha256). Each copy is checked against its sha256 while it is written, and
 belongs to you, not to the service. Sevjala's own copy stays where it is.
 
 Works on a backup PC (what 'sevjala backups list' shows there) and on the controller
 (only the newest backups, which it keeps in staging). An existing file is never replaced
-unless you add --force.`,
+unless you add --force; with all, backups already there are skipped, so running it again
+copies only the new ones.`,
 		Example: `  sevjala backups export latest --to ~/Desktop
   sevjala backups export latest --db shop --to D:\restore
-  sevjala backups export BK-20261014-002000-30D3        (into the current folder)`,
+  sevjala backups export all --to D:\backups              (every backup of every database)
+  sevjala backups export BK-20261014-002000-30D3          (into the current folder)`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			held, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) ([]inventory.Manifest, error) {
 				return cl.Held(ctx)
 			})
-			if err != nil {
-				return err
-			}
-			m, err := pickHeld(held, args[0], db)
 			if err != nil {
 				return err
 			}
@@ -57,7 +55,22 @@ unless you add --force.`,
 			}
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 			defer stop()
-			body, err := localapi.NewClient(localapi.Endpoint(dataDir)).OpenHeld(ctx, m.BackupID)
+			cl := localapi.NewClient(localapi.Endpoint(dataDir))
+			if args[0] == "all" {
+				open := func(ctx context.Context, id string) (io.ReadCloser, error) {
+					rc, err := cl.OpenHeld(ctx, id)
+					if err != nil {
+						return nil, agentProblem(err, nil)
+					}
+					return rc, nil
+				}
+				return exportAll(ctx, held, db, open, to, force, c.OutOrStdout())
+			}
+			m, err := pickHeld(held, args[0], db)
+			if err != nil {
+				return err
+			}
+			body, err := cl.OpenHeld(ctx, m.BackupID)
 			if err != nil {
 				return fail(agentProblem(err, nil))
 			}
@@ -75,7 +88,7 @@ unless you add --force.`,
 			return nil
 		},
 	}
-	c.Flags().StringVar(&db, "db", "", "with latest: the newest backup of database `NAME`")
+	c.Flags().StringVar(&db, "db", "", "with latest: the newest backup of database `NAME`; with all: only that database")
 	c.Flags().StringVar(&to, "to", ".", "`FOLDER` to copy into; it must exist")
 	c.Flags().BoolVar(&force, "force", false, "replace files with the same name in that folder")
 	return c
@@ -114,21 +127,16 @@ func pickHeld(held []inventory.Manifest, arg, db string) (inventory.Manifest, er
 // manifest. The data goes through a temp file that is renamed only when size
 // and sha256 match.
 func writeExport(m inventory.Manifest, body io.Reader, dir string, force bool) (string, error) {
-	switch fi, err := os.Stat(dir); {
-	case errors.Is(err, fs.ErrNotExist):
-		return "", failf("folder %s does not exist", dir)
-	case err != nil:
-		return "", failf("cannot open folder %s: %w", dir, err)
-	case !fi.IsDir():
-		return "", failf("%s is not a folder", dir)
+	if err := checkFolder(dir); err != nil {
+		return "", err
 	}
-	dir = filepath.Join(dir, exportFolder(m.Database))
+	name := exportName(dir, m)
+	dir = filepath.Dir(name)
 	_, err := os.Stat(dir)
 	created := errors.Is(err, fs.ErrNotExist)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", failf("cannot create folder %s: %w", dir, err)
 	}
-	name := filepath.Join(dir, m.CreatedAt.Local().Format("2006-01-02_15-04-05"))
 	data, manifest := name+inventory.DataExt, name+inventory.ManifestExt
 	if !force {
 		for _, p := range []string{data, manifest} {
@@ -195,4 +203,73 @@ func exportFolder(db string) string {
 		}
 		return r
 	}, db)
+}
+
+func checkFolder(dir string) error {
+	switch fi, err := os.Stat(dir); {
+	case errors.Is(err, fs.ErrNotExist):
+		return failf("folder %s does not exist", dir)
+	case err != nil:
+		return failf("cannot open folder %s: %w", dir, err)
+	case !fi.IsDir():
+		return failf("%s is not a folder", dir)
+	}
+	return nil
+}
+
+// exportName is where a backup lands under dir, without its extension.
+func exportName(dir string, m inventory.Manifest) string {
+	return filepath.Join(dir, exportFolder(m.Database), m.CreatedAt.Local().Format("2006-01-02_15-04-05"))
+}
+
+// exportAll copies every held backup (of db, when given) into dir, skipping
+// those already there unless force; one failure does not stop the rest.
+func exportAll(ctx context.Context, held []inventory.Manifest, db string, open func(context.Context, string) (io.ReadCloser, error),
+	dir string, force bool, w io.Writer) error {
+	var todo []inventory.Manifest
+	for _, m := range held {
+		if db == "" || m.Database == db {
+			todo = append(todo, m)
+		}
+	}
+	switch {
+	case len(todo) == 0 && db != "":
+		return failf("this PC holds no backups of %s", db)
+	case len(todo) == 0:
+		return failf("this PC holds no backups yet")
+	}
+	if err := checkFolder(dir); err != nil {
+		return err
+	}
+	exported, skipped, failed := 0, 0, 0
+	for _, m := range todo {
+		name := exportName(dir, m)
+		rel, _ := filepath.Rel(dir, name+inventory.DataExt)
+		if _, err := os.Lstat(name + inventory.DataExt); err == nil && !force {
+			skipped++
+			continue
+		}
+		body, err := open(ctx, m.BackupID)
+		if err == nil {
+			_, err = writeExport(m, body, dir, force)
+			body.Close()
+		}
+		if err != nil {
+			failed++
+			fmt.Fprintf(w, "%s: failed: %v\n", rel, err)
+			if ctx.Err() != nil {
+				break
+			}
+			continue
+		}
+		exported++
+		fmt.Fprintln(w, rel)
+	}
+	fmt.Fprintf(w, "exported %d, skipped %d already there", exported, skipped)
+	if failed > 0 {
+		fmt.Fprintf(w, ", %d failed\n", failed)
+		return errSilent1
+	}
+	fmt.Fprintln(w)
+	return nil
 }

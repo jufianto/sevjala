@@ -130,7 +130,8 @@ ls ~/Desktop/<your database>
 
 **Expect:** `backups list` shows what the Mac holds; `export` prints "sha256 checked" and the
 path; `~/Desktop/<your database>/` has `2026-…_hh-mm-ss.sql.gz` and `.json`, owned by you. Running the
-same export again refuses: "already exists; add --force". On Windows the same command copies
+same export again refuses: "already exists; add --force". `sevjala backups export all --to ~/Desktop`
+copies the rest and reports the latest one as skipped. On Windows the same command copies
 from staging (Administrator prompt).
 
 ## 8. Leave it running (about 1 hour)
