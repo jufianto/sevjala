@@ -7,13 +7,14 @@ import (
 )
 
 type Status struct {
-	Version string `json:"version"`
-	Role    string `json:"role"`
-	PID     int    `json:"pid"`
-	UptimeS int64  `json:"uptime_s"`
-	DataDir string `json:"data_dir"`
-	AgentID string `json:"agent_id"`
-	FP      string `json:"fp"`
+	Version string     `json:"version"`
+	Role    string     `json:"role"`
+	PID     int        `json:"pid"`
+	UptimeS int64      `json:"uptime_s"`
+	DataDir string     `json:"data_dir"`
+	AgentID string     `json:"agent_id"`
+	FP      string     `json:"fp"`
+	Store   *StoreInfo `json:"store,omitempty"`
 }
 
 type Code struct {
@@ -87,4 +88,72 @@ func listOf[T any](xs []T) list[T] {
 		xs = []T{}
 	}
 	return list[T]{Agents: xs}
+}
+
+const (
+	BackupDumping = "dumping"
+	BackupFailed  = "failed"
+)
+
+type DBDatabase struct {
+	Name        string   `json:"name"`
+	Tables      int      `json:"tables"`
+	Consistency string   `json:"consistency"`
+	NonInnoDB   []string `json:"non_innodb"`
+	Configured  bool     `json:"configured"`
+}
+
+type Detection struct {
+	Dumper        string       `json:"dumper"`
+	Client        string       `json:"client"`
+	ServerVersion string       `json:"server_version"`
+	Flavour       string       `json:"flavour"`
+	Databases     []DBDatabase `json:"databases"`
+}
+
+// DBSettings is a partial update: nil fields keep the agent's value; a nil
+// Databases keeps the list, an empty one clears it.
+type DBSettings struct {
+	Host      *string  `json:"host,omitempty"`
+	Port      *int     `json:"port,omitempty"`
+	User      *string  `json:"user,omitempty"`
+	Password  *string  `json:"password,omitempty"`
+	Dumper    *string  `json:"dumper,omitempty"`
+	Databases []string `json:"databases"`
+}
+
+type BackupJob struct {
+	BackupID string `json:"backup_id"`
+	Database string `json:"database"`
+}
+
+type BackupCopy struct {
+	AgentID    string    `json:"agent_id"`
+	Hostname   string    `json:"hostname"`
+	State      string    `json:"state"`
+	Attempts   int       `json:"attempts"`
+	LastError  string    `json:"last_error,omitempty"`
+	VerifiedAt time.Time `json:"verified_at,omitzero"`
+}
+
+// Backup is a stored backup, or one still dumping (State BackupDumping,
+// Bytes so far) or whose dump failed (State BackupFailed, Error).
+type Backup struct {
+	BackupID  string       `json:"backup_id"`
+	Database  string       `json:"database"`
+	CreatedAt time.Time    `json:"created_at,omitzero"`
+	Size      int64        `json:"size"`
+	SHA256    string       `json:"sha256"`
+	Tags      []string     `json:"tags"`
+	State     string       `json:"state"`
+	Error     string       `json:"error,omitempty"`
+	Bytes     int64        `json:"bytes,omitempty"`
+	Copies    []BackupCopy `json:"copies"`
+}
+
+type StoreInfo struct {
+	Path      string   `json:"path"`
+	FreeBytes int64    `json:"free_bytes"`
+	Backups   int      `json:"backups"`
+	Problems  []string `json:"problems"`
 }
