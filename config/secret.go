@@ -20,7 +20,7 @@ const (
 	keyringService = "sevjala"
 )
 
-var ErrNoSecret = errors.New("secret not found")
+var ErrNoSecret = errors.New("the database password is not saved on this PC; save it with: sevjala db set --password")
 
 // SetSecret stores value in the OS keyring. Linux without a Secret Service
 // (a systemd service has no D-Bus session) falls back to an AES-GCM file
@@ -32,10 +32,10 @@ func SetSecret(dataDir, name, value string) (fallback bool, err error) {
 		return false, nil
 	}
 	if runtime.GOOS != "linux" {
-		return false, fmt.Errorf("keyring: %w", kerr)
+		return false, fmt.Errorf("cannot save the database password in the system keyring: %w", kerr)
 	}
 	if err := writeSecretFile(dataDir, name, value); err != nil {
-		return true, errors.Join(fmt.Errorf("keyring: %w", kerr), err)
+		return true, errors.Join(fmt.Errorf("cannot save the database password in the system keyring: %w", kerr), err)
 	}
 	return true, nil
 }
@@ -60,9 +60,9 @@ func Secret(dataDir, ref string) (string, error) {
 	case !errors.Is(ferr, fs.ErrNotExist):
 		return "", ferr
 	case errors.Is(kerr, keyring.ErrNotFound):
-		return "", fmt.Errorf("%s: %w", ref, ErrNoSecret)
+		return "", ErrNoSecret
 	}
-	return "", fmt.Errorf("keyring: %w", kerr)
+	return "", readError(kerr)
 }
 
 func DeleteSecret(dataDir, name string) error {
@@ -141,4 +141,20 @@ func readSecretFile(dataDir, name string) (string, error) {
 		return "", fmt.Errorf("%s: cannot decrypt (was secrets/key replaced?)", path)
 	}
 	return string(plain), nil
+}
+
+type keyringError struct {
+	msg string
+	err error
+}
+
+func (e *keyringError) Error() string { return e.msg }
+func (e *keyringError) Unwrap() error { return e.err }
+
+func readError(kerr error) error {
+	inner := kerr
+	for u := errors.Unwrap(inner); u != nil; u = errors.Unwrap(inner) {
+		inner = u
+	}
+	return &keyringError{"cannot read the saved database password from the system keyring: " + inner.Error(), kerr}
 }

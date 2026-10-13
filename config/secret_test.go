@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -80,5 +81,21 @@ func TestSetSecretFallsBackOnLinux(t *testing.T) {
 	}
 	if got, err := Secret(dir, "keyring:db"); err != nil || got != "s3cret" {
 		t.Errorf("Secret = %q, %v", got, err)
+	}
+}
+
+func TestSecretErrorsArePlain(t *testing.T) {
+	dir := t.TempDir()
+	keyring.MockInit()
+	_, err := Secret(dir, "keyring:db")
+	if !errors.Is(err, ErrNoSecret) || err.Error() != "the database password is not saved on this PC; save it with: sevjala db set --password" {
+		t.Errorf("missing secret: %v", err)
+	}
+	cause := errors.New("The specified service is not available")
+	keyring.MockInitWithError(fmt.Errorf("wrapped: %w", cause))
+	_, err = Secret(dir, "keyring:db")
+	want := "cannot read the saved database password from the system keyring: " + cause.Error()
+	if err == nil || err.Error() != want || !errors.Is(err, cause) {
+		t.Errorf("keyring failure: %v", err)
 	}
 }

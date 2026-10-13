@@ -118,7 +118,7 @@ func TestPasswordOnlyInEnvAndScrubbed(t *testing.T) {
 	}
 	tools, _ = fakeTools(t, dumptest.Denied)
 	_, err := Detect(context.Background(), tools, conn)
-	if err == nil || !strings.Contains(err.Error(), "Access denied") || strings.Contains(err.Error(), "wörd") {
+	if err == nil || !strings.Contains(err.Error(), "refused the password") || strings.Contains(err.Error(), "wörd") {
 		t.Errorf("err = %v", err)
 	}
 }
@@ -190,7 +190,7 @@ func TestRunLockTables(t *testing.T) {
 func TestRunFailuresLeaveNothing(t *testing.T) {
 	tests := []struct{ name, mode, db, want string }{
 		{"unknown database", dumptest.OK, "nope", "does not exist"},
-		{"dumper exits non-zero", dumptest.DumpFails, "shop", "Unknown database"},
+		{"dumper exits non-zero", dumptest.DumpFails, "shop", "database 'shop' does not exist"},
 		{"error on stderr", dumptest.DumpWarnsError, "shop", "Lost connection"},
 	}
 	for _, tt := range tests {

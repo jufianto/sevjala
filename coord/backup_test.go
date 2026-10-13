@@ -149,7 +149,7 @@ func TestBackupDumpFailureIsReported(t *testing.T) {
 	ctrl := newController(t)
 	jobs, _ := ctrl.BackupNow(context.Background(), "", nil)
 	b := waitState(t, ctrl, jobs[0].BackupID, state(localapi.BackupFailed))
-	if !strings.Contains(b.Error, "Unknown database") {
+	if !strings.Contains(b.Error, "does not exist") {
 		t.Errorf("error %q", b.Error)
 	}
 	if all, _ := ctrl.Backups(context.Background(), true); len(all) != 1 || all[0].State != localapi.BackupFailed {
@@ -262,7 +262,7 @@ func TestSetDatabaseRefusesBeforeSaving(t *testing.T) {
 		want       string
 	}{
 		{"unknown database", dumptest.OK, localapi.DBSettings{Databases: []string{"nope"}}, "does not exist"},
-		{"login denied", dumptest.Denied, localapi.DBSettings{Databases: []string{"shop"}}, "Access denied"},
+		{"login denied", dumptest.Denied, localapi.DBSettings{Databases: []string{"shop"}}, "refused the password"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

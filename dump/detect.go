@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -72,7 +71,7 @@ func Detect(ctx context.Context, tools Tools, conn Conn) (Detection, error) {
 		return Detection{}, err
 	}
 	if len(rows) == 0 {
-		return Detection{}, errors.New("SELECT VERSION() returned nothing")
+		return Detection{}, errors.New("MySQL did not report its version; is this a MySQL/MariaDB server?")
 	}
 	d.ServerVersion = rows[0][0]
 	if strings.Contains(strings.ToLower(d.ServerVersion), "mariadb") {
@@ -112,7 +111,7 @@ func query(ctx context.Context, tools Tools, conn Conn, sql string) ([][]string,
 	cmd.Stderr = stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w: %s", filepath.Base(tools.Client), err, strings.TrimSpace(conn.scrub(stderr.String())))
+		return nil, explain("mysql", conn, "", stderr.String(), err)
 	}
 	var rows [][]string
 	for line := range strings.Lines(string(out)) {

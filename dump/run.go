@@ -59,8 +59,8 @@ func Run(ctx context.Context, o Options) (inventory.Manifest, error) {
 		return inventory.Manifest{}, err
 	}
 	m, err := dumpTo(ctx, f, o, flags)
-	if cerr := f.Close(); err == nil {
-		err = cerr
+	if cerr := f.Close(); err == nil && cerr != nil {
+		err = explain("mysqldump", o.Conn, o.Database, "", cerr)
 	}
 	if err == nil {
 		err = os.Rename(part, data)
@@ -88,18 +88,16 @@ func dumpTo(ctx context.Context, f *os.File, o Options, flags []string) (invento
 	cmd.Stderr = stderr
 	cmd.WaitDelay = 5 * time.Second
 	err := cmd.Run()
-	msg := strings.TrimSpace(o.Conn.scrub(stderr.String()))
-	if err == nil && strings.Contains(strings.ToLower(msg), "error") {
-		err = errors.New("reported an error")
+	if err == nil && strings.Contains(strings.ToLower(stderr.String()), "error") {
+		err = errors.New("mysqldump reported an error")
+	}
+	if err == nil {
+		if err = gz.Close(); err == nil {
+			err = f.Sync()
+		}
 	}
 	if err != nil {
-		return inventory.Manifest{}, fmt.Errorf("%s %s: %w: %s", filepath.Base(o.Tools.Dumper), o.Database, err, msg)
-	}
-	if err := gz.Close(); err != nil {
-		return inventory.Manifest{}, err
-	}
-	if err := f.Sync(); err != nil {
-		return inventory.Manifest{}, err
+		return inventory.Manifest{}, explain("mysqldump", o.Conn, o.Database, stderr.String(), err)
 	}
 	return inventory.Manifest{V: 1, BackupID: o.ID, Database: o.Database, CreatedAt: o.Created.Truncate(time.Second),
 		SourceAgent: o.SourceAgent, DumpFlags: flags, Size: cw.n, SHA256: hex.EncodeToString(h.Sum(nil)), Tags: o.Tags}, nil
