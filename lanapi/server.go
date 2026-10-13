@@ -256,7 +256,7 @@ func backupHeaders(r *http.Request, id string) (inventory.Manifest, string, int6
 	var m inventory.Manifest
 	size, err := strconv.ParseInt(r.Header.Get(HeaderSize), 10, 64)
 	if err != nil {
-		return m, "", 0, fmt.Errorf("%w: %s: %v", inventory.ErrInvalid, HeaderSize, err)
+		return m, "", 0, fmt.Errorf("%w: %s: %w", inventory.ErrInvalid, HeaderSize, err)
 	}
 	raw := r.Header.Get(HeaderManifest)
 	if len(raw) > 8<<10 {
@@ -267,7 +267,7 @@ func backupHeaders(r *http.Request, id string) (inventory.Manifest, string, int6
 		err = json.Unmarshal(js, &m)
 	}
 	if err != nil {
-		return m, "", 0, fmt.Errorf("%w: %s: %v", inventory.ErrInvalid, HeaderManifest, err)
+		return m, "", 0, fmt.Errorf("%w: %s: %w", inventory.ErrInvalid, HeaderManifest, err)
 	}
 	if m.BackupID != id {
 		return m, "", 0, fmt.Errorf("%w: manifest is for %q, not %q", inventory.ErrInvalid, m.BackupID, id)

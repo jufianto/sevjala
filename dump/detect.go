@@ -112,7 +112,7 @@ func query(ctx context.Context, tools Tools, conn Conn, sql string) ([][]string,
 	cmd.Stderr = stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("%s: %v: %s", filepath.Base(tools.Client), err, strings.TrimSpace(conn.scrub(stderr.String())))
+		return nil, fmt.Errorf("%s: %w: %s", filepath.Base(tools.Client), err, strings.TrimSpace(conn.scrub(stderr.String())))
 	}
 	var rows [][]string
 	for line := range strings.Lines(string(out)) {

@@ -120,7 +120,7 @@ func (s *Store) remove(name, why string) {
 // manifest is written next to it. Anything else deletes the .part.
 func (s *Store) Receive(m Manifest, sha string, size int64, body io.Reader) error {
 	if err := m.Validate(); err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalid, err)
+		return fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 	if m.SHA256 != sha || m.Size != size {
 		return fmt.Errorf("%w: the manifest does not match the sha256 and size headers", ErrInvalid)

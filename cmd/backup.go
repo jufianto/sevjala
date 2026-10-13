@@ -84,7 +84,8 @@ func watchBackup(ctx context.Context, get func(context.Context, string) (localap
 			return false, err
 		}
 		line, done, good := backupLines(b)
-		if line != last && !(b.State == localapi.BackupDumping && last != "" && time.Since(printed) < 5*time.Second) {
+		throttled := b.State == localapi.BackupDumping && last != "" && time.Since(printed) < 5*time.Second
+		if line != last && !throttled {
 			fmt.Fprintln(w, line)
 			last, printed = line, time.Now()
 		}

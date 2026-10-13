@@ -88,7 +88,7 @@ func dumpTo(ctx context.Context, f *os.File, o Options, flags []string) (invento
 		err = errors.New("reported an error")
 	}
 	if err != nil {
-		return inventory.Manifest{}, fmt.Errorf("%s %s: %v: %s", filepath.Base(o.Tools.Dumper), o.Database, err, msg)
+		return inventory.Manifest{}, fmt.Errorf("%s %s: %w: %s", filepath.Base(o.Tools.Dumper), o.Database, err, msg)
 	}
 	if err := gz.Close(); err != nil {
 		return inventory.Manifest{}, err
