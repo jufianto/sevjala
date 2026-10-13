@@ -274,12 +274,15 @@ func (s *setupFlow) uninstall() error {
 	if err := s.onPath(false, s.dir); err != nil {
 		fmt.Fprintf(s.out, "could not remove %s from PATH: %v\n", s.dir, err)
 	}
+	exes := []string{s.target, s.target + ".old"}
 	if s.fromInstall {
 		fmt.Fprintf(s.out, "delete %s yourself once this window is closed\n", s.target)
-		return nil
+		exes = exes[1:]
 	}
-	if err := s.removeExe(s.target); err != nil && !errors.Is(err, os.ErrNotExist) {
-		fmt.Fprintf(s.out, "could not delete %s: %v\n", s.target, err)
+	for _, exe := range exes {
+		if err := s.removeExe(exe); err != nil && !errors.Is(err, os.ErrNotExist) {
+			fmt.Fprintf(s.out, "could not delete %s: %v\n", exe, err)
+		}
 	}
 	return nil
 }

@@ -142,9 +142,9 @@ func TestSetupInstalledMenu(t *testing.T) {
 		{"controller pairs", "2\nn1 --code 1 --fp ab\n\n", "controller", false,
 			[]string{"run service status", "run discover", "run pair n1 --code 1 --fp ab"}},
 		{"uninstall keeps the running file", "2\n", "node", true, []string{"run service status",
-			"run service uninstall", `path remove C:\Program Files\Sevjala`}},
+			"run service uninstall", `path remove C:\Program Files\Sevjala`, `remove C:\Program Files\Sevjala\sevjala.exe.old`}},
 		{"uninstall removes the installed file", "3\n", "node", false, []string{"run service status",
-			"run service uninstall", `path remove C:\Program Files\Sevjala`, `remove C:\Program Files\Sevjala\sevjala.exe`}},
+			"run service uninstall", `path remove C:\Program Files\Sevjala`, `remove C:\Program Files\Sevjala\sevjala.exe`, `remove C:\Program Files\Sevjala\sevjala.exe.old`}},
 		{"exit", "4\n", "node", false, []string{"run service status"}},
 		{"no update from the installed file", "3\n", "node", true, []string{"run service status"}},
 	}
