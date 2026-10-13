@@ -15,6 +15,7 @@ import (
 
 	"github.com/jufianto/sevjala/config"
 	"github.com/jufianto/sevjala/identity"
+	"github.com/jufianto/sevjala/inventory"
 	"github.com/jufianto/sevjala/lanapi"
 	"github.com/jufianto/sevjala/localapi"
 	"github.com/jufianto/sevjala/svc"
@@ -73,7 +74,7 @@ func checkLAN(cfg config.Config, id *identity.Identity) checkResult {
 	defer cancel()
 	info, err := lanapi.NewClient(id).Identity(ctx, addr)
 	if err != nil {
-		return checkResult{Name: "lan api", Detail: fmt.Sprintf("%s: %v", addr, err)}
+		return checkResult{Name: "lan api", Detail: err.Error()}
 	}
 	if info.FP != id.FP {
 		return checkResult{Name: "lan api", Detail: fmt.Sprintf("%s answers as %s, not this agent", addr, info.FP)}
@@ -89,7 +90,7 @@ func checkFirewall() checkResult {
 }
 
 func serviceChecks(v statusView, endpoint string) []checkResult {
-	agent := checkResult{Name: "local api", Detail: fmt.Sprintf("%s: %v", endpoint, v.AgentErr)}
+	agent := checkResult{Name: "local api", Detail: fmt.Sprint(v.AgentErr)}
 	if v.Agent != nil {
 		agent = checkResult{Name: "local api", Detail: endpoint + " → " + v.Agent.Version, OK: true}
 	}
@@ -138,10 +139,10 @@ func storeCheck(s *localapi.StoreInfo, minFree int64) checkResult {
 	if s == nil {
 		return checkResult{Name: "store", Detail: "the agent reported no store"}
 	}
-	detail := fmt.Sprintf("%s · %s free · %d backups", s.Path, humanBytes(s.FreeBytes), s.Backups)
+	detail := fmt.Sprintf("%s · %s free · %d backups", s.Path, inventory.HumanBytes(s.FreeBytes), s.Backups)
 	switch {
 	case s.FreeBytes < minFree:
-		return checkResult{Name: "store", Detail: detail + " · under the " + humanBytes(minFree) + " floor"}
+		return checkResult{Name: "store", Detail: detail + " · under the " + inventory.HumanBytes(minFree) + " floor"}
 	case len(s.Problems) > 0:
 		return checkResult{Name: "store", Detail: detail + " · " + strings.Join(s.Problems, "; "), Warn: true}
 	}
@@ -213,6 +214,9 @@ func newDoctorCmd(g *globals) *cobra.Command {
 		Short: "Check the data dir, config, identity, service, APIs, database or store",
 		Args:  cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
+			if err := requireAdmin(); err != nil {
+				return err
+			}
 			dataDir, err := g.dataDir()
 			if err != nil {
 				return fail(err)
@@ -235,13 +239,11 @@ func newDoctorCmd(g *globals) *cobra.Command {
 					case config.RoleController:
 						rs = append(rs, checkWritable("staging", config.StagingDir(dataDir)))
 						cl := localapi.NewClient(endpoint)
-						ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-						d, err := cl.DetectDatabase(ctx)
-						ps, perr := cl.Policies(ctx)
-						as, aerr := cl.Agents(ctx)
-						cancel()
-						rs = append(rs, databaseChecks(d, err)...)
-						rs = append(rs, scheduleCheck(ps, perr, len(cfg.Controller.Database.Databases)), nodesCheck(as, aerr))
+						d, err := withTimeout(15*time.Second, cl.DetectDatabase)
+						ps, perr := withTimeout(5*time.Second, cl.Policies)
+						as, aerr := withTimeout(5*time.Second, cl.Agents)
+						rs = append(rs, databaseChecks(d, plain(err))...)
+						rs = append(rs, scheduleCheck(ps, plain(perr), len(cfg.Controller.Database.Databases)), nodesCheck(as, plain(aerr)))
 					case config.RoleNode:
 						rs = append(rs, storeCheck(st.Store, cfg.Node.Store.MinFreeBytes))
 					}
@@ -256,4 +258,19 @@ func newDoctorCmd(g *globals) *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// withTimeout gives each doctor query its own limit, so a slow database does
+// not fail the checks after it.
+func withTimeout[T any](d time.Duration, f func(context.Context) (T, error)) (T, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), d)
+	defer cancel()
+	return f(ctx)
+}
+
+func plain(err error) error {
+	if err == nil {
+		return nil
+	}
+	return agentProblem(err, nil)
 }

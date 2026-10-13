@@ -36,7 +36,7 @@ func checkNotInstalled(s serviceStatuser) error {
 
 func requireAdmin() error {
 	if !svc.IsAdmin() {
-		return failf("%s", svc.AdminHint)
+		return failf("this needs administrator rights: %s", svc.AdminHint)
 	}
 	return nil
 }
@@ -152,7 +152,7 @@ func newServiceUninstallCmd(g *globals) *cobra.Command {
 				return fail(err)
 			}
 			if checkNotInstalled(s) == nil {
-				return failf("not installed")
+				return fail(errNotInstalled)
 			}
 			_ = s.Stop()
 			logEvent(dataDir, "service uninstalled", logx.EventServiceUninstalled)
@@ -183,8 +183,8 @@ func newServiceStartCmd(g *globals) *cobra.Command {
 			if err != nil {
 				return fail(err)
 			}
-			if err := s.Start(); err != nil {
-				return failf("start service: %w", err)
+			if _, err := startService(s); err != nil {
+				return fail(err)
 			}
 			st, apiErr := waitForAgent(localapi.NewClient(localapi.Endpoint(dataDir)), agentWait)
 			if !printStatus(c.OutOrStdout(), s, dataDir, st, apiErr).OK() {
@@ -212,10 +212,11 @@ func newServiceStopCmd(g *globals) *cobra.Command {
 			if err != nil {
 				return fail(err)
 			}
-			if err := s.Stop(); err != nil {
-				return failf("stop service: %w", err)
+			msg, err := stopService(s)
+			if err != nil {
+				return fail(err)
 			}
-			fmt.Fprintln(c.OutOrStdout(), "stopped")
+			fmt.Fprintln(c.OutOrStdout(), msg)
 			return nil
 		},
 	}
@@ -242,4 +243,42 @@ func newServiceStatusCmd(g *globals) *cobra.Command {
 			return nil
 		},
 	}
+}
+
+var errNotInstalled = errors.New("this PC has no Sevjala service installed; install it with: sevjala setup")
+
+type controllable interface {
+	serviceStatuser
+	Start() error
+	Stop() error
+}
+
+// startService treats a running service as done, so setup and scripts can
+// call it without checking first.
+func startService(s controllable) (string, error) {
+	st, err := s.Status()
+	switch {
+	case errors.Is(err, service.ErrNotInstalled):
+		return "", errNotInstalled
+	case err == nil && st == service.StatusRunning:
+		return "already running", nil
+	}
+	if err := s.Start(); err != nil {
+		return "", fmt.Errorf("could not start the Sevjala service: %w", err)
+	}
+	return "started", nil
+}
+
+func stopService(s controllable) (string, error) {
+	st, err := s.Status()
+	switch {
+	case errors.Is(err, service.ErrNotInstalled):
+		return "", errNotInstalled
+	case err == nil && st == service.StatusStopped:
+		return "already stopped", nil
+	}
+	if err := s.Stop(); err != nil {
+		return "", fmt.Errorf("could not stop the Sevjala service: %w", err)
+	}
+	return "stopped", nil
 }

@@ -35,7 +35,7 @@ func buildStatusView(s serviceStatuser, st localapi.Status, apiErr error, dataDi
 	if apiErr == nil {
 		v.Agent = &st
 	} else {
-		v.AgentErr = apiErr
+		v.AgentErr = agentProblem(apiErr, s)
 	}
 	state, err := s.Status()
 	switch {
@@ -60,7 +60,7 @@ func renderStatus(w io.Writer, v statusView) {
 		fmt.Fprintf(w, "%-10s%-12s %s  role=%s  up %s  pid %d\n", "agent", "answering",
 			a.Version, a.Role, time.Duration(a.UptimeS)*time.Second, a.PID)
 	} else {
-		fmt.Fprintf(w, "%-10snot answering (%v)\n", "agent", v.AgentErr)
+		fmt.Fprintf(w, "%-10snot answering: %v\n", "agent", v.AgentErr)
 	}
 	fmt.Fprintf(w, "%-10s%s\n", "data dir", v.DataDir)
 }

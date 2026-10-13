@@ -62,7 +62,7 @@ func TestRenderStatus(t *testing.T) {
 	b.Reset()
 	renderStatus(&b, buildStatusView(fakeService{st: service.StatusStopped}, localapi.Status{}, errors.New("refused"), "/d", true))
 	want = "service   stopped      (test-platform)\n" +
-		"agent     not answering (refused)\n" +
+		"agent     not answering: the Sevjala service is stopped; start it with: sevjala service start\n" +
 		"data dir  /d\n"
 	if b.String() != want {
 		t.Errorf("got\n%s\nwant\n%s", b.String(), want)

@@ -14,6 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/jufianto/sevjala/inventory"
 	"github.com/jufianto/sevjala/localapi"
 )
 
@@ -44,7 +45,7 @@ func newBackupCmd(g *globals) *cobra.Command {
 				fmt.Fprintln(c.ErrOrStderr(), "still running in the agent; see 'sevjala backups list'")
 				return &exitError{code: 130}
 			case err != nil:
-				return failf("agent stopped answering: %w", err)
+				return fail(agentProblem(err, nil))
 			case !ok:
 				return errSilent1
 			}
@@ -106,11 +107,11 @@ func backupLines(b localapi.Backup) (lines string, done, good bool) {
 	head := b.BackupID + " " + b.Database + ":"
 	switch b.State {
 	case localapi.BackupDumping:
-		return fmt.Sprintf("%s dumping… %s", head, humanBytes(b.Bytes)), false, false
+		return fmt.Sprintf("%s dumping… %s", head, inventory.HumanBytes(b.Bytes)), false, false
 	case localapi.BackupFailed:
 		return fmt.Sprintf("%s dump failed: %s", head, b.Error), true, false
 	}
-	lines = fmt.Sprintf("%s %s %s sha256:%s", head, b.State, humanBytes(b.Size), b.SHA256[:min(12, len(b.SHA256))])
+	lines = fmt.Sprintf("%s %s %s sha256:%s", head, b.State, inventory.HumanBytes(b.Size), b.SHA256[:min(12, len(b.SHA256))])
 	if len(b.Copies) == 0 {
 		return lines + "\n  no paired nodes: the backup is only in staging on this PC", true, true
 	}
@@ -126,19 +127,6 @@ func backupLines(b localapi.Backup) (lines string, done, good bool) {
 		}
 	}
 	return lines + "\n  " + strings.Join(parts, " · "), b.State == "distributed" || b.State == "partial", good
-}
-
-func humanBytes(n int64) string {
-	const unit = 1024
-	if n < unit {
-		return fmt.Sprintf("%d B", n)
-	}
-	div, exp := int64(unit), 0
-	for m := n / unit; m >= unit; m /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
 func newBackupsCmd(g *globals) *cobra.Command {
@@ -191,7 +179,7 @@ func renderBackups(w io.Writer, bs []localapi.Backup) {
 			}
 			live++
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%d/%d verified\n", b.BackupID, b.Database, created, humanBytes(b.Size),
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%d/%d verified\n", b.BackupID, b.Database, created, inventory.HumanBytes(b.Size),
 			strings.Join(b.Tags, ","), b.State, verified, live)
 	}
 	tw.Flush()

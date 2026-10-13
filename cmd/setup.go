@@ -53,7 +53,13 @@ func newSetupCmd(g *globals) *cobra.Command {
 					}
 					cmd := exec.Command(target, args...)
 					cmd.Stdin, cmd.Stdout, cmd.Stderr = strings.NewReader(stdin), c.OutOrStdout(), c.ErrOrStderr()
-					return cmd.Run()
+					var exit *exec.ExitError
+					if err := cmd.Run(); errors.As(err, &exit) {
+						return errShown
+					} else if err != nil {
+						return err
+					}
+					return nil
 				},
 				password: func() (string, error) {
 					b, err := term.ReadPassword(int(os.Stdin.Fd()))
@@ -68,6 +74,9 @@ func newSetupCmd(g *globals) *cobra.Command {
 		},
 	}
 }
+
+// errShown: the step ran and already printed why it failed.
+var errShown = errors.New("see the message above")
 
 // installedRole is the role of the installed service, or "" when none is
 // installed. No config means a fresh install even when the service manager
@@ -195,7 +204,7 @@ func (s *setupFlow) pairNodes() error {
 }
 
 func (s *setupFlow) menu() error {
-	if err := s.run("", "service", "status"); err != nil {
+	if err := s.run("", "service", "status"); err != nil && !errors.Is(err, errShown) {
 		fmt.Fprintf(s.out, "(status: %v)\n", err)
 	}
 	type item struct {

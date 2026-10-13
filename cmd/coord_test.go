@@ -4,11 +4,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
+
+	"github.com/kardianos/service"
 
 	"github.com/jufianto/sevjala/localapi"
 	"github.com/jufianto/sevjala/svc"
@@ -104,5 +108,39 @@ func TestCallAgentDeniedNamesTheFix(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), svc.AdminHint) || strings.Contains(err.Error(), "is the service running") {
 		t.Errorf("got %v, want the admin hint", err)
+	}
+}
+
+func TestAgentProblem(t *testing.T) {
+	pipe := func(err error) error {
+		return fmt.Errorf("post: %w", &os.PathError{Op: "open", Path: `\\.\pipe\sevjala`, Err: err})
+	}
+	tests := []struct {
+		name string
+		err  error
+		svc  serviceStatuser
+		want string
+	}{
+		{"not installed", pipe(fs.ErrNotExist), fakeService{err: service.ErrNotInstalled}, "no Sevjala service installed"},
+		{"stopped", pipe(fs.ErrNotExist), fakeService{st: service.StatusStopped}, "sevjala service start"},
+		{"starting", pipe(fs.ErrNotExist), fakeService{st: service.StatusRunning}, "not answering yet"},
+		{"state unknown", pipe(syscall.ECONNREFUSED), nil, "not running"},
+		{"not admin", pipe(fs.ErrPermission), fakeService{st: service.StatusRunning}, svc.AdminHint},
+		{"slow", fmt.Errorf("post: %w", context.DeadlineExceeded), nil, "did not answer in time"},
+		{"restarted", fmt.Errorf("get: %w", io.ErrUnexpectedEOF), nil, "stopped answering"},
+		{"agent's own message", &localapi.Error{Code: 409, Msg: "a backup of shop is already running"}, nil, "a backup of shop is already running"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := agentProblem(tt.err, tt.svc).Error()
+			if !strings.Contains(got, tt.want) {
+				t.Errorf("got %q, want it to contain %q", got, tt.want)
+			}
+			for _, raw := range []string{`\\.\pipe`, "post:", "http://", "file specified"} {
+				if strings.Contains(got, raw) && tt.name != "agent's own message" {
+					t.Errorf("%q leaks %q", got, raw)
+				}
+			}
+		})
 	}
 }

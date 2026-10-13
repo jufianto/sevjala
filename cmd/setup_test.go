@@ -207,3 +207,22 @@ func TestInstalledRole(t *testing.T) {
 		t.Errorf("installed: %q, %v", role, err)
 	}
 }
+
+func TestSetupDoesNotRepeatAFailedStep(t *testing.T) {
+	var f fakeSetup
+	f.failRuns = map[string]int{"service status": 1}
+	fl := f.flow("4\n", "node", false)
+	inner := fl.run
+	fl.run = func(stdin string, args ...string) error {
+		if err := inner(stdin, args...); err != nil {
+			return errShown
+		}
+		return nil
+	}
+	if err := fl.wizard(); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(f.out.String(), "status:") || strings.Contains(f.out.String(), "exit status") {
+		t.Errorf("repeats the failed step:\n%s", f.out.String())
+	}
+}

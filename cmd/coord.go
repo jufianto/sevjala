@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"syscall"
 	"text/tabwriter"
 	"time"
 
+	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
 
+	"github.com/jufianto/sevjala/inventory"
 	"github.com/jufianto/sevjala/localapi"
 	"github.com/jufianto/sevjala/pairing"
 	"github.com/jufianto/sevjala/svc"
@@ -29,16 +32,41 @@ func callAgent[T any](g *globals, timeout time.Duration, f func(context.Context,
 	defer cancel()
 	v, err := f(ctx, localapi.NewClient(ep))
 	if err != nil {
-		var le *localapi.Error
-		if errors.As(err, &le) {
-			return zero, fail(le)
+		var s serviceStatuser
+		if ss, serr := svc.New(dataDir, &svc.Agent{}); serr == nil {
+			s = ss
 		}
-		if errors.Is(err, fs.ErrPermission) {
-			return zero, failf("the agent at %s refused this user: %s (%w)", ep, svc.AdminHint, err)
-		}
-		return zero, failf("agent not answering at %s (is the service running?): %w", ep, err)
+		return zero, fail(agentProblem(err, s))
 	}
 	return v, nil
+}
+
+// agentProblem says what to do when a local API call fails; an answer with an
+// error is the agent's own message. s may be nil when the state is unknown.
+func agentProblem(err error, s serviceStatuser) error {
+	var le *localapi.Error
+	switch {
+	case errors.As(err, &le):
+		return le
+	case errors.Is(err, fs.ErrPermission):
+		return fmt.Errorf("this account may not use Sevjala: %s", svc.AdminHint)
+	case errors.Is(err, context.DeadlineExceeded):
+		return errors.New("the Sevjala service did not answer in time; it may be busy (a slow database?). Try again, or run: sevjala doctor")
+	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF), errors.Is(err, syscall.ECONNRESET):
+		return errors.New("the Sevjala service stopped answering mid-way (did it restart?); try again")
+	}
+	if s != nil {
+		st, serr := s.Status()
+		switch {
+		case errors.Is(serr, service.ErrNotInstalled):
+			return errNotInstalled
+		case serr == nil && st == service.StatusRunning:
+			return errors.New("the Sevjala service is running but not answering yet; wait a few seconds, or run: sevjala doctor")
+		case serr == nil:
+			return errors.New("the Sevjala service is stopped; start it with: sevjala service start")
+		}
+	}
+	return errors.New("the Sevjala service is not running; start it with: sevjala service start (or install it with: sevjala setup)")
 }
 
 func shortID(id string) string {
@@ -190,7 +218,7 @@ func renderAgents(w io.Writer, as []localapi.Agent) {
 			seen = a.LastSeen.Local().Format("2006-01-02 15:04")
 		}
 		if a.FreeBytes > 0 {
-			free = humanBytes(a.FreeBytes)
+			free = inventory.HumanBytes(a.FreeBytes)
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", shortID(a.AgentID), a.Hostname, a.Addr, a.State, free, seen, a.Problem)
 	}
