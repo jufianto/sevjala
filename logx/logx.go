@@ -38,6 +38,7 @@ const (
 	EventDBConfigured       = "db_configured"
 	EventKeyringFallback    = "keyring_fallback"
 	EventBackupDeleted      = "backup_deleted"
+	EventPolicyChanged      = "policy_changed"
 )
 
 func Event(name string) slog.Attr { return slog.String("event", name) }

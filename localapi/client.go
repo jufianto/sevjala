@@ -124,3 +124,24 @@ func (c *Client) Backup(ctx context.Context, id string) (Backup, error) {
 	var b Backup
 	return b, c.do(ctx, http.MethodGet, "/backups/"+url.PathEscape(id), nil, &b)
 }
+
+func (c *Client) Policies(ctx context.Context) ([]Policy, error) {
+	var out policyList
+	err := c.do(ctx, http.MethodGet, "/policies", nil, &out)
+	return out.Policies, err
+}
+
+func (c *Client) AddPolicy(ctx context.Context, ch PolicyChange) (Policy, error) {
+	var p Policy
+	return p, c.do(ctx, http.MethodPost, "/policies", ch, &p)
+}
+
+func (c *Client) SetPolicy(ctx context.Context, name string, ch PolicyChange) (Policy, error) {
+	var p Policy
+	return p, c.do(ctx, http.MethodPatch, "/policies/"+url.PathEscape(name), ch, &p)
+}
+
+func (c *Client) RemovePolicy(ctx context.Context, name string) error {
+	var out struct{}
+	return c.do(ctx, http.MethodDelete, "/policies/"+url.PathEscape(name), nil, &out)
+}

@@ -69,6 +69,10 @@ type Backend interface {
 	BackupNow(ctx context.Context, db string, tags []string) ([]BackupJob, error)
 	Backups(ctx context.Context) ([]Backup, error)
 	Backup(ctx context.Context, id string) (Backup, error)
+	Policies(ctx context.Context) ([]Policy, error)
+	AddPolicy(ctx context.Context, p PolicyChange) (Policy, error)
+	SetPolicy(ctx context.Context, name string, p PolicyChange) (Policy, error)
+	RemovePolicy(ctx context.Context, name string) error
 }
 
 // Error carries an HTTP status across the pipe; Msg is shown to the operator.
@@ -169,4 +173,34 @@ type backupJobs struct {
 
 type backupList struct {
 	Backups []Backup `json:"backups"`
+}
+
+type PolicyTarget struct {
+	AgentID  string `json:"agent_id"`
+	Hostname string `json:"hostname"`
+}
+
+// Policy is a schedule and how many backups with its tag each node keeps; To
+// is empty for every paired node, NextRun zero when it never fires.
+type Policy struct {
+	Name     string         `json:"name"`
+	Schedule string         `json:"schedule"`
+	Keep     int            `json:"keep"`
+	To       []PolicyTarget `json:"to"`
+	Enabled  bool           `json:"enabled"`
+	NextRun  time.Time      `json:"next_run,omitzero"`
+}
+
+// PolicyChange adds (Name, Keep required) or changes a policy: nil fields keep
+// the current value. To holds agent references; [] or ["all"] is every node.
+type PolicyChange struct {
+	Name     string   `json:"name,omitempty"`
+	Schedule *string  `json:"schedule,omitempty"`
+	Keep     *int     `json:"keep,omitempty"`
+	To       []string `json:"to"`
+	Enabled  *bool    `json:"enabled,omitempty"`
+}
+
+type policyList struct {
+	Policies []Policy `json:"policies"`
 }

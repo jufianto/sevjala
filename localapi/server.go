@@ -86,6 +86,30 @@ func NewHandler(b Backend) http.Handler {
 		bk, err := b.Backup(r.Context(), r.PathValue("id"))
 		reply(w, bk, err)
 	})
+	mux.HandleFunc("GET /policies", func(w http.ResponseWriter, r *http.Request) {
+		ps, err := b.Policies(r.Context())
+		if ps == nil {
+			ps = []Policy{}
+		}
+		reply(w, policyList{Policies: ps}, err)
+	})
+	mux.HandleFunc("POST /policies", func(w http.ResponseWriter, r *http.Request) {
+		var ch PolicyChange
+		if decode(w, r, &ch) {
+			p, err := b.AddPolicy(r.Context(), ch)
+			reply(w, p, err)
+		}
+	})
+	mux.HandleFunc("PATCH /policies/{name}", func(w http.ResponseWriter, r *http.Request) {
+		var ch PolicyChange
+		if decode(w, r, &ch) {
+			p, err := b.SetPolicy(r.Context(), r.PathValue("name"), ch)
+			reply(w, p, err)
+		}
+	})
+	mux.HandleFunc("DELETE /policies/{name}", func(w http.ResponseWriter, r *http.Request) {
+		reply(w, struct{}{}, b.RemovePolicy(r.Context(), r.PathValue("name")))
+	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 	})

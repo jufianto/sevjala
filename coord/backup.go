@@ -37,7 +37,7 @@ type job struct {
 	err    string // guarded by Controller.mu
 }
 
-func (c *Controller) BackupNow(_ context.Context, db string, tags []string) ([]localapi.BackupJob, error) {
+func (c *Controller) BackupNow(ctx context.Context, db string, tags []string) ([]localapi.BackupJob, error) {
 	cfg := c.config()
 	dbs := cfg.Controller.Database.Databases
 	if len(dbs) == 0 {
@@ -52,9 +52,17 @@ func (c *Controller) BackupNow(_ context.Context, db string, tags []string) ([]l
 	if len(tags) == 0 {
 		tags = []string{defaultTag}
 	}
+	ps, err := c.Store.Policies(ctx)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, len(ps))
+	for i, p := range ps {
+		names[i] = p.Name
+	}
 	for _, t := range tags {
-		if !tagPattern.MatchString(t) {
-			return nil, localapi.Errorf(http.StatusBadRequest, "tag %q: use lower-case letters, digits, '-' and '_'", t)
+		if !slices.Contains(names, t) {
+			return nil, localapi.Errorf(http.StatusBadRequest, "tag %q is not a policy (policies: %s)", t, strings.Join(names, ", "))
 		}
 	}
 	now := time.Now()

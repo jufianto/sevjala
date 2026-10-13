@@ -43,6 +43,8 @@ type fakeBackend struct {
 	gotSettings                       DBSettings
 	gotDB                             string
 	gotTags                           []string
+	gotName                           string
+	gotPolicy                         PolicyChange
 }
 
 func (f *fakeBackend) Status() Status { return f.status }
@@ -260,5 +262,50 @@ func TestBackupRoutesRoundTrip(t *testing.T) {
 	}
 	if b, err := c.Backup(ctx, "BK-20261013-101500-A8F2"); err != nil || b.State != BackupDumping || b.Bytes != 7 {
 		t.Errorf("Backup %+v, %v", b, err)
+	}
+}
+
+func (f *fakeBackend) Policies(context.Context) ([]Policy, error) { return nil, f.err }
+
+func (f *fakeBackend) AddPolicy(_ context.Context, ch PolicyChange) (Policy, error) {
+	f.mu.Lock()
+	f.gotPolicy = ch
+	f.mu.Unlock()
+	return Policy{Name: ch.Name, Keep: *ch.Keep, To: []PolicyTarget{}}, f.err
+}
+
+func (f *fakeBackend) SetPolicy(_ context.Context, name string, ch PolicyChange) (Policy, error) {
+	f.mu.Lock()
+	f.gotName, f.gotPolicy = name, ch
+	f.mu.Unlock()
+	return Policy{Name: name}, f.err
+}
+
+func (f *fakeBackend) RemovePolicy(_ context.Context, name string) error {
+	f.mu.Lock()
+	f.gotName = name
+	f.mu.Unlock()
+	return f.err
+}
+
+func TestPolicyRoutesRoundTrip(t *testing.T) {
+	f := &fakeBackend{}
+	c := NewClient(startBackend(t, f))
+	ctx := context.Background()
+	if ps, err := c.Policies(ctx); err != nil || ps == nil || len(ps) != 0 {
+		t.Errorf("Policies %+v, %v", ps, err)
+	}
+	keep, sched := 4, "@weekly"
+	if p, err := c.AddPolicy(ctx, PolicyChange{Name: "weekly", Keep: &keep, Schedule: &sched}); err != nil || p.Keep != 4 ||
+		f.gotPolicy.To != nil || *f.gotPolicy.Schedule != sched {
+		t.Errorf("AddPolicy %+v, %v, %+v", p, err, f.gotPolicy)
+	}
+	off := false
+	if _, err := c.SetPolicy(ctx, "a b", PolicyChange{Enabled: &off, To: []string{}}); err != nil || f.gotName != "a b" ||
+		f.gotPolicy.To == nil || *f.gotPolicy.Enabled || f.gotPolicy.Keep != nil {
+		t.Errorf("SetPolicy %v, %q %+v", err, f.gotName, f.gotPolicy)
+	}
+	if err := c.RemovePolicy(ctx, "weekly"); err != nil || f.gotName != "weekly" {
+		t.Errorf("RemovePolicy %v, %q", err, f.gotName)
 	}
 }

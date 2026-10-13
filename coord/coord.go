@@ -120,3 +120,31 @@ func (s *Service) Backup(ctx context.Context, id string) (localapi.Backup, error
 	}
 	return s.Controller.Backup(ctx, id)
 }
+
+func (s *Service) Policies(ctx context.Context) ([]localapi.Policy, error) {
+	if s.Controller == nil {
+		return nil, errNotController
+	}
+	return s.Controller.Policies(ctx)
+}
+
+func (s *Service) AddPolicy(ctx context.Context, p localapi.PolicyChange) (localapi.Policy, error) {
+	if s.Controller == nil {
+		return localapi.Policy{}, errNotController
+	}
+	return s.Controller.AddPolicy(ctx, p)
+}
+
+func (s *Service) SetPolicy(ctx context.Context, name string, p localapi.PolicyChange) (localapi.Policy, error) {
+	if s.Controller == nil {
+		return localapi.Policy{}, errNotController
+	}
+	return s.Controller.SetPolicy(ctx, name, p)
+}
+
+func (s *Service) RemovePolicy(ctx context.Context, name string) error {
+	if s.Controller == nil {
+		return errNotController
+	}
+	return s.Controller.RemovePolicy(ctx, name)
+}
