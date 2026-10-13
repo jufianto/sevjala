@@ -94,6 +94,13 @@ func TestReconcileDeletesBeyondKeep(t *testing.T) {
 	if st := copyState(t, ctrl, old, n.id.AgentID); st != store.CopyDeleted {
 		t.Errorf("copy %s", st)
 	}
+	// Before the next poll, the last inventory still lists the deleted copy.
+	if plan, err := ctrl.Reconcile(ctx, false); err != nil || len(plan.Deletes)+len(plan.Sends) != 0 {
+		t.Errorf("second run before a poll %+v, %v", plan, err)
+	}
+	if st := copyState(t, ctrl, old, n.id.AgentID); st != store.CopyDeleted {
+		t.Errorf("copy after a second run %s", st)
+	}
 	ctrl.PollAll(ctx)
 	if plan, _ := ctrl.Reconcile(ctx, true); len(plan.Deletes)+len(plan.Sends)+len(plan.Unstaged)+len(plan.Expired) != 0 {
 		t.Errorf("not settled: %+v", plan)

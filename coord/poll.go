@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -136,4 +137,15 @@ func (c *Controller) pollSnapshot() map[string]nodeState {
 		out[id] = *n
 	}
 	return out
+}
+
+// forget drops a deleted backup from the node's last inventory, so a reconcile
+// before the next poll does not act on it again. The slice is copied: snapshots
+// share it.
+func (c *Controller) forget(agentID, backupID string) {
+	c.pollMu.Lock()
+	defer c.pollMu.Unlock()
+	if n := c.nodes[agentID]; n != nil && n.status.Backups != nil {
+		n.status.Backups = slices.DeleteFunc(slices.Clone(n.status.Backups), func(r lanapi.BackupRef) bool { return r.BackupID == backupID })
+	}
 }

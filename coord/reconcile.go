@@ -134,6 +134,7 @@ func (c *Controller) apply(ctx context.Context, plan retention.Plan, agents map[
 			c.Log.Warn("retention delete failed", "backup_id", d.BackupID, "agent_id", d.AgentID, "err", err)
 			continue
 		}
+		c.forget(d.AgentID, d.BackupID)
 		if err := c.Store.MarkCopy(ctx, d.BackupID, d.AgentID, store.CopyDeleted, d.Reason, now); err != nil {
 			c.Log.Error("reconcile: record delete", "backup_id", d.BackupID, "agent_id", d.AgentID, "err", err)
 		}
