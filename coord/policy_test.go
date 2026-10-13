@@ -7,7 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jufianto/sevjala/dump/dumptest"
 	"github.com/jufianto/sevjala/localapi"
+	"github.com/jufianto/sevjala/store"
 )
 
 func ptr[T any](v T) *T { return &v }
@@ -83,5 +85,22 @@ func TestBackupNowTagMustBeAPolicy(t *testing.T) {
 	_, err := newController(t).BackupNow(context.Background(), "", []string{"yearly"})
 	if errCode(err) != http.StatusBadRequest || !strings.Contains(err.Error(), "not a policy") || !strings.Contains(err.Error(), "manual") {
 		t.Errorf("err = %v", err)
+	}
+}
+
+func TestBackupGoesOnlyToItsPolicyDestinations(t *testing.T) {
+	dumptest.Use(t, dumptest.OK)
+	ctx := context.Background()
+	ctrl := newController(t)
+	pc1 := startAgent(t, "node", "PC-1")
+	pairNode(t, ctrl, pc1)
+	pairNode(t, ctrl, startAgent(t, "node", "PC-2"))
+	if _, err := ctrl.SetPolicy(ctx, "daily", localapi.PolicyChange{To: []string{"PC-1"}}); err != nil {
+		t.Fatal(err)
+	}
+	id := backupAt(t, ctrl, tick0, store.BackupDistributed, "daily")
+	b, err := ctrl.Backup(ctx, id)
+	if err != nil || len(b.Copies) != 1 || b.Copies[0].AgentID != pc1.id.AgentID {
+		t.Errorf("copies %+v, %v", b.Copies, err)
 	}
 }

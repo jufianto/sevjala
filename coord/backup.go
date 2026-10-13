@@ -118,7 +118,7 @@ func (c *Controller) runBackup(j *job, created time.Time, tags []string, cfg con
 	m, err := c.dump(j, created, tags, cfg)
 	var nodes []string
 	if err == nil {
-		nodes, err = c.nodeIDs(c.Ctx)
+		nodes, err = c.targets(c.Ctx, tags)
 	}
 	if err == nil {
 		err = c.Store.InsertBackup(c.Ctx, store.Backup{BackupID: m.BackupID, Database: m.Database, CreatedAt: m.CreatedAt,
@@ -158,14 +158,32 @@ func (c *Controller) dump(j *job, created time.Time, tags []string, cfg config.C
 		Progress: func(n int64) { j.bytes.Store(n) }})
 }
 
-func (c *Controller) nodeIDs(ctx context.Context) ([]string, error) {
+// targets is the union of the destinations of the backup's policies (blueprint:
+// Policies and tiers); a policy without destinations, or one removed since
+// the dump started, means every paired node.
+func (c *Controller) targets(ctx context.Context, tags []string) ([]string, error) {
 	as, err := c.Store.Agents(ctx)
 	if err != nil {
 		return nil, err
 	}
+	ps, err := c.Store.Policies(ctx)
+	if err != nil {
+		return nil, err
+	}
+	all, want := false, map[string]bool{}
+	for _, t := range tags {
+		i := slices.IndexFunc(ps, func(p store.Policy) bool { return p.Name == t })
+		if i < 0 || len(ps[i].Destinations) == 0 {
+			all = true
+			break
+		}
+		for _, d := range ps[i].Destinations {
+			want[d] = true
+		}
+	}
 	var out []string
 	for _, a := range as {
-		if a.Role == config.RoleNode {
+		if a.Role == config.RoleNode && (all || want[a.AgentID]) {
 			out = append(out, a.AgentID)
 		}
 	}
