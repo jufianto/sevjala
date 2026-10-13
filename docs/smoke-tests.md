@@ -165,3 +165,12 @@ Secrets:
 
 Logs: the controller has `backup_started`, `backup_created`, `transfer_started`,
 `transfer_verified`; each node has `backup_received`.
+
+Win7-only risks found in review (no automated coverage):
+
+- `db set --password` with a non-ASCII password (e.g. `wörd`): it must either work, with a
+  backup succeeding afterwards, or be refused at `db set` with "Access denied". It must
+  never be saved broken.
+- Re-pair one node to another controller, then `backup now` on the first: that copy must
+  end `failed` after one attempt ("rejected this controller's certificate"), not retry for
+  12 minutes.
