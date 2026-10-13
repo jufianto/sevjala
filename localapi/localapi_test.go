@@ -37,6 +37,7 @@ var discard = slog.New(slog.DiscardHandler)
 type fakeBackend struct {
 	status Status
 	err    error
+	delay  time.Duration // RunRetention takes this long
 
 	mu                                sync.Mutex
 	gotAgent, gotCode, gotAddr, gotFP string
@@ -239,6 +240,7 @@ func (f *fakeBackend) Backups(_ context.Context, all bool) ([]Backup, error) {
 }
 
 func (f *fakeBackend) RunRetention(_ context.Context, dryRun bool) (RetentionPlan, error) {
+	time.Sleep(f.delay)
 	f.mu.Lock()
 	f.gotDryRun = dryRun
 	f.mu.Unlock()
@@ -326,5 +328,15 @@ func TestPolicyRoutesRoundTrip(t *testing.T) {
 	}
 	if err := c.RemovePolicy(ctx, "weekly"); err != nil || f.gotName != "weekly" {
 		t.Errorf("RemovePolicy %v, %q", err, f.gotName)
+	}
+}
+
+// A retention run waits for LAN deletes; the client's ceiling must not cut it off.
+func TestRunRetentionOutlastsTheCallCeiling(t *testing.T) {
+	defer func(d time.Duration) { callTimeout = d }(callTimeout)
+	callTimeout = 50 * time.Millisecond
+	c := NewClient(startBackend(t, &fakeBackend{delay: 200 * time.Millisecond}))
+	if _, err := c.RunRetention(context.Background(), false); err != nil {
+		t.Error(err)
 	}
 }

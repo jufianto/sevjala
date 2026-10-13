@@ -273,3 +273,26 @@ func TestPruneOrphansRechecksTheStore(t *testing.T) {
 		t.Errorf("staging %v, want %s's two files", got, id)
 	}
 }
+
+// The CLI may give up waiting; a run that started must not stop halfway.
+func TestReconcileFinishesWhenTheCallerLeaves(t *testing.T) {
+	dumptest.Use(t, dumptest.OK)
+	ctx := context.Background()
+	ctrl := newController(t)
+	n := startAgent(t, "node", "PC-1")
+	pairNode(t, ctrl, n)
+	if _, err := ctrl.SetPolicy(ctx, "manual", localapi.PolicyChange{Keep: ptr(1)}); err != nil {
+		t.Fatal(err)
+	}
+	backupAt(t, ctrl, tick0, store.BackupDistributed)
+	newer := backupAt(t, ctrl, tick0.Add(time.Minute), store.BackupDistributed)
+	ctrl.PollAll(ctx)
+	gone, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := ctrl.Reconcile(gone, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := stored(t, n); !slices.Equal(got, []string{newer}) {
+		t.Errorf("node holds %v", got)
+	}
+}

@@ -24,6 +24,10 @@ import (
 // their last poll, then deletes, sends again, prunes staging and expires
 // (blueprint: Retention and reconciliation). A dry run only returns the plan.
 func (c *Controller) Reconcile(ctx context.Context, dryRun bool) (localapi.RetentionPlan, error) {
+	if !dryRun {
+		// A caller that gives up must not leave deletes done but not recorded.
+		ctx = context.WithoutCancel(ctx)
+	}
 	c.reconcileMu.Lock()
 	defer c.reconcileMu.Unlock()
 	if !dryRun && c.anyOffline() {

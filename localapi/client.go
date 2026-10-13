@@ -16,15 +16,17 @@ type Client struct {
 	hc *http.Client
 }
 
-// NewClient's 15 s ceiling covers discover (2 s wait) and a pairing round trip;
-// callers pass shorter contexts where they want them.
+// callTimeout covers discover (2 s wait) and a pairing round trip; callers pass
+// shorter contexts where they want them.
+var callTimeout = 15 * time.Second
+
 func NewClient(endpoint string) *Client {
 	tr := &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return dial(ctx, endpoint)
 		},
 	}
-	return &Client{hc: &http.Client{Transport: tr, Timeout: 15 * time.Second}}
+	return &Client{hc: &http.Client{Transport: tr, Timeout: callTimeout}}
 }
 
 func (c *Client) Status(ctx context.Context) (Status, error) {
@@ -151,7 +153,10 @@ func (c *Client) RemovePolicy(ctx context.Context, name string) error {
 	return c.do(ctx, http.MethodDelete, "/policies/"+url.PathEscape(name), nil, &out)
 }
 
+// RunRetention has no ceiling of its own: it waits for deletes on the LAN, and
+// the caller's context bounds it.
 func (c *Client) RunRetention(ctx context.Context, dryRun bool) (RetentionPlan, error) {
 	var p RetentionPlan
-	return p, c.do(ctx, http.MethodPost, "/retention/run", map[string]bool{"dry_run": dryRun}, &p)
+	long := &Client{hc: &http.Client{Transport: c.hc.Transport}}
+	return p, long.do(ctx, http.MethodPost, "/retention/run", map[string]bool{"dry_run": dryRun}, &p)
 }
