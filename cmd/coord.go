@@ -161,7 +161,7 @@ func newAgentsCmd(g *globals) *cobra.Command {
 			out := c.OutOrStdout()
 			renderDiscovered(out, []localapi.Discovered{d})
 			if !d.Paired {
-				fmt.Fprintf(out, "pair it with: sevjala pair %s --code <code from 'sevjala code' on that PC>\n", shortID(d.AgentID))
+				fmt.Fprintf(out, "pair it with: sevjala pair %s --code <code> --fp <fingerprint> (both from 'sevjala code' on that PC)\n", shortID(d.AgentID))
 			}
 			return nil
 		},
@@ -171,7 +171,7 @@ func newAgentsCmd(g *globals) *cobra.Command {
 
 func renderAgents(w io.Writer, as []localapi.Agent) {
 	if len(as) == 0 {
-		fmt.Fprintln(w, "no paired agents; run 'sevjala discover', then 'sevjala pair <agent> --code <code>'")
+		fmt.Fprintln(w, "no paired agents; run 'sevjala discover', then 'sevjala pair <agent> --code <code> --fp <fingerprint>'")
 		return
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)

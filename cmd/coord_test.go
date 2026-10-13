@@ -54,7 +54,7 @@ func TestRenderAgents(t *testing.T) {
 	}
 	b.Reset()
 	renderAgents(&b, nil)
-	if !strings.Contains(b.String(), "no paired agents") {
+	if !strings.Contains(b.String(), "no paired agents") || !strings.Contains(b.String(), "--fp") {
 		t.Errorf("empty: %q", b.String())
 	}
 }
