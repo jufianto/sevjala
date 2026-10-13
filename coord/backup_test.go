@@ -157,6 +157,25 @@ func TestBackupDumpFailureIsReported(t *testing.T) {
 	}
 }
 
+// The scheduler retries a failed database every 15 min; only the latest failure is kept.
+func TestOnlyTheLatestFailedDumpIsKept(t *testing.T) {
+	dumptest.Use(t, dumptest.DumpFails)
+	ctrl := newController(t)
+	ctx := context.Background()
+	var last string
+	for range 3 {
+		jobs, err := ctrl.BackupNow(ctx, "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		last = jobs[0].BackupID
+		waitState(t, ctrl, last, state(localapi.BackupFailed))
+	}
+	if all, _ := ctrl.Backups(ctx, true); len(all) != 1 || all[0].BackupID != last {
+		t.Errorf("list %+v", all)
+	}
+}
+
 func TestPushToStoppedNodeEndsOffline(t *testing.T) {
 	dumptest.Use(t, dumptest.OK)
 	ctrl := newController(t)

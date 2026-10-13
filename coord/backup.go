@@ -84,6 +84,11 @@ func (c *Controller) start(dbs, tags []string, now time.Time, cfg config.Config)
 	out := make([]localapi.BackupJob, len(dbs))
 	queued := make([]*job, len(dbs))
 	for i, name := range dbs {
+		for id, old := range c.jobs {
+			if old.db == name && old.err != "" {
+				delete(c.jobs, id) // the new attempt replaces the last failure
+			}
+		}
 		id := inventory.NewID(now)
 		for c.jobs[id] != nil || c.staged(id) {
 			id = inventory.NewID(now)

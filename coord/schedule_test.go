@@ -63,13 +63,18 @@ func TestTickWaitsAfterAFailedDump(t *testing.T) {
 	ctx := context.Background()
 	ctrl := newController(t)
 	ctrl.Tick(ctx, tick0)
-	if bs := settled(t, ctrl, 1); bs[0].State != localapi.BackupFailed {
-		t.Fatalf("backup %+v", bs[0])
+	first := settled(t, ctrl, 1)[0]
+	if first.State != localapi.BackupFailed {
+		t.Fatalf("backup %+v", first)
 	}
 	ctrl.Tick(ctx, tick0.Add(14*time.Minute))
-	settled(t, ctrl, 1)
+	if bs := settled(t, ctrl, 1); bs[0].BackupID != first.BackupID {
+		t.Fatalf("retried before 15 min: %+v", bs[0])
+	}
 	ctrl.Tick(ctx, tick0.Add(15*time.Minute))
-	settled(t, ctrl, 2)
+	if bs := settled(t, ctrl, 1); bs[0].BackupID == first.BackupID {
+		t.Errorf("not retried after 15 min: %+v", bs[0])
+	}
 }
 
 // A clock moved back must neither stop the schedule until it catches up nor
