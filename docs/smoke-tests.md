@@ -2,6 +2,8 @@
 
 Checks that CI cannot run: they need root, a service manager, or real machines (P0, M1). Paste each
 transcript into the milestone's PR. Pending ones are listed in [PROGRESS.md](./PROGRESS.md).
+For a first guided run on one Windows PC and one Mac, start with
+[test-walkthrough.md](./test-walkthrough.md).
 
 ## Installer — double-click setup (Windows)
 
