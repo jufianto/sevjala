@@ -175,16 +175,26 @@ func (c *Controller) Push(ctx context.Context, j transfer.Job) error {
 	defer f.Close()
 	addr := net.JoinHostPort(a.LastIP, strconv.Itoa(a.Port))
 	c.Log.Info("transfer started", logx.Event(logx.EventTransferStarted), "backup_id", j.BackupID, "agent_id", j.AgentID, "addr", addr)
-	err = c.LAN.PutBackup(ctx, addr, a.FP, m, f)
+	if err := c.LAN.PutBackup(ctx, addr, a.FP, m, f); err != nil {
+		return classify(err)
+	}
+	return nil
+}
+
+// classify tells the pool what a retry can fix. A full disk is not retried on
+// the backoff timer: reconciliation sends the copy again once the node reports
+// enough free space.
+func classify(err error) error {
 	var he *lanapi.HTTPError
 	var op *net.OpError
 	switch {
-	case err == nil:
-		return nil
-	case errors.Is(err, lanapi.ErrRejected):
+	case errors.Is(err, lanapi.ErrRejected), errors.Is(err, lanapi.ErrPinMismatch):
 		return transfer.Permanent(err)
-	case errors.As(err, &he) && (he.Code == http.StatusBadRequest || he.Code == http.StatusForbidden || he.Code == http.StatusConflict):
-		return transfer.Permanent(err)
+	case errors.As(err, &he):
+		switch he.Code {
+		case http.StatusBadRequest, http.StatusForbidden, http.StatusConflict, http.StatusInsufficientStorage:
+			return transfer.Permanent(err)
+		}
 	case errors.As(err, &op) && op.Op == "dial":
 		return transfer.Unreachable(err)
 	}
@@ -192,16 +202,20 @@ func (c *Controller) Push(ctx context.Context, j transfer.Job) error {
 }
 
 // Settle records what the transfer pool reports.
-func (c *Controller) Settle(j transfer.Job, state string, attempts int, err error) {
-	cp := store.Copy{BackupID: j.BackupID, AgentID: j.AgentID, State: state, Attempts: attempts}
-	log := c.Log.With("backup_id", j.BackupID, "agent_id", j.AgentID, "attempt", attempts)
+func (c *Controller) Settle(j transfer.Job, u transfer.Update) {
+	cp := store.Copy{BackupID: j.BackupID, AgentID: j.AgentID, State: u.State, Attempts: u.Attempts}
+	log := c.Log.With("backup_id", j.BackupID, "agent_id", j.AgentID, "attempt", u.Attempts)
 	switch {
-	case state == store.CopyVerified:
+	case u.State == store.CopyVerified:
 		cp.VerifiedAt = time.Now().UTC().Truncate(time.Second)
 		log.Info("transfer verified", logx.Event(logx.EventTransferVerified))
-	case err != nil:
-		cp.LastError = err.Error()
-		log.Warn("transfer failed", logx.Event(logx.EventTransferFailed), "state", state, "err", err)
+	case u.Err != nil:
+		cp.LastError = u.Err.Error()
+		attrs := []any{logx.Event(logx.EventTransferFailed), "state", u.State, "err", u.Err}
+		if u.Retry > 0 {
+			attrs = append(attrs, "next_retry", u.Retry.String())
+		}
+		log.Warn("transfer failed", attrs...)
 	}
 	if err := c.Store.SetCopy(context.Background(), cp); err != nil {
 		c.Log.Error("record transfer state", "backup_id", j.BackupID, "agent_id", j.AgentID, "err", err)
@@ -215,7 +229,7 @@ func (c *Controller) Resume(ctx context.Context) error {
 		return err
 	}
 	for _, cp := range cs {
-		c.Pool.Enqueue(transfer.Job{BackupID: cp.BackupID, AgentID: cp.AgentID})
+		c.Pool.Enqueue(transfer.Job{BackupID: cp.BackupID, AgentID: cp.AgentID, Attempts: cp.Attempts})
 	}
 	return nil
 }

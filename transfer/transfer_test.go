@@ -15,18 +15,22 @@ import (
 var fast = []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond}
 
 type recorder struct {
-	mu     sync.Mutex
-	events []string
-	done   chan Job
+	mu      sync.Mutex
+	events  []string
+	retries []time.Duration
+	done    chan Job
 }
 
 func newRecorder() *recorder { return &recorder{done: make(chan Job, 16)} }
 
-func (r *recorder) settle(j Job, state string, attempts int, _ error) {
+func (r *recorder) settle(j Job, u Update) {
 	r.mu.Lock()
-	r.events = append(r.events, fmt.Sprintf("%s %s %d", j.AgentID, state, attempts))
+	r.events = append(r.events, fmt.Sprintf("%s %s %d", j.AgentID, u.State, u.Attempts))
+	if u.Retry > 0 {
+		r.retries = append(r.retries, u.Retry)
+	}
 	r.mu.Unlock()
-	if state == store.CopyVerified || state == store.CopyFailed || state == store.CopyOffline {
+	if u.State == store.CopyVerified || u.State == store.CopyFailed || u.State == store.CopyOffline {
 		r.done <- j
 	}
 }
@@ -126,7 +130,7 @@ func TestOneWorkerPerNodeInOrder(t *testing.T) {
 		return nil
 	}, r.settle, fast)
 	defer p.Close()
-	for _, j := range []Job{{"a", "n1"}, {"b", "n1"}, {"c", "n2"}} {
+	for _, j := range []Job{{BackupID: "a", AgentID: "n1"}, {BackupID: "b", AgentID: "n1"}, {BackupID: "c", AgentID: "n2"}} {
 		p.Enqueue(j)
 	}
 	for range 3 {
@@ -136,5 +140,57 @@ func TestOneWorkerPerNodeInOrder(t *testing.T) {
 	defer mu.Unlock()
 	if slices.Index(order, "n1:a") > slices.Index(order, "n1:b") {
 		t.Errorf("order %q", order)
+	}
+}
+
+func TestRetryIsReported(t *testing.T) {
+	r := newRecorder()
+	p := NewPool(failing(errors.New("500")), r.settle, []time.Duration{time.Millisecond, 2 * time.Millisecond})
+	defer p.Close()
+	p.Enqueue(Job{BackupID: "b1", AgentID: "n1"})
+	r.wait(t)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !slices.Equal(r.retries, []time.Duration{time.Millisecond}) {
+		t.Errorf("retries %v", r.retries)
+	}
+}
+
+func TestAttemptsContinueAfterRestart(t *testing.T) {
+	r := newRecorder()
+	p := NewPool(failing(errors.New("500")), r.settle, fast)
+	defer p.Close()
+	p.Enqueue(Job{BackupID: "b1", AgentID: "n1", Attempts: 4})
+	r.wait(t)
+	if got := r.got(); !slices.Equal(got, []string{"n1 transferring 5", "n1 pending 5", "n1 transferring 6", "n1 verified 6"}) {
+		t.Errorf("events %q", got)
+	}
+}
+
+func TestEnqueueDropsDuplicates(t *testing.T) {
+	r := newRecorder()
+	release := make(chan struct{})
+	var mu sync.Mutex
+	pushes := 0
+	p := NewPool(func(context.Context, Job) error {
+		mu.Lock()
+		pushes++
+		mu.Unlock()
+		<-release
+		return nil
+	}, r.settle, fast)
+	defer p.Close()
+	j := Job{BackupID: "b1", AgentID: "n1"}
+	p.Enqueue(j)
+	p.Enqueue(j)
+	p.Enqueue(Job{BackupID: "b1", AgentID: "n1", Attempts: 3})
+	close(release)
+	r.wait(t)
+	p.Enqueue(j)
+	r.wait(t)
+	mu.Lock()
+	defer mu.Unlock()
+	if pushes != 2 {
+		t.Errorf("pushes %d, want 2 (one while queued, one after it finished)", pushes)
 	}
 }
