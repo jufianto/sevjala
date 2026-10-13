@@ -85,3 +85,38 @@ func (n *Node) Code() (localapi.Code, error) {
 	n.Log.Info("pairing code issued", logx.Event(logx.EventPairCodeIssued), "expires_at", exp)
 	return localapi.Code{Code: code, ExpiresAt: exp, AgentID: n.AgentID, FP: n.FP}, nil
 }
+
+func (s *Service) DetectDatabase(ctx context.Context) (localapi.Detection, error) {
+	if s.Controller == nil {
+		return localapi.Detection{}, errNotController
+	}
+	return s.Controller.DetectDatabase(ctx)
+}
+
+func (s *Service) SetDatabase(ctx context.Context, set localapi.DBSettings) (localapi.Detection, error) {
+	if s.Controller == nil {
+		return localapi.Detection{}, errNotController
+	}
+	return s.Controller.SetDatabase(ctx, set)
+}
+
+func (s *Service) BackupNow(ctx context.Context, db string, tags []string) ([]localapi.BackupJob, error) {
+	if s.Controller == nil {
+		return nil, errNotController
+	}
+	return s.Controller.BackupNow(ctx, db, tags)
+}
+
+func (s *Service) Backups(ctx context.Context) ([]localapi.Backup, error) {
+	if s.Controller == nil {
+		return nil, errNotController
+	}
+	return s.Controller.Backups(ctx)
+}
+
+func (s *Service) Backup(ctx context.Context, id string) (localapi.Backup, error) {
+	if s.Controller == nil {
+		return localapi.Backup{}, errNotController
+	}
+	return s.Controller.Backup(ctx, id)
+}

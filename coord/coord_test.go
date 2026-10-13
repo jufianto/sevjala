@@ -59,6 +59,12 @@ func TestWrongRoleIs409(t *testing.T) {
 	if _, err := node.Discover(context.Background()); !is409(err, "this agent is a node") {
 		t.Errorf("Discover on a node: %v", err)
 	}
+	if _, err := node.BackupNow(context.Background(), "", nil); !is409(err, "this agent is a node") {
+		t.Errorf("BackupNow on a node: %v", err)
+	}
+	if _, err := node.DetectDatabase(context.Background()); !is409(err, "this agent is a node") {
+		t.Errorf("DetectDatabase on a node: %v", err)
+	}
 	ctrl := &Service{Controller: &Controller{}}
 	if _, err := ctrl.Code(); !is409(err, "this agent is a controller") {
 		t.Errorf("Code on a controller: %v", err)

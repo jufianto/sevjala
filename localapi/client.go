@@ -97,3 +97,30 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 	}
 	return nil
 }
+
+func (c *Client) DetectDatabase(ctx context.Context) (Detection, error) {
+	var d Detection
+	return d, c.do(ctx, http.MethodPost, "/db/detect", nil, &d)
+}
+
+func (c *Client) SetDatabase(ctx context.Context, s DBSettings) (Detection, error) {
+	var d Detection
+	return d, c.do(ctx, http.MethodPut, "/db", s, &d)
+}
+
+func (c *Client) BackupNow(ctx context.Context, db string, tags []string) ([]BackupJob, error) {
+	var out backupJobs
+	err := c.do(ctx, http.MethodPost, "/backup/now", map[string]any{"db": db, "tags": tags}, &out)
+	return out.Backups, err
+}
+
+func (c *Client) Backups(ctx context.Context) ([]Backup, error) {
+	var out backupList
+	err := c.do(ctx, http.MethodGet, "/backups", nil, &out)
+	return out.Backups, err
+}
+
+func (c *Client) Backup(ctx context.Context, id string) (Backup, error) {
+	var b Backup
+	return b, c.do(ctx, http.MethodGet, "/backups/"+url.PathEscape(id), nil, &b)
+}

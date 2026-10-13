@@ -54,6 +54,38 @@ func NewHandler(b Backend) http.Handler {
 		p, err := b.Ping(r.Context(), r.PathValue("agent"))
 		reply(w, p, err)
 	})
+	mux.HandleFunc("POST /db/detect", func(w http.ResponseWriter, r *http.Request) {
+		d, err := b.DetectDatabase(r.Context())
+		reply(w, d, err)
+	})
+	mux.HandleFunc("PUT /db", func(w http.ResponseWriter, r *http.Request) {
+		var s DBSettings
+		if decode(w, r, &s) {
+			d, err := b.SetDatabase(r.Context(), s)
+			reply(w, d, err)
+		}
+	})
+	mux.HandleFunc("POST /backup/now", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			DB   string   `json:"db"`
+			Tags []string `json:"tags"`
+		}
+		if decode(w, r, &req) {
+			js, err := b.BackupNow(r.Context(), req.DB, req.Tags)
+			reply(w, backupJobs{Backups: js}, err)
+		}
+	})
+	mux.HandleFunc("GET /backups", func(w http.ResponseWriter, r *http.Request) {
+		bs, err := b.Backups(r.Context())
+		if bs == nil {
+			bs = []Backup{}
+		}
+		reply(w, backupList{Backups: bs}, err)
+	})
+	mux.HandleFunc("GET /backups/{id}", func(w http.ResponseWriter, r *http.Request) {
+		bk, err := b.Backup(r.Context(), r.PathValue("id"))
+		reply(w, bk, err)
+	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 	})

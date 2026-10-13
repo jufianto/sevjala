@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -39,6 +40,9 @@ type fakeBackend struct {
 
 	mu                                sync.Mutex
 	gotAgent, gotCode, gotAddr, gotFP string
+	gotSettings                       DBSettings
+	gotDB                             string
+	gotTags                           []string
 }
 
 func (f *fakeBackend) Status() Status { return f.status }
@@ -203,5 +207,58 @@ func TestBadBodyIs400(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status %d", resp.StatusCode)
+	}
+}
+
+func (f *fakeBackend) DetectDatabase(context.Context) (Detection, error) {
+	return Detection{Dumper: "/x/mysqldump", Databases: []DBDatabase{{Name: "shop", Configured: true}}}, f.err
+}
+
+func (f *fakeBackend) SetDatabase(_ context.Context, s DBSettings) (Detection, error) {
+	f.mu.Lock()
+	f.gotSettings = s
+	f.mu.Unlock()
+	return Detection{Dumper: "/x/mysqldump"}, f.err
+}
+
+func (f *fakeBackend) BackupNow(_ context.Context, db string, tags []string) ([]BackupJob, error) {
+	f.mu.Lock()
+	f.gotDB, f.gotTags = db, tags
+	f.mu.Unlock()
+	return []BackupJob{{BackupID: "BK-20261013-101500-A8F2", Database: "shop"}}, f.err
+}
+
+func (f *fakeBackend) Backups(context.Context) ([]Backup, error) { return nil, f.err }
+
+func (f *fakeBackend) Backup(_ context.Context, id string) (Backup, error) {
+	return Backup{BackupID: id, State: BackupDumping, Bytes: 7}, f.err
+}
+
+func TestBackupRoutesRoundTrip(t *testing.T) {
+	f := &fakeBackend{}
+	c := NewClient(startBackend(t, f))
+	ctx := context.Background()
+	if d, err := c.DetectDatabase(ctx); err != nil || d.Dumper != "/x/mysqldump" || !d.Databases[0].Configured {
+		t.Errorf("DetectDatabase %+v, %v", d, err)
+	}
+	pw, port := "s3cret", 3307
+	if _, err := c.SetDatabase(ctx, DBSettings{Password: &pw, Port: &port, Databases: []string{}}); err != nil {
+		t.Fatal(err)
+	}
+	if s := f.gotSettings; s.Password == nil || *s.Password != pw || *s.Port != port || s.Host != nil || s.Databases == nil {
+		t.Errorf("settings %+v", s)
+	}
+	if _, err := c.SetDatabase(ctx, DBSettings{}); err != nil || f.gotSettings.Databases != nil {
+		t.Errorf("nil databases must stay nil: %+v, %v", f.gotSettings, err)
+	}
+	jobs, err := c.BackupNow(ctx, "shop", []string{"daily"})
+	if err != nil || len(jobs) != 1 || f.gotDB != "shop" || !slices.Equal(f.gotTags, []string{"daily"}) {
+		t.Errorf("BackupNow %+v, %v, %q %q", jobs, err, f.gotDB, f.gotTags)
+	}
+	if bs, err := c.Backups(ctx); err != nil || bs == nil || len(bs) != 0 {
+		t.Errorf("Backups %+v, %v", bs, err)
+	}
+	if b, err := c.Backup(ctx, "BK-20261013-101500-A8F2"); err != nil || b.State != BackupDumping || b.Bytes != 7 {
+		t.Errorf("Backup %+v, %v", b, err)
 	}
 }

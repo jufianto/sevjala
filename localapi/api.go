@@ -64,6 +64,11 @@ type Backend interface {
 	Pair(ctx context.Context, agent, code, fp string) (Agent, error)
 	Agents(ctx context.Context) ([]Agent, error)
 	Ping(ctx context.Context, agent string) (Ping, error)
+	DetectDatabase(ctx context.Context) (Detection, error)
+	SetDatabase(ctx context.Context, s DBSettings) (Detection, error)
+	BackupNow(ctx context.Context, db string, tags []string) ([]BackupJob, error)
+	Backups(ctx context.Context) ([]Backup, error)
+	Backup(ctx context.Context, id string) (Backup, error)
 }
 
 // Error carries an HTTP status across the pipe; Msg is shown to the operator.
@@ -156,4 +161,12 @@ type StoreInfo struct {
 	FreeBytes int64    `json:"free_bytes"`
 	Backups   int      `json:"backups"`
 	Problems  []string `json:"problems"`
+}
+
+type backupJobs struct {
+	Backups []BackupJob `json:"backups"`
+}
+
+type backupList struct {
+	Backups []Backup `json:"backups"`
 }
