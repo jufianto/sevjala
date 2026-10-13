@@ -5,17 +5,22 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jufianto/sevjala/config"
 	"github.com/jufianto/sevjala/discovery"
+	"github.com/jufianto/sevjala/dump"
 	"github.com/jufianto/sevjala/identity"
+	"github.com/jufianto/sevjala/inventory"
 	"github.com/jufianto/sevjala/lanapi"
 	"github.com/jufianto/sevjala/pairing"
 	"github.com/jufianto/sevjala/store"
+	"github.com/jufianto/sevjala/transfer"
 )
 
 var discard = slog.New(slog.DiscardHandler)
@@ -25,6 +30,7 @@ type testAgent struct {
 	codes *pairing.Codes
 	lan   *lanapi.Server
 	disco *discovery.Responder
+	inv   *inventory.Store
 }
 
 func startAgent(t *testing.T, role, hostname string) testAgent {
@@ -35,11 +41,15 @@ func startAgent(t *testing.T, role, hostname string) testAgent {
 		t.Fatal(err)
 	}
 	var codes *pairing.Codes
+	var inv *inventory.Store
 	if role == "node" {
 		codes = pairing.New(time.Now)
+		if inv, err = inventory.Open(filepath.Join(dir, "store"), 0, discard); err != nil {
+			t.Fatal(err)
+		}
 	}
 	lan, err := lanapi.Start(lanapi.Options{Addr: "127.0.0.1:0", DataDir: dir, Identity: id, Role: role,
-		Version: "test", Hostname: hostname, Started: time.Now(), Codes: codes, Log: discard})
+		Version: "test", Hostname: hostname, Started: time.Now(), Codes: codes, Store: inv, Log: discard})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +61,7 @@ func startAgent(t *testing.T, role, hostname string) testAgent {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { disco.Close() })
-	return testAgent{id: id, codes: codes, lan: lan, disco: disco}
+	return testAgent{id: id, codes: codes, lan: lan, disco: disco, inv: inv}
 }
 
 func newController(t *testing.T, targets ...*discovery.Responder) *Controller {
@@ -66,14 +76,26 @@ func newController(t *testing.T, targets ...*discovery.Responder) *Controller {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	return &Controller{Self: id, Store: st, LAN: lanapi.NewClient(id), Wait: 300 * time.Millisecond, Log: discard,
+	staging := filepath.Join(dir, "staging")
+	if err := os.MkdirAll(staging, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cfg := config.Default(config.RoleController)
+	cfg.Controller.Database.Databases = []string{"shop"}
+	c := &Controller{Self: id, Store: st, LAN: lanapi.NewClient(id), Wait: 300 * time.Millisecond, Log: discard,
 		Targets: func() ([]*net.UDPAddr, error) {
 			var out []*net.UDPAddr
 			for _, r := range targets {
 				out = append(out, r.Addr())
 			}
 			return out, nil
-		}}
+		},
+		DataDir: dir, Staging: staging, Config: cfg, Ctx: ctx,
+		FindTools: func(string) (dump.Tools, error) { return dump.Tools{Dumper: os.Args[0], Client: os.Args[0]}, nil }}
+	c.Pool = transfer.NewPool(c.Push, c.Settle, []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond})
+	t.Cleanup(func() { cancel(); c.Pool.Close() })
+	return c
 }
 
 func TestDiscoverPairPing(t *testing.T) {

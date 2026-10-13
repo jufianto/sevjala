@@ -29,6 +29,14 @@ const (
 	EventPartRemoved        = "part_removed"
 	EventBackupReceived     = "backup_received"
 	EventBackupRejected     = "backup_rejected"
+	EventBackupStarted      = "backup_started"
+	EventBackupCreated      = "backup_created"
+	EventBackupFailed       = "backup_failed"
+	EventTransferStarted    = "transfer_started"
+	EventTransferVerified   = "transfer_verified"
+	EventTransferFailed     = "transfer_failed"
+	EventDBConfigured       = "db_configured"
+	EventKeyringFallback    = "keyring_fallback"
 )
 
 func Event(name string) slog.Attr { return slog.String("event", name) }

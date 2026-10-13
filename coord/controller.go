@@ -14,24 +14,42 @@ import (
 
 	"github.com/jufianto/sevjala/config"
 	"github.com/jufianto/sevjala/discovery"
+	"github.com/jufianto/sevjala/dump"
 	"github.com/jufianto/sevjala/identity"
 	"github.com/jufianto/sevjala/lanapi"
 	"github.com/jufianto/sevjala/localapi"
 	"github.com/jufianto/sevjala/logx"
 	"github.com/jufianto/sevjala/pairing"
 	"github.com/jufianto/sevjala/store"
+	"github.com/jufianto/sevjala/transfer"
 )
 
 type Controller struct {
-	Self    *identity.Identity
-	Store   *store.Store
-	LAN     *lanapi.Client
-	Targets func() ([]*net.UDPAddr, error)
-	Wait    time.Duration
-	Log     *slog.Logger
+	Self      *identity.Identity
+	Store     *store.Store
+	LAN       *lanapi.Client
+	Targets   func() ([]*net.UDPAddr, error)
+	Wait      time.Duration
+	Log       *slog.Logger
+	DataDir   string
+	Staging   string
+	Config    config.Config   // after start, read with config() and replaced by SetDatabase
+	Ctx       context.Context // the agent's lifetime: dumps outlive the request that started them
+	FindTools func(dumper string) (dump.Tools, error)
+	Pool      *transfer.Pool
 
-	mu   sync.Mutex
-	seen map[string]localapi.Discovered // from discover and agents add; pair needs the fp seen here
+	mu      sync.Mutex
+	seen    map[string]localapi.Discovered // from discover and agents add; pair needs the fp seen here
+	jobs    map[string]*job                // dumps not yet in the store
+	running map[string]string              // database → backup_id being dumped
+
+	cfgMu sync.Mutex
+}
+
+func (c *Controller) config() config.Config {
+	c.cfgMu.Lock()
+	defer c.cfgMu.Unlock()
+	return c.Config
 }
 
 const (
