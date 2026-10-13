@@ -31,6 +31,25 @@ var migrations = []string{
 		state      TEXT NOT NULL DEFAULT 'online',
 		free_bytes INTEGER NOT NULL DEFAULT 0
 	)`,
+	`CREATE TABLE backups (
+		backup_id    TEXT PRIMARY KEY,
+		"database"   TEXT NOT NULL,
+		created_at   TEXT NOT NULL,
+		size         INTEGER NOT NULL,
+		sha256       TEXT NOT NULL,
+		tags         TEXT NOT NULL,
+		staging_path TEXT NOT NULL,
+		state        TEXT NOT NULL
+	);
+	CREATE TABLE backup_copies (
+		backup_id   TEXT NOT NULL REFERENCES backups(backup_id),
+		agent_id    TEXT NOT NULL,
+		state       TEXT NOT NULL,
+		attempts    INTEGER NOT NULL DEFAULT 0,
+		last_error  TEXT NOT NULL DEFAULT '',
+		verified_at TEXT NOT NULL DEFAULT '',
+		PRIMARY KEY (backup_id, agent_id)
+	)`,
 }
 
 type Agent struct {
