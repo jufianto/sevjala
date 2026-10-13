@@ -18,7 +18,8 @@ import (
 )
 
 func newPolicyCmd(g *globals) *cobra.Command {
-	c := &cobra.Command{Use: "policy", Short: "Backup schedules and how many backups each PC keeps (controller)", Long: `A policy is a schedule plus a keep count. Every backup is tagged with the policies that
+	c := &cobra.Command{Use: "policy", Short: "Backup schedules and how many backups each PC keeps (controller)",
+		Long: `A policy is a schedule plus a keep count. Every backup is tagged with the policies that
 were due when it was made; a backup PC keeps, per policy, that many of the newest backups
 with its tag. A backup stays while any of its tags still keeps it.
 
@@ -28,9 +29,11 @@ Schedules use cron: minute hour day month weekday (* = any, 0 = Sunday).
   0 3 * * 0        Sundays at 03:00
   0 1 1 * *        the 1st of every month at 01:00`}
 	c.AddCommand(&cobra.Command{
-		Use:   "list",
-		Short: "List policies, when each runs and how many backups each keeps", Long: `KEEP is how many backups with that policy's tag each backup PC keeps.`, Example: `  sevjala policy list`,
-		Args: cobra.NoArgs,
+		Use:     "list",
+		Short:   "List policies, when each runs and how many backups each keeps",
+		Long:    `KEEP is how many backups with that policy's tag each backup PC keeps.`,
+		Example: `  sevjala policy list`,
+		Args:    cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			ps, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) ([]localapi.Policy, error) {
 				return cl.Policies(ctx)
@@ -46,9 +49,11 @@ Schedules use cron: minute hour day month weekday (* = any, 0 = Sunday).
 	set, _ := policyEditCmd(g, false)
 	c.AddCommand(add, set, &cobra.Command{
 		Use:   "remove <name>",
-		Short: "Remove a policy; backups already made with it stay", Long: `Prefer 'policy set <name> --disable' for the built-in policies: it stops new backups
-but keeps applying the policy's keep count.`, Example: `  sevjala policy remove weekly`,
-		Args: cobra.ExactArgs(1),
+		Short: "Remove a policy; backups already made with it stay",
+		Long: `Prefer 'policy set <name> --disable' for the built-in policies: it stops new backups
+but keeps applying the policy's keep count.`,
+		Example: `  sevjala policy remove weekly`,
+		Args:    cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			if _, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) (struct{}, error) {
 				return struct{}{}, cl.RemovePolicy(ctx, args[0])
@@ -167,7 +172,8 @@ func renderPolicies(w io.Writer, ps []localapi.Policy) {
 }
 
 func newRetentionCmd(g *globals) *cobra.Command {
-	c := &cobra.Command{Use: "retention", Short: "Clean up old backups and fill in missing copies (controller)", Long: `Retention runs by itself every 5 minutes and when a backup PC comes back online. For
+	c := &cobra.Command{Use: "retention", Short: "Clean up old backups and fill in missing copies (controller)",
+		Long: `Retention runs by itself every 5 minutes and when a backup PC comes back online. For
 each backup PC it keeps, per policy, the newest backups that policy keeps, deletes the
 rest, sends what is missing, and replaces damaged copies.
 
@@ -177,7 +183,9 @@ free-space floor gets no new copies until space is freed.`}
 	var dryRun bool
 	run := &cobra.Command{
 		Use:   "run",
-		Short: "Clean up and fill in missing copies now (it also runs every 5 minutes)", Long: `Use --dry-run to see what would happen and why, without changing anything.`, Example: `  sevjala retention run --dry-run
+		Short: "Clean up and fill in missing copies now (it also runs every 5 minutes)",
+		Long:  `Use --dry-run to see what would happen and why, without changing anything.`,
+		Example: `  sevjala retention run --dry-run
   sevjala retention run`,
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {

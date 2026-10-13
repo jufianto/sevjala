@@ -62,8 +62,10 @@ func newServiceInstallCmd(g *globals) *cobra.Command {
 	var role string
 	c := &cobra.Command{
 		Use:   "install --role controller|node",
-		Short: "Install and start the service (setup does this for you)", Long: `Creates the data folder, opens the firewall and starts the service. 'sevjala setup'
-runs this and the next steps for you.`, Example: `  sevjala service install --role controller     (the PC with the database)
+		Short: "Install and start the service (setup does this for you)",
+		Long: `Creates the data folder, opens the firewall and starts the service. 'sevjala setup'
+runs this and the next steps for you.`,
+		Example: `  sevjala service install --role controller     (the PC with the database)
   sevjala service install --role node           (a backup PC)`,
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
@@ -139,9 +141,11 @@ runs this and the next steps for you.`, Example: `  sevjala service install --ro
 func newServiceUninstallCmd(g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use:   "uninstall",
-		Short: "Stop and remove the service; backups and settings are kept", Long: `The data folder (backups, settings, pairing) stays, so a later install picks up
-where it left off.`, Example: `  sevjala service uninstall`,
-		Args: cobra.NoArgs,
+		Short: "Stop and remove the service; backups and settings are kept",
+		Long: `The data folder (backups, settings, pairing) stays, so a later install picks up
+where it left off.`,
+		Example: `  sevjala service uninstall`,
+		Args:    cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			if err := requireAdmin(); err != nil {
 				return err
@@ -171,9 +175,11 @@ where it left off.`, Example: `  sevjala service uninstall`,
 
 func newServiceStartCmd(g *globals) *cobra.Command {
 	return &cobra.Command{
-		Use:   "start",
-		Short: "Start the service (nothing to do if it already runs)", Long: `Starts the service and waits until it answers.`, Example: `  sevjala service start`,
-		Args: cobra.NoArgs,
+		Use:     "start",
+		Short:   "Start the service (nothing to do if it already runs)",
+		Long:    `Starts the service and waits until it answers.`,
+		Example: `  sevjala service start`,
+		Args:    cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			if err := requireAdmin(); err != nil {
 				return err
@@ -200,9 +206,11 @@ func newServiceStartCmd(g *globals) *cobra.Command {
 
 func newServiceStopCmd(g *globals) *cobra.Command {
 	return &cobra.Command{
-		Use:   "stop",
-		Short: "Stop the service (nothing to do if it is already stopped)", Long: `No backups are made or received while it is stopped.`, Example: `  sevjala service stop`,
-		Args: cobra.NoArgs,
+		Use:     "stop",
+		Short:   "Stop the service (nothing to do if it is already stopped)",
+		Long:    `No backups are made or received while it is stopped.`,
+		Example: `  sevjala service stop`,
+		Args:    cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			if err := requireAdmin(); err != nil {
 				return err
@@ -227,9 +235,11 @@ func newServiceStopCmd(g *globals) *cobra.Command {
 
 func newServiceStatusCmd(g *globals) *cobra.Command {
 	return &cobra.Command{
-		Use:   "status",
-		Short: "Show whether the service runs and answers", Long: `Exit code 0 when the service runs and answers, 1 otherwise.`, Example: `  sevjala service status`,
-		Args: cobra.NoArgs,
+		Use:     "status",
+		Short:   "Show whether the service runs and answers",
+		Long:    `Exit code 0 when the service runs and answers, 1 otherwise.`,
+		Example: `  sevjala service status`,
+		Args:    cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			dataDir, err := g.dataDir()
 			if err != nil {

@@ -79,8 +79,10 @@ func shortID(id string) string {
 func newDiscoverCmd(g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use:   "discover",
-		Short: "Find Sevjala PCs on this network (controller)", Long: `Sends one broadcast on every local network and lists the Sevjala PCs that answer.
-It does not cross Tailscale, VPNs or other subnets: add those with 'sevjala agents add <IP>'.`, Example: `  sevjala discover
+		Short: "Find Sevjala PCs on this network (controller)",
+		Long: `Sends one broadcast on every local network and lists the Sevjala PCs that answer.
+It does not cross Tailscale, VPNs or other subnets: add those with 'sevjala agents add <IP>'.`,
+		Example: `  sevjala discover
   sevjala agents add 192.168.1.21      (a PC discovery does not reach)`,
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
@@ -118,9 +120,11 @@ func renderDiscovered(w io.Writer, ds []localapi.Discovered) {
 func newCodeCmd(g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use:   "code",
-		Short: "Show a one-time pairing code (run on the backup PC)", Long: `Prints a 6-digit code, valid 10 minutes, and this PC's fingerprint, plus the exact
-'sevjala pair' line to type on the controller.`, Example: `  sevjala code`,
-		Args: cobra.NoArgs,
+		Short: "Show a one-time pairing code (run on the backup PC)",
+		Long: `Prints a 6-digit code, valid 10 minutes, and this PC's fingerprint, plus the exact
+'sevjala pair' line to type on the controller.`,
+		Example: `  sevjala code`,
+		Args:    cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			code, err := callAgent(g, 5*time.Second, func(ctx context.Context, cl *localapi.Client) (localapi.Code, error) {
 				return cl.Code(ctx)
@@ -146,8 +150,10 @@ func newPairCmd(g *globals) *cobra.Command {
 	var code, fp string
 	c := &cobra.Command{
 		Use:   "pair <agent> --code <code> --fp <fingerprint>",
-		Short: "Pair with a backup PC using the code it shows (controller)", Long: `Type the line that 'sevjala code' printed on the backup PC. The PC must have been found
-first, by 'sevjala discover' or 'sevjala agents add <IP>'.`, Example: `  sevjala discover
+		Short: "Pair with a backup PC using the code it shows (controller)",
+		Long: `Type the line that 'sevjala code' printed on the backup PC. The PC must have been found
+first, by 'sevjala discover' or 'sevjala agents add <IP>'.`,
+		Example: `  sevjala discover
   sevjala pair 78ce929d --code 123456 --fp 3f2a9b1c77de0a41`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
@@ -175,8 +181,10 @@ first, by 'sevjala discover' or 'sevjala agents add <IP>'.`, Example: `  sevjala
 func newAgentsCmd(g *globals) *cobra.Command {
 	c := &cobra.Command{
 		Use:   "agents",
-		Short: "List paired backup PCs and their state (controller)", Long: `STATE is online, offline or warning; FREE is the disk space left on that PC; PROBLEM says
-what is wrong when it is not online.`, Example: `  sevjala agents
+		Short: "List paired backup PCs and their state (controller)",
+		Long: `STATE is online, offline or warning; FREE is the disk space left on that PC; PROBLEM says
+what is wrong when it is not online.`,
+		Example: `  sevjala agents
   sevjala agents add 192.168.1.21
   sevjala agents remove 78ce929d`,
 		Args: cobra.NoArgs,
@@ -193,8 +201,10 @@ what is wrong when it is not online.`, Example: `  sevjala agents
 	}
 	c.AddCommand(&cobra.Command{
 		Use:   "add <host[:port]>",
-		Short: "Add a backup PC by its IP address when discovery cannot find it (controller)", Long: `For a PC on Tailscale, a VPN or another subnet. Afterwards pair it with the line that
-'sevjala code' shows on it. For a PC already paired, this updates its address.`, Example: `  sevjala agents add 192.168.1.21
+		Short: "Add a backup PC by its IP address when discovery cannot find it (controller)",
+		Long: `For a PC on Tailscale, a VPN or another subnet. Afterwards pair it with the line that
+'sevjala code' shows on it. For a PC already paired, this updates its address.`,
+		Example: `  sevjala agents add 192.168.1.21
   sevjala agents add 192.168.1.21:17891`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
@@ -215,8 +225,10 @@ what is wrong when it is not online.`, Example: `  sevjala agents
 	var force bool
 	remove := &cobra.Command{
 		Use:   "remove <agent> [--force]",
-		Short: "Stop backing up to a backup PC; its files stay on that PC (controller)", Long: `The controller forgets the PC. Nothing is deleted on it. Refused while a policy sends
-only to that PC, and, without --force, while some backup exists only there.`, Example: `  sevjala agents remove 78ce929d
+		Short: "Stop backing up to a backup PC; its files stay on that PC (controller)",
+		Long: `The controller forgets the PC. Nothing is deleted on it. Refused while a policy sends
+only to that PC, and, without --force, while some backup exists only there.`,
+		Example: `  sevjala agents remove 78ce929d
   sevjala agents remove BACKUP-PC-1 --force`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
@@ -260,7 +272,9 @@ func renderAgents(w io.Writer, as []localapi.Agent) {
 func newPingCmd(g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use:   "ping <agent>",
-		Short: "Check that a paired backup PC answers (controller)", Long: `Connects to the PC over the encrypted link and prints how long it took to answer.`, Example: `  sevjala ping 78ce929d
+		Short: "Check that a paired backup PC answers (controller)",
+		Long:  `Connects to the PC over the encrypted link and prints how long it took to answer.`,
+		Example: `  sevjala ping 78ce929d
   sevjala ping BACKUP-PC-1`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {

@@ -22,9 +22,11 @@ func newDBCmd(g *globals) *cobra.Command {
 	c := &cobra.Command{Use: "db", Short: "Find and choose the database to back up (controller)"}
 	c.AddCommand(&cobra.Command{
 		Use:   "detect",
-		Short: "Find MySQL tools and list the databases they can reach", Long: `Looks for mysqldump (XAMPP first, then PATH), connects with the saved settings, and
-lists the databases with their size and whether they are backed up.`, Example: `  sevjala db detect`,
-		Args: cobra.NoArgs,
+		Short: "Find MySQL tools and list the databases they can reach",
+		Long: `Looks for mysqldump (XAMPP first, then PATH), connects with the saved settings, and
+lists the databases with their size and whether they are backed up.`,
+		Example: `  sevjala db detect`,
+		Args:    cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			d, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) (localapi.Detection, error) {
 				return cl.DetectDatabase(ctx)
@@ -53,9 +55,11 @@ func dbSetCmd(g *globals) (*cobra.Command, *dbFlags) {
 	f := &dbFlags{}
 	c := &cobra.Command{
 		Use:   "set",
-		Short: "Choose the databases to back up and how to connect; tested before it is saved", Long: `Only the flags you give change. The connection is tested first; a wrong password or
+		Short: "Choose the databases to back up and how to connect; tested before it is saved",
+		Long: `Only the flags you give change. The connection is tested first; a wrong password or
 unknown database is refused and the old settings stay. The password is kept in the
-system keyring, never in a file.`, Example: `  sevjala db set --db shop --no-password          (XAMPP default: root without password)
+system keyring, never in a file.`,
+		Example: `  sevjala db set --db shop --no-password          (XAMPP default: root without password)
   sevjala db set --db shop,crm --password         (asks for the password, not shown)
   sevjala db set --user backup --password
   sevjala db set --host 127.0.0.1 --port 3307`,
