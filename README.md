@@ -3,7 +3,7 @@
 LAN-first database backup for MySQL/MariaDB (XAMPP first), shipped as one Go binary for
 Windows 7+, macOS and Linux. A Controller on the database server dumps, verifies and pushes
 backups over mutual TLS to paired backup PCs (Nodes); everything is operated from a CLI and
-tray, with a local browser dashboard later. No cloud, no Internet.
+tray, with a local browser dashboard later. No cloud; the only Internet use is `sevjala update`, when you run it.
 
 **Status:** pre-alpha. P0–M3 code done (scheduled backups, retention), manual smokes pending, see [docs/PROGRESS.md](docs/PROGRESS.md).
 
@@ -13,7 +13,9 @@ tray, with a local browser dashboard later. No cloud, no Internet.
 (32-bit Windows 7) from [Releases](https://github.com/jufianto/sevjala/releases) and double-click it.
 Setup asks for administrator rights, then whether this PC runs the database (controller) or keeps
 backups (node); it installs to `C:\Program Files\Sevjala`, starts the service and shows the next
-step. Double-click it again later to update, show a pairing code or uninstall. `sudo ./sevjala
+step. Double-click it again later to update, show a pairing code or uninstall. To update
+later, run `sevjala update` on each PC (Administrator prompt / sudo): it downloads the newest release
+from here, checks it and restarts the service; `--from FILE` installs a file you copied over. `sudo ./sevjala
 setup` does the same on macOS and Linux (installs to `/usr/local/bin`).
 
 By hand: put the binary in a permanent folder first; the service runs it from there.
@@ -68,7 +70,7 @@ Every command explains itself with examples: `sevjala <command> --help`.
 
 | Group | Commands |
 |---|---|
-| Install & status | `setup`, `service install/start/stop/status/uninstall`, `doctor`, `version` |
+| Install & status | `setup`, `update [--from FILE]`, `service install/start/stop/status/uninstall`, `doctor`, `version` |
 | Connect PCs | `discover`, `code` (on the backup PC), `pair`, `agents`, `agents add/remove`, `ping` |
 | Database | `db detect`, `db set` |
 | Backups | `backup now`, `backups list [--matrix]`, `backups export <backup\|latest\|all> --to FOLDER` (copy out, no sudo needed on macOS/Linux) |

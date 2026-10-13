@@ -10,8 +10,8 @@ Oct 12, 2026 · @jufi
 
 Sevjala is a LAN-first database backup and replication manager for MySQL/MariaDB on
 Windows (especially XAMPP), shipped as one Go binary, operated from a CLI and tray, with
-a browser dashboard in Phase 2. No cloud, no Internet, no database-admin knowledge
-required.
+a browser dashboard in Phase 2. No cloud, no Internet (except an operator-run
+`sevjala update`, AD-18), no database-admin knowledge required.
 
 ### Naming
 
@@ -60,6 +60,7 @@ needs a new row and a reason.
 | AD-15 | Toolchain: stock Go for win10+/macOS/Linux; XTLS/go-win7 patched SDK for Windows 7 builds (amd64 + 386), pinned by checksum | Modern Go on Windows 7; one source tree |
 | AD-16 | Service management via `kardianos/service`; tray via `fyne.io/systray` | Windows Service / launchd / systemd behind one interface; pure-Go tray on Windows |
 | AD-17 | Replication monitoring, PITR, self-heal, notifications are Phase 3 | Keep the MVP to discover, pair, back up, verify, retain, restore |
+| AD-18 | **Amended** 2026-10-14 ([D-055](./decisions.md)): the only Internet use is `sevjala update`, run by hand: it downloads the newest GitHub release for the PC, checks it against the release's `checksums.txt`, and swaps the installed binary. The agent never contacts the Internet; `update --from FILE` covers offline PCs | Copying a new exe to every PC by hand is the main chore of keeping a fleet current; an operator-run download keeps the service LAN-only |
 
 ## Components
 

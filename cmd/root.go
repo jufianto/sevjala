@@ -67,7 +67,7 @@ Windows, or with sudo on macOS/Linux. New here? Start with: sevjala setup`,
 		id, title string
 		cmds      []*cobra.Command
 	}{
-		{"install", "Install & status:", []*cobra.Command{newSetupCmd(g), newServiceCmd(g), newDoctorCmd(g), newVersionCmd()}},
+		{"install", "Install & status:", []*cobra.Command{newSetupCmd(g), newUpdateCmd(g), newServiceCmd(g), newDoctorCmd(g), newVersionCmd()}},
 		{"connect", "Connect PCs:", []*cobra.Command{newDiscoverCmd(g), newCodeCmd(g), newPairCmd(g), newAgentsCmd(g), newPingCmd(g)}},
 		{"database", "Database:", []*cobra.Command{newDBCmd(g)}},
 		{"backups", "Backups:", []*cobra.Command{newBackupCmd(g), newBackupsCmd(g)}},

@@ -37,8 +37,9 @@ func (f *fakeSetup) flow(input, role string, fromInstall bool, passwords ...stri
 			}
 			return nil
 		},
-		copyExe:   func(src, dst string) error { f.calls = append(f.calls, "copy "+src+" → "+dst); return nil },
-		removeExe: func(p string) error { f.calls = append(f.calls, "remove "+p); return nil },
+		copyExe:    func(src, dst string) error { f.calls = append(f.calls, "copy "+src+" → "+dst); return nil },
+		removeExe:  func(p string) error { f.calls = append(f.calls, "remove "+p); return nil },
+		restoreExe: func(p string) error { f.calls = append(f.calls, "restore "+p); return nil },
 		onPath: func(add bool, dir string) error {
 			f.calls = append(f.calls, map[bool]string{true: "path add ", false: "path remove "}[add]+dir)
 			return nil

@@ -32,45 +32,13 @@ later to update to a newer sevjala.exe, pair another PC, or uninstall.`,
 			if !svc.IsAdmin() {
 				return elevate(g)
 			}
-			dataDir, err := g.dataDir()
-			if err != nil {
-				return fail(err)
-			}
-			s, err := svc.New(dataDir, &svc.Agent{})
-			if err != nil {
-				return fail(err)
-			}
-			role, err := installedRole(s, dataDir)
-			if err != nil {
-				return fail(err)
-			}
 			self, err := os.Executable()
 			if err != nil {
 				return fail(err)
 			}
-			dir := installDir()
-			target := filepath.Join(dir, exeName)
-			f := &setupFlow{in: bufio.NewReader(c.InOrStdin()), out: c.OutOrStdout(), self: self, dir: dir, target: target,
-				role: role, fromInstall: sameFile(self, target), copyExe: copyFile, removeExe: os.Remove, onPath: setPath,
-				run: func(stdin string, args ...string) error {
-					if g.dataDirFlag != "" {
-						args = append([]string{"--data-dir", g.dataDirFlag}, args...)
-					}
-					cmd := exec.Command(target, args...)
-					cmd.Stdin, cmd.Stdout, cmd.Stderr = strings.NewReader(stdin), c.OutOrStdout(), c.ErrOrStderr()
-					var exit *exec.ExitError
-					if err := cmd.Run(); errors.As(err, &exit) {
-						return errShown
-					} else if err != nil {
-						return err
-					}
-					return nil
-				},
-				password: func() (string, error) {
-					b, err := term.ReadPassword(int(os.Stdin.Fd()))
-					fmt.Fprintln(c.OutOrStdout())
-					return string(b), err
-				},
+			f, err := newSetupFlow(g, c, self)
+			if err != nil {
+				return fail(err)
 			}
 			if err := f.wizard(); err != nil {
 				return fail(err)
@@ -78,6 +46,46 @@ later to update to a newer sevjala.exe, pair another PC, or uninstall.`,
 			return nil
 		},
 	}
+}
+
+// newSetupFlow installs from self, the file that replaces the installed one.
+func newSetupFlow(g *globals, c *cobra.Command, self string) (*setupFlow, error) {
+	dataDir, err := g.dataDir()
+	if err != nil {
+		return nil, err
+	}
+	s, err := svc.New(dataDir, &svc.Agent{})
+	if err != nil {
+		return nil, err
+	}
+	role, err := installedRole(s, dataDir)
+	if err != nil {
+		return nil, err
+	}
+	dir := installDir()
+	target := filepath.Join(dir, exeName)
+	return &setupFlow{in: bufio.NewReader(c.InOrStdin()), out: c.OutOrStdout(), self: self, dir: dir, target: target,
+		role: role, fromInstall: sameFile(self, target), copyExe: copyFile, restoreExe: restoreExe, removeExe: os.Remove, onPath: setPath,
+		run: func(stdin string, args ...string) error {
+			if g.dataDirFlag != "" {
+				args = append([]string{"--data-dir", g.dataDirFlag}, args...)
+			}
+			cmd := exec.Command(target, args...)
+			cmd.Stdin, cmd.Stdout, cmd.Stderr = strings.NewReader(stdin), c.OutOrStdout(), c.ErrOrStderr()
+			var exit *exec.ExitError
+			if err := cmd.Run(); errors.As(err, &exit) {
+				return errShown
+			} else if err != nil {
+				return err
+			}
+			return nil
+		},
+		password: func() (string, error) {
+			b, err := term.ReadPassword(int(os.Stdin.Fd()))
+			fmt.Fprintln(c.OutOrStdout())
+			return string(b), err
+		},
+	}, nil
 }
 
 // errShown: the step ran and already printed why it failed.
@@ -110,7 +118,8 @@ type setupFlow struct {
 	role        string                                   // installed role, "" when not installed
 	fromInstall bool                                     // self is target
 	run         func(stdin string, args ...string) error // runs target
-	copyExe     func(src, dst string) error
+	copyExe     func(src, dst string) error              // keeps the replaced file as dst.old
+	restoreExe  func(path string) error                  // puts path.old back
 	removeExe   func(path string) error
 	onPath      func(add bool, dir string) error
 	password    func() (string, error)
@@ -245,7 +254,17 @@ func (s *setupFlow) update() error {
 		return fmt.Errorf("copy to %s: %w (the old version is still installed; run 'sevjala service start')", s.target, err)
 	}
 	fmt.Fprintf(s.out, "updated %s\n", s.target)
-	return s.run("", "service", "start")
+	if err := s.run("", "service", "start"); err == nil {
+		return nil
+	}
+	fmt.Fprintln(s.out, "the new version did not start; putting the previous one back")
+	if err := s.restoreExe(s.target); err != nil {
+		return fmt.Errorf("the previous version could not be put back (%w); it is %s.old", err, s.target)
+	}
+	if err := s.run("", "service", "start"); err != nil {
+		return fmt.Errorf("service start: %w", err)
+	}
+	return errors.New("the new version did not start; the previous version is running again")
 }
 
 func (s *setupFlow) uninstall() error {
@@ -354,5 +373,19 @@ func copyFile(src, dst string) error {
 		os.Remove(tmp)
 		return err
 	}
-	return os.Rename(tmp, dst)
+	// A running exe cannot be replaced on Windows but can be renamed.
+	old := dst + ".old"
+	_ = os.Remove(old)
+	if err := os.Rename(dst, old); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		_ = os.Rename(old, dst)
+		os.Remove(tmp)
+		return err
+	}
+	return nil
 }
+
+func restoreExe(path string) error { return os.Rename(path+".old", path) }

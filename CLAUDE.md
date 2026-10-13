@@ -28,7 +28,8 @@ not invent approval requirements or ask again about decisions already made.
   back up, verify, retain, restore. One Go binary, CLI and tray; browser UI in Phase 2.
 - Priorities, in order: data safety, reliability, simple recovery, transparent status, minimal
   operator intervention.
-- Scope boundaries: no cloud, no Internet. Sevjala never implements database replication
+- Scope boundaries: no cloud, no Internet, except `sevjala update`, which downloads a release
+  from GitHub only when an operator runs it (AD-18). Sevjala never implements database replication
   itself. Replication monitoring, PITR, self-heal, notifications, encryption and PostgreSQL are
   Phase 3 (AD-17).
 

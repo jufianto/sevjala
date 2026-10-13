@@ -168,6 +168,18 @@ Double-click the downloaded `.exe` again and accept UAC.
 **Expect:** it shows the service status and a menu: Update, Pair a node, Uninstall, Exit.
 Choose **Exit**. Do not uninstall yet if you want to keep testing.
 
+Then, from the Administrator prompt:
+
+```bat
+sevjala update
+sevjala update --from C:\Users\admin\Downloads\sevjala-win7-amd64.exe
+```
+
+**Expect:** the first says "already up to date" when the PC runs the newest release, or
+downloads it ("checksum ok"), stops the service, replaces it and starts it again. The second
+installs that file the same way without Internet. `sevjala version` shows the new version;
+`C:\Program Files\Sevjala\sevjala.exe.old` is the previous one.
+
 ## 11. Clean up
 
 ```sh
