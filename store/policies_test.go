@@ -230,3 +230,24 @@ func TestRecordPollAndState(t *testing.T) {
 		}
 	}
 }
+
+func TestVerifiedCopyRevivesAnExpiredBackup(t *testing.T) {
+	ctx := context.Background()
+	s, _ := open(t)
+	id := "BK-20261013-100000-0001"
+	_ = s.InsertBackup(ctx, backup(id), []string{"n1"})
+	_ = s.Unstage(ctx, id)
+	_ = s.Expire(ctx, id)
+	if err := s.MarkCopy(ctx, id, "n1", CopyFailed, "missing from the node", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := s.Backup(ctx, id); b.State != BackupExpired {
+		t.Fatalf("failed copy changed the state to %s", b.State)
+	}
+	if err := s.MarkCopy(ctx, id, "n1", CopyVerified, "", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := s.Backup(ctx, id); b.State != BackupDistributed {
+		t.Errorf("state %s, want distributed", b.State)
+	}
+}

@@ -26,7 +26,7 @@ func settled(t *testing.T, ctrl *Controller, n int) []localapi.Backup {
 	}
 }
 
-var tick0 = time.Date(2026, 10, 13, 10, 15, 0, 0, time.UTC)
+var tick0 = time.Date(2026, 1, 13, 10, 15, 0, 0, time.UTC) // a Tuesday before the real clock
 
 func TestTickFiresDuePolicies(t *testing.T) {
 	dumptest.Use(t, dumptest.OK)

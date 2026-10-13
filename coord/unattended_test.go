@@ -100,7 +100,7 @@ func TestUnattended(t *testing.T) {
 		}
 	}
 
-	now := time.Date(2026, 10, 13, 10, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 1, 13, 10, 0, 0, 0, time.UTC) // before the real clock, or retention freezes
 	for ; now.Hour() < 11 || now.Minute() == 0; now = now.Add(10 * time.Minute) {
 		ctrl.Tick(ctx, now)
 		settle()

@@ -74,7 +74,7 @@ func (c *Controller) retentionInput(ctx context.Context) (retention.Input, map[s
 	if err != nil {
 		return retention.Input{}, nil, nil, err
 	}
-	in := retention.Input{StagingKeep: c.config().StagingKeep(), Busy: busy}
+	in := retention.Input{StagingKeep: c.config().StagingKeep(), Busy: busy, Now: time.Now()}
 	for _, p := range ps {
 		in.Policies = append(in.Policies, retention.Policy{Name: p.Name, Keep: p.Keep, Dest: p.Destinations})
 	}

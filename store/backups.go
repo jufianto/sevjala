@@ -200,7 +200,7 @@ func recompute(ctx context.Context, tx *sql.Tx, id string) error {
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("backup %s: %w", id, ErrNotFound)
 	}
-	if err != nil || state == BackupExpired {
+	if err != nil {
 		return err
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT state FROM backup_copies WHERE backup_id = ?`, id)
@@ -219,6 +219,10 @@ func recompute(ctx context.Context, tx *sql.Tx, id string) error {
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return err
+	}
+	// Expired stays expired until a node shows a verified copy again.
+	if state == BackupExpired && !slices.Contains(states, CopyVerified) {
+		return nil
 	}
 	_, err = tx.ExecContext(ctx, `UPDATE backups SET state = ? WHERE backup_id = ?`, backupState(states), id)
 	return err

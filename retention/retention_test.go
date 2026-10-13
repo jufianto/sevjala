@@ -139,8 +139,29 @@ func TestCompute(t *testing.T) {
 			Backups: []Backup{b1, b2}, Nodes: []Node{node("A", b1, b2)}, StagingKeep: 1},
 			Plan{Deletes: []Action{{id(1), "A", "retention: not among the newest 1 p on this node"}},
 				Unstage: []string{id(1)}, Expire: []string{id(1)}}},
+
+		{"a destination change keeps the only copy until the new node has it", Input{Policies: []Policy{{Name: "p", Keep: 2, Dest: []string{"B"}}},
+			Backups: []Backup{unstaged(b1)}, Nodes: []Node{node("A", b1), node("B")}, StagingKeep: 10},
+			Plan{Kept: []Action{{id(1), "A", ReasonStillNeeded}, {id(1), "B", "missing, no staging copy"}}}},
+
+		{"an expired backup back on a node is kept", Input{Policies: keep2,
+			Backups: []Backup{func() Backup { b := unstaged(bk(1, "p")); b.Expired = true; return b }(), b2, b3},
+			Nodes:   []Node{node("A", bk(1, "p"), b2, b3)}, StagingKeep: 10},
+			Plan{Updates: []Update{{id(1), "A", "verified", ""}}, Deletes: []Action{{id(1), "A", "retention: not among the newest 2 p on this node"}}}},
+
+		{"an expired backup within keep is not deleted", Input{Policies: []Policy{{Name: "p", Keep: 5}},
+			Backups: []Backup{func() Backup { b := unstaged(bk(1, "p")); b.Expired = true; return b }(), b2},
+			Nodes:   []Node{node("A", bk(1, "p"), b2)}, StagingKeep: 10},
+			Plan{Updates: []Update{{id(1), "A", "verified", ""}}}},
+
+		{"a backup dated in the future stops deleting, unstaging and expiring", Input{Policies: keep2,
+			Backups: []Backup{b1, b2, b3, unstaged(bk(4, "p"))}, Nodes: []Node{node("A", b1, b2, b3)}, StagingKeep: 1, Now: t0.Add(150 * time.Second)},
+			Plan{Kept: []Action{{"", "", ReasonClockBehind}, {id(4), "A", "missing, no staging copy"}}}},
 	}
 	for _, tt := range tests {
+		if tt.in.Now.IsZero() {
+			tt.in.Now = t0.Add(48 * time.Hour)
+		}
 		t.Run(tt.name, func(t *testing.T) {
 			if got := Compute(tt.in); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("\n got %+v\nwant %+v", got, tt.want)

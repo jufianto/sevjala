@@ -55,6 +55,7 @@ type Input struct {
 	Nodes       []Node // every paired node
 	StagingKeep int
 	Busy        map[string]bool // still dumping: never unstaged
+	Now         time.Time
 }
 
 type Action struct{ BackupID, AgentID, Reason string }
@@ -71,9 +72,11 @@ type Plan struct {
 }
 
 const (
-	ReasonUnknown  = "not made by this controller"
-	ReasonOffline  = "no current inventory (offline, or its store cannot be read)"
-	ReasonBackfill = "backfill"
+	ReasonUnknown     = "not made by this controller"
+	ReasonOffline     = "no current inventory (offline, or its store cannot be read)"
+	ReasonBackfill    = "backfill"
+	ReasonStillNeeded = "a node that should hold it does not have it yet"
+	ReasonClockBehind = "a backup is dated after now (clock moved back): nothing is deleted, unstaged or expired"
 )
 
 type group struct{ db, tag string }
@@ -83,14 +86,16 @@ type computer struct {
 	plan     Plan
 	byID     map[string]*Backup
 	policies map[string]Policy
-	groups   map[group][]*Backup          // live backups per database and tag, newest first
+	groups   map[group][]*Backup          // backups per database and tag, newest first; expired ones still count as held
 	keys     []group                      // groups in a fixed order, so reasons are stable
 	final    map[string]map[string]string // backup → agent → copy state once the plan ran
+	wants    map[string]map[string]bool   // agent → wanted, memoized
+	frozen   bool                         // the clock is behind a backup: delete nothing
 }
 
 func Compute(in Input) Plan {
 	c := &computer{in: in, byID: map[string]*Backup{}, policies: map[string]Policy{}, groups: map[group][]*Backup{},
-		final: map[string]map[string]string{}}
+		final: map[string]map[string]string{}, wants: map[string]map[string]bool{}}
 	for i := range in.Backups {
 		b := &in.Backups[i]
 		c.byID[b.ID] = b
@@ -98,9 +103,7 @@ func Compute(in Input) Plan {
 		for a, cp := range b.Copies {
 			c.final[b.ID][a] = cp.State
 		}
-		if b.Expired {
-			continue
-		}
+		c.frozen = c.frozen || b.Created.After(in.Now)
 		for _, t := range b.Tags {
 			g := group{b.Database, t}
 			c.groups[g] = append(c.groups[g], b)
@@ -122,8 +125,11 @@ func Compute(in Input) Plan {
 			c.plan.Kept = append(c.plan.Kept, Action{AgentID: n.AgentID, Reason: ReasonOffline})
 		}
 	}
-	unstaged := c.staging()
-	c.expire(unstaged)
+	if c.frozen {
+		c.plan.Kept = append(c.plan.Kept, Action{Reason: ReasonClockBehind})
+	} else {
+		c.expire(c.staging())
+	}
 	c.plan.sort()
 	return c.plan
 }
@@ -134,19 +140,45 @@ func newestFirst(a, b *Backup) int {
 
 func targets(p Policy, agent string) bool { return len(p.Dest) == 0 || slices.Contains(p.Dest, agent) }
 
-// wanted is, per database and tag whose policy sends to agent, the newest Keep backups.
+// wanted is, per database and tag whose policy sends to agent, the newest Keep
+// backups that are not expired. Callers must not modify the result.
 func (c *computer) wanted(agent string) map[string]bool {
+	if out, ok := c.wants[agent]; ok {
+		return out
+	}
 	out := map[string]bool{}
 	for _, g := range c.keys {
 		p, ok := c.policies[g.tag]
 		if !ok || !targets(p, agent) {
 			continue
 		}
-		for _, b := range c.groups[g][:min(p.Keep, len(c.groups[g]))] {
-			out[b.ID] = true
+		n := 0
+		for _, b := range c.groups[g] {
+			if n == p.Keep {
+				break
+			}
+			if !b.Expired {
+				out[b.ID] = true
+				n++
+			}
 		}
 	}
+	c.wants[agent] = out
 	return out
+}
+
+// lastSource: the copy on agent may be the only way a node that wants the
+// backup can still get it.
+func (c *computer) lastSource(b *Backup, agent string) bool {
+	if b.Staged {
+		return false
+	}
+	for _, n := range c.in.Nodes {
+		if n.AgentID != agent && c.wanted(n.AgentID)[b.ID] && c.final[b.ID][n.AgentID] != store.CopyVerified {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *computer) node(n Node) {
@@ -155,7 +187,7 @@ func (c *computer) node(n Node) {
 		return ok && h.State == inventory.StateVerified && h.SHA256 == b.SHA256
 	}
 	// A node drops an old copy only once newer ones are verified on that same node.
-	needed, why := c.wanted(n.AgentID), map[string]string{}
+	needed, why := maps.Clone(c.wanted(n.AgentID)), map[string]string{}
 	for _, g := range c.keys {
 		p, ok := c.policies[g.tag]
 		if !ok {
@@ -181,11 +213,11 @@ func (c *computer) node(n Node) {
 		}
 	}
 	for _, b := range c.byID {
-		if b.Expired {
-			continue
-		}
 		cp, has := b.Copies[n.AgentID]
 		h, onNode := n.Actual[b.ID]
+		if b.Expired && (!onNode || !verified(b)) {
+			continue
+		}
 		switch {
 		case onNode && verified(b):
 			if cp.State != store.CopyVerified {
@@ -208,6 +240,8 @@ func (c *computer) node(n Node) {
 		switch {
 		case b == nil:
 			c.plan.Kept = append(c.plan.Kept, Action{id, n.AgentID, ReasonUnknown})
+		case !needed[id] && c.lastSource(b, n.AgentID):
+			c.plan.Kept = append(c.plan.Kept, Action{id, n.AgentID, ReasonStillNeeded})
 		case !needed[id]:
 			reason := why[id]
 			if reason == "" {
@@ -216,8 +250,9 @@ func (c *computer) node(n Node) {
 			c.delete(id, n.AgentID, reason)
 		case verified(b):
 		case b.Staged:
-			c.delete(id, n.AgentID, "corrupt: replaced from staging")
-			c.send(id, n.AgentID, "replace corrupt copy")
+			if c.delete(id, n.AgentID, "corrupt: replaced from staging") {
+				c.send(id, n.AgentID, "replace corrupt copy")
+			}
 		default:
 			c.plan.Kept = append(c.plan.Kept, Action{id, n.AgentID, "corrupt, no staging copy to replace it"})
 		}
@@ -249,9 +284,13 @@ func (c *computer) update(id, agent, state, reason string) {
 	c.final[id][agent] = state
 }
 
-func (c *computer) delete(id, agent, reason string) {
+func (c *computer) delete(id, agent, reason string) bool {
+	if c.frozen {
+		return false
+	}
 	c.plan.Deletes = append(c.plan.Deletes, Action{id, agent, reason})
 	c.final[id][agent] = store.CopyDeleted
+	return true
 }
 
 func (c *computer) send(id, agent, reason string) {
