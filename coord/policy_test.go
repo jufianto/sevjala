@@ -3,6 +3,7 @@ package coord
 import (
 	"context"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -69,7 +70,8 @@ func TestPolicyDestinations(t *testing.T) {
 		t.Fatalf("set %+v, %v", p, err)
 	}
 	hosts := []string{p.To[0].Hostname, p.To[1].Hostname}
-	if !(hosts[0] == "PC-1" && hosts[1] == "PC-2") && !(hosts[0] == "PC-2" && hosts[1] == "PC-1") {
+	slices.Sort(hosts)
+	if hosts[0] != "PC-1" || hosts[1] != "PC-2" {
 		t.Errorf("to %+v", p.To)
 	}
 	if p, err = ctrl.SetPolicy(ctx, "daily", localapi.PolicyChange{To: []string{"all"}}); err != nil || len(p.To) != 0 {
