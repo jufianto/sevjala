@@ -70,6 +70,13 @@ func (c *Client) Status(ctx context.Context, addr, nodeFP string) (Status, error
 	return st, err
 }
 
+// DeleteBackup asks a node to remove a backup; deleted is false when it was not there.
+func (c *Client) DeleteBackup(ctx context.Context, addr, nodeFP, id, reason string) (bool, error) {
+	var out DeleteResponse
+	err := c.do(ctx, c.http(nodeFP, true, nil), http.MethodDelete, addr, "/backups/"+url.PathEscape(id), DeleteRequest{Reason: reason}, &out)
+	return out.Deleted, err
+}
+
 func (c *Client) http(wantFP string, withCert bool, gotFP *string) *http.Client {
 	return &http.Client{Timeout: c.Timeout, Transport: c.transport(wantFP, withCert, gotFP)}
 }

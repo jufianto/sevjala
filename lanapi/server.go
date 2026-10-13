@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -141,6 +142,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /pair", s.pair)
 	mux.HandleFunc("GET /status", s.pairedOnly(s.status))
 	mux.HandleFunc("PUT /backups/{id}", s.pairedOnly(s.putBackup))
+	mux.HandleFunc("DELETE /backups/{id}", s.pairedOnly(s.deleteBackup))
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")
 	})
@@ -250,6 +252,29 @@ func (s *Server) putBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, PutResponse{BackupID: id, SHA256: sha, Size: size})
+}
+
+// deleteBackup is retention's only way to remove a backup (blueprint AD-08);
+// the reason is logged on the node.
+func (s *Server) deleteBackup(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Store == nil {
+		writeError(w, http.StatusConflict, "this agent is a controller; backups live on nodes")
+		return
+	}
+	var req DeleteRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody)).Decode(&req); err != nil || strings.TrimSpace(req.Reason) == "" {
+		writeError(w, http.StatusBadRequest, `a delete needs a body {"reason":"…"}`)
+		return
+	}
+	id := r.PathValue("id")
+	deleted, err := s.opt.Store.Delete(id)
+	if err != nil {
+		writeError(w, receiveStatus(err), err.Error())
+		return
+	}
+	s.opt.Log.Info("backup deleted", logx.Event(logx.EventBackupDeleted), "backup_id", id, "reason", req.Reason,
+		"deleted", deleted, "remote", r.RemoteAddr)
+	writeJSON(w, http.StatusOK, DeleteResponse{BackupID: id, Deleted: deleted})
 }
 
 func backupHeaders(r *http.Request, id string) (inventory.Manifest, string, int64, error) {

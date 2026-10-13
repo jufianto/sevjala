@@ -477,3 +477,44 @@ func TestPutBackupNoAnswerAfterBodyTimesOut(t *testing.T) {
 		t.Errorf("err = %v after %v", err, time.Since(start))
 	}
 }
+
+func TestDeleteBackup(t *testing.T) {
+	ctx := context.Background()
+	n, st := startStoreNode(t)
+	c := controller(t)
+	pair(t, c, n)
+	m, data := backupData(t, 1024)
+	if err := c.PutBackup(ctx, n.srv.Addr(), n.id.FP, m, bytes.NewReader(data)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.DeleteBackup(ctx, n.srv.Addr(), n.id.FP, m.BackupID, " "); httpCode(err) != http.StatusBadRequest {
+		t.Errorf("no reason: %v", err)
+	}
+	if _, err := c.DeleteBackup(ctx, n.srv.Addr(), n.id.FP, "nope", "retention"); httpCode(err) != http.StatusBadRequest {
+		t.Errorf("bad id: %v", err)
+	}
+	if _, err := controller(t).DeleteBackup(ctx, n.srv.Addr(), n.id.FP, m.BackupID, "retention"); !errors.Is(err, ErrRejected) {
+		t.Errorf("stranger: %v", err)
+	}
+	if deleted, err := c.DeleteBackup(ctx, n.srv.Addr(), n.id.FP, m.BackupID, "retention: test"); err != nil || !deleted {
+		t.Fatalf("delete = %v, %v", deleted, err)
+	}
+	if f := storeFiles(t, st); len(f) != 0 {
+		t.Errorf("files %v", f)
+	}
+	if deleted, err := c.DeleteBackup(ctx, n.srv.Addr(), n.id.FP, m.BackupID, "retention: test"); err != nil || deleted {
+		t.Errorf("second delete = %v, %v", deleted, err)
+	}
+}
+
+func TestControllerRefusesDelete(t *testing.T) {
+	id, dir := newID(t)
+	s := start(t, "controller", dir, id, nil)
+	c := controller(t)
+	var out DeleteResponse
+	err := c.do(context.Background(), c.http(id.FP, false, nil), http.MethodDelete, s.Addr(), "/backups/BK-20261013-101500-A8F2",
+		DeleteRequest{Reason: "x"}, &out)
+	if httpCode(err) != http.StatusForbidden {
+		t.Errorf("err = %v", err)
+	}
+}

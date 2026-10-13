@@ -271,3 +271,48 @@ func TestFreeBytes(t *testing.T) {
 		t.Errorf("FreeBytes = %d, %v", n, err)
 	}
 }
+
+func TestDelete(t *testing.T) {
+	data := []byte("to be deleted")
+	tests := []struct {
+		name    string
+		remove  []string // files removed before the delete
+		deleted bool
+	}{
+		{"both files", nil, true},
+		{"data only", []string{ManifestExt}, true},
+		{"manifest only", []string{DataExt}, true},
+		{"absent", []string{DataExt, ManifestExt}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newStore(t)
+			if err := receive(s, manifestFor(testID, data), data); err != nil {
+				t.Fatal(err)
+			}
+			for _, ext := range tt.remove {
+				os.Remove(s.path(testID, ext))
+			}
+			deleted, err := s.Delete(testID)
+			if err != nil || deleted != tt.deleted {
+				t.Errorf("Delete = %v, %v", deleted, err)
+			}
+			if left := names(t, s.Dir()); len(left) != 0 {
+				t.Errorf("left %v", left)
+			}
+		})
+	}
+}
+
+func TestDeleteRefuses(t *testing.T) {
+	s := newStore(t)
+	if _, err := s.Delete("../config"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("bad id: %v", err)
+	}
+	if !s.claim(testID) {
+		t.Fatal("claim")
+	}
+	if _, err := s.Delete(testID); !errors.Is(err, ErrBusy) {
+		t.Errorf("in flight: %v", err)
+	}
+}

@@ -168,6 +168,29 @@ func (s *Store) Receive(m Manifest, sha string, size int64, body io.Reader) erro
 	return WriteManifest(s.path(id, ManifestExt), m)
 }
 
+// Delete removes a stored backup on the controller's instruction: the data
+// file first, so a crash in between leaves a manifest reported as corrupt.
+// It reports whether anything was there.
+func (s *Store) Delete(id string) (bool, error) {
+	if !ValidID(id) {
+		return false, fmt.Errorf("%w: backup id %q is not BK-yyyymmdd-hhmmss-XXXX", ErrInvalid, id)
+	}
+	if !s.claim(id) {
+		return false, fmt.Errorf("%w: %s is being received", ErrBusy, id)
+	}
+	defer s.release(id)
+	deleted := false
+	for _, ext := range []string{DataExt, ManifestExt} {
+		switch err := os.Remove(s.path(id, ext)); {
+		case err == nil:
+			deleted = true
+		case !errors.Is(err, fs.ErrNotExist):
+			return deleted, err
+		}
+	}
+	return deleted, SyncDir(s.dir)
+}
+
 // Scan lists the store without re-hashing (that happens before restore) and
 // removes .part files older than StalePart that no transfer holds.
 func (s *Store) Scan() (Inventory, error) {

@@ -56,3 +56,12 @@ type StoreInfo struct {
 	Path      string `json:"path"`
 	FreeBytes int64  `json:"free_bytes"`
 }
+
+type DeleteRequest struct {
+	Reason string `json:"reason"`
+}
+
+type DeleteResponse struct {
+	BackupID string `json:"backup_id"`
+	Deleted  bool   `json:"deleted"`
+}
