@@ -148,7 +148,7 @@ func TestControllerStartRemovesUnfinishedDumps(t *testing.T) {
 	if _, err := os.Stat(part); !os.IsNotExist(err) {
 		t.Errorf("unfinished dump kept: %v", err)
 	}
-	bs, err := localapi.NewClient(localapi.Endpoint(dir)).Backups(context.Background())
+	bs, err := localapi.NewClient(localapi.Endpoint(dir)).Backups(context.Background(), false)
 	if err != nil || len(bs) != 0 {
 		t.Errorf("backups %+v, %v", bs, err)
 	}

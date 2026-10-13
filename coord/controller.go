@@ -46,9 +46,11 @@ type Controller struct {
 
 	cfgMu sync.Mutex
 
-	PollTimeout time.Duration // per /status call; 0 means 10 s
-	pollMu      sync.Mutex
-	nodes       map[string]*nodeState
+	PollEvery      time.Duration // Run's /status poll interval
+	ReconcileEvery time.Duration // Run's reconciliation interval
+	PollTimeout    time.Duration // per /status call; 0 means 10 s
+	pollMu         sync.Mutex
+	nodes          map[string]*nodeState
 
 	reconcileMu sync.Mutex
 	unknownSeen map[[2]string]bool // backup, agent: unknown backups already logged

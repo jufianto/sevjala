@@ -45,7 +45,15 @@ type Agent struct {
 	inv     *inventory.Store
 	pool    *transfer.Pool
 	cancel  context.CancelFunc
+	runDone chan struct{}
 }
+
+// The controller's unattended loops (blueprint: /status every 15 s,
+// reconciliation every 5 min).
+const (
+	PollEvery      = 15 * time.Second
+	ReconcileEvery = 5 * time.Minute
+)
 
 // Start must not block: kardianos/service calls it on the service thread.
 func (a *Agent) Start(service.Service) error {
@@ -106,7 +114,7 @@ func (a *Agent) start() error {
 		ctrl := &coord.Controller{Self: id, Store: a.store, LAN: lanapi.NewClient(id),
 			Targets: func() ([]*net.UDPAddr, error) { return discovery.BroadcastTargets(port) },
 			Wait:    discovery.DefaultWait, Log: a.log, DataDir: a.DataDir, Staging: staging, Config: a.Config,
-			Ctx: ctx, FindTools: dump.FindTools}
+			Ctx: ctx, FindTools: dump.FindTools, PollEvery: PollEvery, ReconcileEvery: ReconcileEvery}
 		a.pool = transfer.NewPool(ctrl.Push, ctrl.Settle, transfer.DefaultDelays)
 		ctrl.Pool = a.pool
 		backend.Controller = ctrl
@@ -118,10 +126,15 @@ func (a *Agent) start() error {
 		Version: a.Version, Hostname: hostname, Started: a.started, Codes: codes, Store: a.inv, Log: a.log}); err != nil {
 		return err
 	}
-	if backend.Controller != nil {
-		if err := backend.Controller.Resume(context.Background()); err != nil {
+	if ctrl := backend.Controller; ctrl != nil {
+		if err := ctrl.Resume(context.Background()); err != nil {
 			return err
 		}
+		a.runDone = make(chan struct{})
+		go func() {
+			defer close(a.runDone)
+			ctrl.Run(ctrl.Ctx)
+		}()
 	}
 	info := discovery.Reply{AgentID: id.AgentID, Hostname: hostname, Port: a.lan.Port(), Role: a.Config.Role,
 		Version: a.Version, OS: runtime.GOOS, FP: id.FP}
@@ -137,6 +150,10 @@ func (a *Agent) shutdown() error {
 	if a.cancel != nil {
 		a.cancel()
 		a.cancel = nil
+	}
+	if a.runDone != nil {
+		<-a.runDone // Run may still enqueue; the pool closes after it
+		a.runDone = nil
 	}
 	if a.pool != nil {
 		a.pool.Close()
