@@ -214,6 +214,12 @@ func (c *Controller) Resume(ctx context.Context) error {
 }
 
 func (c *Controller) Backups(ctx context.Context) ([]localapi.Backup, error) {
+	c.mu.Lock()
+	jobs := make([]localapi.Backup, 0, len(c.jobs))
+	for _, j := range c.jobs {
+		jobs = append(jobs, j.view())
+	}
+	c.mu.Unlock()
 	bs, err := c.Store.Backups(ctx)
 	if err != nil {
 		return nil, err
@@ -228,32 +234,37 @@ func (c *Controller) Backups(ctx context.Context) ([]localapi.Backup, error) {
 		out = append(out, toBackup(b, hosts))
 		stored[b.BackupID] = true
 	}
-	c.mu.Lock()
-	for _, j := range c.jobs {
-		if !stored[j.id] {
-			out = append(out, j.view())
+	for _, j := range jobs {
+		if !stored[j.BackupID] {
+			out = append(out, j)
 		}
 	}
-	c.mu.Unlock()
 	slices.SortFunc(out, func(a, b localapi.Backup) int { return strings.Compare(b.BackupID, a.BackupID) })
 	return out, nil
 }
 
+// Backup checks the jobs before the store: runBackup commits the row before it
+// drops the job, so a landing backup is always found in one of them.
 func (c *Controller) Backup(ctx context.Context, id string) (localapi.Backup, error) {
-	b, err := c.Store.Backup(ctx, id)
-	if err == nil {
-		hosts, err := c.hostnames(ctx)
-		return toBackup(b, hosts), err
+	c.mu.Lock()
+	j := c.jobs[id]
+	var view localapi.Backup
+	if j != nil {
+		view = j.view()
 	}
-	if !errors.Is(err, store.ErrNotFound) {
+	c.mu.Unlock()
+	if j != nil {
+		return view, nil
+	}
+	b, err := c.Store.Backup(ctx, id)
+	if errors.Is(err, store.ErrNotFound) {
+		return localapi.Backup{}, localapi.Errorf(http.StatusNotFound, "no backup %s", id)
+	}
+	if err != nil {
 		return localapi.Backup{}, err
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if j := c.jobs[id]; j != nil {
-		return j.view(), nil
-	}
-	return localapi.Backup{}, localapi.Errorf(http.StatusNotFound, "no backup %s", id)
+	hosts, err := c.hostnames(ctx)
+	return toBackup(b, hosts), err
 }
 
 // view must be called with Controller.mu held.
