@@ -44,6 +44,7 @@ type fakeBackend struct {
 	gotDB                             string
 	gotTags                           []string
 	gotName                           string
+	gotAll, gotDryRun                 bool
 	gotPolicy                         PolicyChange
 }
 
@@ -230,7 +231,19 @@ func (f *fakeBackend) BackupNow(_ context.Context, db string, tags []string) ([]
 	return []BackupJob{{BackupID: "BK-20261013-101500-A8F2", Database: "shop"}}, f.err
 }
 
-func (f *fakeBackend) Backups(context.Context) ([]Backup, error) { return nil, f.err }
+func (f *fakeBackend) Backups(_ context.Context, all bool) ([]Backup, error) {
+	f.mu.Lock()
+	f.gotAll = all
+	f.mu.Unlock()
+	return nil, f.err
+}
+
+func (f *fakeBackend) RunRetention(_ context.Context, dryRun bool) (RetentionPlan, error) {
+	f.mu.Lock()
+	f.gotDryRun = dryRun
+	f.mu.Unlock()
+	return RetentionPlan{DryRun: dryRun, Deletes: []RetentionAction{{BackupID: "b", AgentID: "n1", Reason: "r"}}}, f.err
+}
 
 func (f *fakeBackend) Backup(_ context.Context, id string) (Backup, error) {
 	return Backup{BackupID: id, State: BackupDumping, Bytes: 7}, f.err
@@ -257,8 +270,14 @@ func TestBackupRoutesRoundTrip(t *testing.T) {
 	if err != nil || len(jobs) != 1 || f.gotDB != "shop" || !slices.Equal(f.gotTags, []string{"daily"}) {
 		t.Errorf("BackupNow %+v, %v, %q %q", jobs, err, f.gotDB, f.gotTags)
 	}
-	if bs, err := c.Backups(ctx); err != nil || bs == nil || len(bs) != 0 {
+	if bs, err := c.Backups(ctx, false); err != nil || bs == nil || len(bs) != 0 || f.gotAll {
 		t.Errorf("Backups %+v, %v", bs, err)
+	}
+	if _, err := c.Backups(ctx, true); err != nil || !f.gotAll {
+		t.Errorf("Backups all: %v, %v", err, f.gotAll)
+	}
+	if p, err := c.RunRetention(ctx, true); err != nil || !p.DryRun || !f.gotDryRun || len(p.Deletes) != 1 {
+		t.Errorf("RunRetention %+v, %v", p, err)
 	}
 	if b, err := c.Backup(ctx, "BK-20261013-101500-A8F2"); err != nil || b.State != BackupDumping || b.Bytes != 7 {
 		t.Errorf("Backup %+v, %v", b, err)

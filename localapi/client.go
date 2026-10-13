@@ -114,9 +114,14 @@ func (c *Client) BackupNow(ctx context.Context, db string, tags []string) ([]Bac
 	return out.Backups, err
 }
 
-func (c *Client) Backups(ctx context.Context) ([]Backup, error) {
+// Backups lists newest first; all includes expired backups.
+func (c *Client) Backups(ctx context.Context, all bool) ([]Backup, error) {
+	path := "/backups"
+	if all {
+		path += "?all=1"
+	}
 	var out backupList
-	err := c.do(ctx, http.MethodGet, "/backups", nil, &out)
+	err := c.do(ctx, http.MethodGet, path, nil, &out)
 	return out.Backups, err
 }
 
@@ -144,4 +149,9 @@ func (c *Client) SetPolicy(ctx context.Context, name string, ch PolicyChange) (P
 func (c *Client) RemovePolicy(ctx context.Context, name string) error {
 	var out struct{}
 	return c.do(ctx, http.MethodDelete, "/policies/"+url.PathEscape(name), nil, &out)
+}
+
+func (c *Client) RunRetention(ctx context.Context, dryRun bool) (RetentionPlan, error) {
+	var p RetentionPlan
+	return p, c.do(ctx, http.MethodPost, "/retention/run", map[string]bool{"dry_run": dryRun}, &p)
 }

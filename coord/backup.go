@@ -249,14 +249,15 @@ func (c *Controller) Resume(ctx context.Context) error {
 	return nil
 }
 
-func (c *Controller) Backups(ctx context.Context) ([]localapi.Backup, error) {
+// Backups merges the store with dumps still in memory; all includes expired backups.
+func (c *Controller) Backups(ctx context.Context, all bool) ([]localapi.Backup, error) {
 	c.mu.Lock()
 	jobs := make([]localapi.Backup, 0, len(c.jobs))
 	for _, j := range c.jobs {
 		jobs = append(jobs, j.view())
 	}
 	c.mu.Unlock()
-	bs, err := c.Store.Backups(ctx, true)
+	bs, err := c.Store.Backups(ctx, all)
 	if err != nil {
 		return nil, err
 	}

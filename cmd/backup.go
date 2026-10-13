@@ -150,7 +150,7 @@ func newBackupsCmd(g *globals) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			bs, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) ([]localapi.Backup, error) {
-				return cl.Backups(ctx)
+				return cl.Backups(ctx, false)
 			})
 			if err != nil {
 				return err

@@ -15,7 +15,7 @@ func settled(t *testing.T, ctrl *Controller, n int) []localapi.Backup {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		bs, err := ctrl.Backups(context.Background())
+		bs, err := ctrl.Backups(context.Background(), true)
 		if err == nil && len(bs) == n && !slices.ContainsFunc(bs, func(b localapi.Backup) bool { return b.State == localapi.BackupDumping }) {
 			return bs
 		}
@@ -53,7 +53,7 @@ func TestTickSkipsWhileRunning(t *testing.T) {
 	ctrl.jobs, ctrl.running = map[string]*job{}, map[string]string{"shop": "BK-20261013-101400-0001"}
 	ctrl.mu.Unlock()
 	ctrl.Tick(context.Background(), tick0)
-	if bs, _ := ctrl.Backups(context.Background()); len(bs) != 0 {
+	if bs, _ := ctrl.Backups(context.Background(), true); len(bs) != 0 {
 		t.Errorf("backups %+v", bs)
 	}
 }
@@ -91,7 +91,7 @@ func TestTickWithoutDatabaseDoesNothing(t *testing.T) {
 	ctrl := newController(t)
 	ctrl.Config.Controller.Database.Databases = nil
 	ctrl.Tick(context.Background(), tick0)
-	if bs, _ := ctrl.Backups(context.Background()); len(bs) != 0 {
+	if bs, _ := ctrl.Backups(context.Background(), true); len(bs) != 0 {
 		t.Errorf("backups %+v", bs)
 	}
 }

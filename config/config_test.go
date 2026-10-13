@@ -170,3 +170,22 @@ func TestValidateDatabasePort(t *testing.T) {
 		t.Errorf("err = %v", err)
 	}
 }
+
+func TestStagingKeep(t *testing.T) {
+	c := Default(RoleController)
+	if c.StagingKeep() != 12 {
+		t.Errorf("default %d", c.StagingKeep())
+	}
+	c.Controller.Staging.Keep = 0
+	if c.StagingKeep() != 12 {
+		t.Errorf("0 means the default, got %d", c.StagingKeep())
+	}
+	c.Controller.Staging.Keep = 3
+	if c.StagingKeep() != 3 {
+		t.Errorf("got %d", c.StagingKeep())
+	}
+	c.Controller.Staging.Keep = -1
+	if c.Validate() == nil {
+		t.Error("negative keep accepted")
+	}
+}

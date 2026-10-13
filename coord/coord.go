@@ -107,11 +107,18 @@ func (s *Service) BackupNow(ctx context.Context, db string, tags []string) ([]lo
 	return s.Controller.BackupNow(ctx, db, tags)
 }
 
-func (s *Service) Backups(ctx context.Context) ([]localapi.Backup, error) {
+func (s *Service) Backups(ctx context.Context, all bool) ([]localapi.Backup, error) {
 	if s.Controller == nil {
 		return nil, errNotController
 	}
-	return s.Controller.Backups(ctx)
+	return s.Controller.Backups(ctx, all)
+}
+
+func (s *Service) RunRetention(ctx context.Context, dryRun bool) (localapi.RetentionPlan, error) {
+	if s.Controller == nil {
+		return localapi.RetentionPlan{}, errNotController
+	}
+	return s.Controller.Reconcile(ctx, dryRun)
 }
 
 func (s *Service) Backup(ctx context.Context, id string) (localapi.Backup, error) {

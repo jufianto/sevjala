@@ -22,6 +22,7 @@ const (
 	DefaultDBPort              = 3306
 	DefaultDBUser              = "root"
 	DefaultMinFreeBytes  int64 = 2 << 30
+	DefaultStagingKeep         = 12
 )
 
 type Config struct {
@@ -62,8 +63,9 @@ type Store struct {
 func Default(role string) Config {
 	return Config{
 		Role: role, Listen: DefaultListen, DiscoveryPort: DefaultDiscoveryPort,
-		Controller: Controller{Database: Database{Host: DefaultDBHost, Port: DefaultDBPort, User: DefaultDBUser}},
-		Node:       Node{Store: Store{MinFreeBytes: DefaultMinFreeBytes}},
+		Controller: Controller{Database: Database{Host: DefaultDBHost, Port: DefaultDBPort, User: DefaultDBUser},
+			Staging: Staging{Keep: DefaultStagingKeep}},
+		Node: Node{Store: Store{MinFreeBytes: DefaultMinFreeBytes}},
 	}
 }
 
@@ -88,6 +90,9 @@ func (c Config) Validate() error {
 	if p := c.Controller.Database.Port; p < 1 || p > 65535 {
 		return fmt.Errorf("controller.database.port %d: must be 1-65535", p)
 	}
+	if c.Controller.Staging.Keep < 0 {
+		return fmt.Errorf("controller.staging.keep %d: must not be negative", c.Controller.Staging.Keep)
+	}
 	if c.Node.Store.MinFreeBytes < 0 {
 		return fmt.Errorf("node.store.min_free_bytes %d: must not be negative", c.Node.Store.MinFreeBytes)
 	}
@@ -99,6 +104,15 @@ func (c Config) ListenPort() int {
 	_, port, _ := net.SplitHostPort(c.Listen)
 	p, _ := strconv.Atoi(port)
 	return p
+}
+
+// StagingKeep is how many recent backups per database staging keeps; 0, as
+// written by builds before M3, means the default.
+func (c Config) StagingKeep() int {
+	if c.Controller.Staging.Keep == 0 {
+		return DefaultStagingKeep
+	}
+	return c.Controller.Staging.Keep
 }
 
 // StorePath is where a node keeps backups: [node.store] path, else

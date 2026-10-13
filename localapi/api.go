@@ -69,8 +69,9 @@ type Backend interface {
 	DetectDatabase(ctx context.Context) (Detection, error)
 	SetDatabase(ctx context.Context, s DBSettings) (Detection, error)
 	BackupNow(ctx context.Context, db string, tags []string) ([]BackupJob, error)
-	Backups(ctx context.Context) ([]Backup, error)
+	Backups(ctx context.Context, all bool) ([]Backup, error)
 	Backup(ctx context.Context, id string) (Backup, error)
+	RunRetention(ctx context.Context, dryRun bool) (RetentionPlan, error)
 	Policies(ctx context.Context) ([]Policy, error)
 	AddPolicy(ctx context.Context, p PolicyChange) (Policy, error)
 	SetPolicy(ctx context.Context, name string, p PolicyChange) (Policy, error)
@@ -205,4 +206,22 @@ type PolicyChange struct {
 
 type policyList struct {
 	Policies []Policy `json:"policies"`
+}
+
+// RetentionAction is one line of a retention plan; BackupID is empty when the
+// line is about a whole node (skipped while offline).
+type RetentionAction struct {
+	BackupID string `json:"backup_id,omitempty"`
+	AgentID  string `json:"agent_id"`
+	Hostname string `json:"hostname"`
+	Reason   string `json:"reason"`
+}
+
+type RetentionPlan struct {
+	DryRun   bool              `json:"dry_run"`
+	Deletes  []RetentionAction `json:"deletes"`
+	Sends    []RetentionAction `json:"sends"`
+	Kept     []RetentionAction `json:"kept"`
+	Unstaged []string          `json:"unstaged"`
+	Expired  []string          `json:"expired"`
 }

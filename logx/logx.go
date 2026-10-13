@@ -44,6 +44,10 @@ const (
 	EventAgentWarning       = "agent_warning"
 	EventAgentOffline       = "agent_offline"
 	EventAgentError         = "agent_error"
+	EventRetentionDelete    = "retention_delete"
+	EventBackfillQueued     = "backfill_queued"
+	EventStagingPruned      = "staging_pruned"
+	EventUnknownBackup      = "unknown_backup"
 )
 
 func Event(name string) slog.Attr { return slog.String("event", name) }

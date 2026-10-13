@@ -76,7 +76,7 @@ func TestCompute(t *testing.T) {
 
 		{"an offline node gets nothing", Input{Policies: keep2, Backups: []Backup{b1, b2, b3},
 			Nodes: []Node{{AgentID: "A", Actual: node("A", b1, b2, b3).Actual}}, StagingKeep: 10},
-			Plan{Kept: []Action{{"", "A", "node offline"}}}},
+			Plan{Kept: []Action{{"", "A", ReasonOffline}}}},
 
 		{"corrupt and staged is replaced", Input{Policies: keep2, Backups: []Backup{b1, b2},
 			Nodes: []Node{{AgentID: "A", Polled: true, PolledAt: t0, FreeBytes: 1 << 40,
@@ -133,7 +133,7 @@ func TestCompute(t *testing.T) {
 				on(bk(5, "p"), "A", "B")},
 			Nodes:       []Node{node("A", bk(1, "p"), bk(2, "p"), bk(3, "p"), bk(4, "p"), bk(5, "p")), {AgentID: "B"}},
 			StagingKeep: 1, Busy: map[string]bool{id(2): true}},
-			Plan{Unstage: []string{id(1), id(3)}, Kept: []Action{{"", "B", "node offline"}}}},
+			Plan{Unstage: []string{id(1), id(3)}, Kept: []Action{{"", "B", ReasonOffline}}}},
 
 		{"an unstaged backup with no copy left expires", Input{Policies: []Policy{{Name: "p", Keep: 1}},
 			Backups: []Backup{b1, b2}, Nodes: []Node{node("A", b1, b2)}, StagingKeep: 1},

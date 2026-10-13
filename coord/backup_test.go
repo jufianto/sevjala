@@ -152,7 +152,7 @@ func TestBackupDumpFailureIsReported(t *testing.T) {
 	if !strings.Contains(b.Error, "Unknown database") {
 		t.Errorf("error %q", b.Error)
 	}
-	if all, _ := ctrl.Backups(context.Background()); len(all) != 1 || all[0].State != localapi.BackupFailed {
+	if all, _ := ctrl.Backups(context.Background(), true); len(all) != 1 || all[0].State != localapi.BackupFailed {
 		t.Errorf("list %+v", all)
 	}
 }

@@ -72,7 +72,7 @@ type Plan struct {
 
 const (
 	ReasonUnknown  = "not made by this controller"
-	ReasonOffline  = "node offline"
+	ReasonOffline  = "no current inventory (offline, or its store cannot be read)"
 	ReasonBackfill = "backfill"
 )
 

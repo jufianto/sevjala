@@ -76,7 +76,7 @@ func NewHandler(b Backend) http.Handler {
 		}
 	})
 	mux.HandleFunc("GET /backups", func(w http.ResponseWriter, r *http.Request) {
-		bs, err := b.Backups(r.Context())
+		bs, err := b.Backups(r.Context(), r.URL.Query().Get("all") == "1")
 		if bs == nil {
 			bs = []Backup{}
 		}
@@ -85,6 +85,15 @@ func NewHandler(b Backend) http.Handler {
 	mux.HandleFunc("GET /backups/{id}", func(w http.ResponseWriter, r *http.Request) {
 		bk, err := b.Backup(r.Context(), r.PathValue("id"))
 		reply(w, bk, err)
+	})
+	mux.HandleFunc("POST /retention/run", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			DryRun bool `json:"dry_run"`
+		}
+		if decode(w, r, &req) {
+			p, err := b.RunRetention(r.Context(), req.DryRun)
+			reply(w, p, err)
+		}
 	})
 	mux.HandleFunc("GET /policies", func(w http.ResponseWriter, r *http.Request) {
 		ps, err := b.Policies(r.Context())
