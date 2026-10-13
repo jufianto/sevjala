@@ -39,6 +39,7 @@ const (
 	EventKeyringFallback    = "keyring_fallback"
 	EventBackupDeleted      = "backup_deleted"
 	EventPolicyChanged      = "policy_changed"
+	EventScheduleFired      = "schedule_fired"
 )
 
 func Event(name string) slog.Attr { return slog.String("event", name) }

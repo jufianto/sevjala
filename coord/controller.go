@@ -38,10 +38,11 @@ type Controller struct {
 	FindTools func(dumper string) (dump.Tools, error)
 	Pool      *transfer.Pool
 
-	mu      sync.Mutex
-	seen    map[string]localapi.Discovered // from discover and agents add; pair needs the fp seen here
-	jobs    map[string]*job                // dumps not yet in the store
-	running map[string]string              // database → backup_id being dumped
+	mu       sync.Mutex
+	seen     map[string]localapi.Discovered // from discover and agents add; pair needs the fp seen here
+	jobs     map[string]*job                // dumps not yet in the store
+	running  map[string]string              // database → backup_id being dumped
+	failedAt map[string]time.Time           // database → creation time of its last failed dump
 
 	cfgMu sync.Mutex
 }

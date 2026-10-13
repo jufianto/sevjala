@@ -65,7 +65,12 @@ func (c *Controller) BackupNow(ctx context.Context, db string, tags []string) ([
 			return nil, localapi.Errorf(http.StatusBadRequest, "tag %q is not a policy (policies: %s)", t, strings.Join(names, ", "))
 		}
 	}
-	now := time.Now()
+	return c.start(dbs, tags, time.Now(), cfg)
+}
+
+// start registers one dump per database, all created at now, and runs them in
+// sequence on the agent's lifetime context.
+func (c *Controller) start(dbs, tags []string, now time.Time, cfg config.Config) ([]localapi.BackupJob, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, name := range dbs {
@@ -74,7 +79,7 @@ func (c *Controller) BackupNow(ctx context.Context, db string, tags []string) ([
 		}
 	}
 	if c.jobs == nil {
-		c.jobs, c.running = map[string]*job{}, map[string]string{}
+		c.jobs, c.running, c.failedAt = map[string]*job{}, map[string]string{}, map[string]time.Time{}
 	}
 	out := make([]localapi.BackupJob, len(dbs))
 	queued := make([]*job, len(dbs))
@@ -122,8 +127,10 @@ func (c *Controller) runBackup(j *job, created time.Time, tags []string, cfg con
 	c.mu.Lock()
 	if err != nil {
 		j.err = err.Error()
+		c.failedAt[j.db] = created
 	} else {
 		delete(c.jobs, j.id)
+		delete(c.failedAt, j.db)
 	}
 	c.mu.Unlock()
 	if err != nil {
