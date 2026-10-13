@@ -49,6 +49,11 @@ func Run(ctx context.Context, o Options) (inventory.Manifest, error) {
 	flags := append(slices.Clone(ContentFlags), det.Databases[i].Consistency())
 	part := filepath.Join(o.StagingDir, o.ID+inventory.PartExt)
 	data := filepath.Join(o.StagingDir, o.ID+inventory.DataExt)
+	for _, p := range []string{data, filepath.Join(o.StagingDir, o.ID+inventory.ManifestExt)} {
+		if _, err := os.Lstat(p); err == nil {
+			return inventory.Manifest{}, fmt.Errorf("backup %s is already in staging", o.ID)
+		}
+	}
 	f, err := os.OpenFile(part, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return inventory.Manifest{}, err

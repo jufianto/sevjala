@@ -234,3 +234,26 @@ func TestCleanStaging(t *testing.T) {
 		t.Errorf("left %v", es)
 	}
 }
+
+// Two backups drawing the same id must never swap contents: nodes would verify
+// the wrong database under the first backup's id.
+func TestRunNeverReplacesAStagedBackup(t *testing.T) {
+	for _, ext := range []string{inventory.DataExt, inventory.ManifestExt} {
+		t.Run(ext, func(t *testing.T) {
+			o, _ := opts(t, dumptest.OK, "shop")
+			existing := filepath.Join(o.StagingDir, o.ID+ext)
+			if err := os.WriteFile(existing, []byte("first backup"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Run(context.Background(), o); err == nil || !strings.Contains(err.Error(), "already") {
+				t.Fatalf("err = %v", err)
+			}
+			if got, _ := os.ReadFile(existing); string(got) != "first backup" {
+				t.Errorf("staged file replaced: %q", got)
+			}
+			if es, _ := os.ReadDir(o.StagingDir); len(es) != 1 {
+				t.Errorf("staging %v", es)
+			}
+		})
+	}
+}

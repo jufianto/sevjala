@@ -72,7 +72,7 @@ func (c *Controller) BackupNow(_ context.Context, db string, tags []string) ([]l
 	queued := make([]*job, len(dbs))
 	for i, name := range dbs {
 		id := inventory.NewID(now)
-		for c.jobs[id] != nil {
+		for c.jobs[id] != nil || c.staged(id) {
 			id = inventory.NewID(now)
 		}
 		j := &job{id: id, db: name}
@@ -85,6 +85,13 @@ func (c *Controller) BackupNow(_ context.Context, db string, tags []string) ([]l
 		}
 	}()
 	return out, nil
+}
+
+// staged reports whether a finished backup already uses id; an id drawn twice
+// in the same second must not reach dump.Run.
+func (c *Controller) staged(id string) bool {
+	_, err := os.Lstat(filepath.Join(c.Staging, id+inventory.DataExt))
+	return err == nil
 }
 
 func (c *Controller) runBackup(j *job, created time.Time, tags []string, cfg config.Config) {
