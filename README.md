@@ -9,7 +9,14 @@ tray, with a local browser dashboard later. No cloud, no Internet.
 
 ## Try it
 
-Put the binary in a permanent folder first; the service runs it from there.
+**Windows:** download `sevjala-win7-amd64.exe` (64-bit Windows 7 to 11) or `sevjala-win7-386.exe`
+(32-bit Windows 7) from [Releases](https://github.com/jufianto/sevjala/releases) and double-click it.
+Setup asks for administrator rights, then whether this PC runs the database (controller) or keeps
+backups (node); it installs to `C:\Program Files\Sevjala`, starts the service and shows the next
+step. Double-click it again later to update, show a pairing code or uninstall. `sudo ./sevjala
+setup` does the same on macOS and Linux (installs to `/usr/local/bin`).
+
+By hand: put the binary in a permanent folder first; the service runs it from there.
 
 ```sh
 sudo ./sevjala service install --role node   # Windows: Administrator prompt, no sudo

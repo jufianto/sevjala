@@ -3,6 +3,35 @@
 Checks that CI cannot run: they need root, a service manager, or real machines (P0, M1). Paste each
 transcript into the milestone's PR. Pending ones are listed in [PROGRESS.md](./PROGRESS.md).
 
+## Installer — double-click setup (Windows)
+
+Covered without Windows: the wizard's steps (choices, copy, install, PATH, pairing, update,
+uninstall) with fakes in `cmd/setup_test.go`. Not covered: the real double-click, UAC, PATH in
+the registry, and Windows 7. A Windows VM (UTM or Parallels on the Mac; Windows 11 ARM runs the
+x64 exe) covers all but Windows 7.
+
+1. Download `sevjala-win7-amd64.exe` from the release to `Downloads` and double-click it.
+   The UAC prompt appears; after "Yes" a new console shows `Sevjala setup <version>` and the
+   two roles. "No" on UAC: the first window says administrator rights are needed and waits
+   for Enter.
+2. Choose 2 (node). Expect `copied to C:\Program Files\Sevjala\sevjala.exe`, the firewall
+   line, the service status, the PATH line and a pairing code; `Press Enter to close` keeps
+   the window open. `services.msc` shows "Sevjala Agent" running; `Downloads` can now be
+   emptied without breaking it.
+3. On the XAMPP PC, double-click and choose 1 (controller): `db detect` lists the databases;
+   type one, then the MySQL password (not echoed; Enter if root has none). A wrong password
+   says "not saved" and asks again. Then it discovers nodes; type the node's
+   `sevjala pair …` line and see "paired with …". Enter finishes.
+4. Open a **new** Administrator prompt anywhere: `sevjala status` works (PATH).
+5. Double-click the same downloaded exe again: it shows the status and the menu (Update /
+   Show a pairing code or Pair a node / Uninstall / Exit). Update stops the service, replaces
+   the exe and starts it; `sevjala version` shows the new version.
+6. Uninstall from the menu: the service and firewall rules are gone, `sevjala` is no longer on
+   the PATH in a new prompt, `C:\Program Files\Sevjala\sevjala.exe` is deleted, and
+   `C:\ProgramData\Sevjala` (backups, settings) is kept.
+7. Typing `sevjala` with no arguments in cmd still prints the help (no wizard, no pause).
+8. Windows 7 (32- and 64-bit): steps 1–6 with `sevjala-win7-386.exe` / `-amd64.exe`.
+
 ## P0 — service install and status
 
 Exit criterion: `sevjala service install && sevjala service status` works on Windows 7,
