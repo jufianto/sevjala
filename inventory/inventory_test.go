@@ -154,13 +154,15 @@ func TestReceiveExisting(t *testing.T) {
 	}
 }
 
-func TestReceiveInFlightIsConflict(t *testing.T) {
+// A transfer the node still holds (its controller vanished without closing) must
+// not fail the retry for good: it frees itself within the 60 s read deadline.
+func TestReceiveInFlightIsBusy(t *testing.T) {
 	s := newStore(t)
 	if !s.claim(testID) {
 		t.Fatal("claim")
 	}
 	data := []byte("x")
-	if err := receive(s, manifestFor(testID, data), data); !errors.Is(err, ErrConflict) {
+	if err := receive(s, manifestFor(testID, data), data); !errors.Is(err, ErrBusy) || errors.Is(err, ErrConflict) {
 		t.Errorf("err = %v", err)
 	}
 }

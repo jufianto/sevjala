@@ -28,6 +28,7 @@ var (
 	ErrInvalid  = errors.New("invalid backup")
 	ErrExists   = errors.New("already stored")
 	ErrConflict = errors.New("conflict")
+	ErrBusy     = errors.New("busy")
 	ErrMismatch = errors.New("hash or size mismatch")
 	ErrNoSpace  = errors.New("not enough free space")
 )
@@ -127,7 +128,7 @@ func (s *Store) Receive(m Manifest, sha string, size int64, body io.Reader) erro
 	}
 	id := m.BackupID
 	if !s.claim(id) {
-		return fmt.Errorf("%w: %s is already being received", ErrConflict, id)
+		return fmt.Errorf("%w: %s is already being received", ErrBusy, id)
 	}
 	defer s.release(id)
 	if old, err := ReadManifest(s.path(id, ManifestExt)); err == nil {

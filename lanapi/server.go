@@ -281,6 +281,8 @@ func receiveStatus(err error) int {
 		return http.StatusBadRequest
 	case errors.Is(err, inventory.ErrConflict):
 		return http.StatusConflict
+	case errors.Is(err, inventory.ErrBusy):
+		return http.StatusServiceUnavailable
 	case errors.Is(err, inventory.ErrMismatch):
 		return http.StatusUnprocessableEntity
 	case errors.Is(err, inventory.ErrNoSpace):

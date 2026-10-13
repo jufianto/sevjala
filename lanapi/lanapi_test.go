@@ -431,3 +431,25 @@ func TestPutBackupStallIsCancelled(t *testing.T) {
 	}
 	waitNoFiles(t, st)
 }
+
+func TestPutBackupWhileReceivingIs503(t *testing.T) {
+	n, st := startStoreNode(t)
+	c := controller(t)
+	pair(t, c, n)
+	m, data := backupData(t, 1<<20)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- c.PutBackup(ctx, n.srv.Addr(), n.id.FP, m, &blockingReader{first: data[:64<<10], ctx: ctx})
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for len(storeFiles(t, st)) == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := c.PutBackup(context.Background(), n.srv.Addr(), n.id.FP, m, bytes.NewReader(data)); httpCode(err) != http.StatusServiceUnavailable {
+		t.Errorf("second put while the first is in flight: %v", err)
+	}
+	cancel()
+	<-done
+}

@@ -128,7 +128,8 @@ Each body read must arrive within 60 s; the controller cancels after 60 s withou
 | 200 `{"backup_id","sha256","size"}` | stored and verified, or an identical copy was already stored (body not read) |
 | 400 | bad id, headers or manifest |
 | 403 | not the paired controller |
-| 409 | the id is stored with another sha256, is being received right now, or the agent is a controller |
+| 409 | the id is stored with another sha256, or the agent is a controller |
+| 503 | the id is being received right now (a vanished controller's transfer holds it up to 60 s); retried |
 | 422 | the received bytes do not match `size`/`sha256`; nothing is kept |
 | 507 | storing it would leave less than `min_free_bytes` free |
 | 500 | anything else (disk error) |
