@@ -14,7 +14,17 @@ import (
 
 const FileName = "controller.db"
 
-var ErrNotFound = errors.New("not found")
+var (
+	ErrNotFound = errors.New("not found")
+	ErrExists   = errors.New("already exists")
+)
+
+const (
+	AgentOnline  = "online"
+	AgentWarning = "warning"
+	AgentOffline = "offline"
+	AgentError   = "error"
+)
 
 // migrations[i] moves the schema from user_version i to i+1.
 var migrations = []string{
@@ -50,6 +60,16 @@ var migrations = []string{
 		verified_at TEXT NOT NULL DEFAULT '',
 		PRIMARY KEY (backup_id, agent_id)
 	)`,
+	`CREATE TABLE policies (
+		name         TEXT PRIMARY KEY,
+		cron         TEXT NOT NULL,
+		keep         INTEGER NOT NULL,
+		destinations TEXT NOT NULL DEFAULT '[]',
+		enabled      INTEGER NOT NULL DEFAULT 1
+	);
+	INSERT INTO policies (name, cron, keep) VALUES
+		('frequent', '*/10 * * * *', 12), ('hourly', '0 * * * *', 24),
+		('daily', '0 1 * * *', 30), ('monthly', '0 1 1 * *', 12), ('manual', '', 10)`,
 }
 
 type Agent struct {
@@ -161,16 +181,7 @@ func (s *Store) UpdateAddress(ctx context.Context, id, hostname, ip string, port
 }
 
 func (s *Store) update(ctx context.Context, id, query string, args ...any) error {
-	res, err := s.db.ExecContext(ctx, query, args...)
-	if err != nil {
-		return err
-	}
-	if n, err := res.RowsAffected(); err != nil {
-		return err
-	} else if n == 0 {
-		return fmt.Errorf("agent %s: %w", id, ErrNotFound)
-	}
-	return nil
+	return s.affect(ctx, "agent "+id, query, args...)
 }
 
 type scanner interface{ Scan(dest ...any) error }
@@ -204,4 +215,15 @@ func parseTime(s string) (time.Time, error) {
 		return time.Time{}, nil
 	}
 	return time.Parse(time.RFC3339, s)
+}
+
+// RecordPoll stores what a successful /status poll showed.
+func (s *Store) RecordPoll(ctx context.Context, id, state, version string, freeBytes int64, at time.Time) error {
+	return s.update(ctx, id, `UPDATE agents SET state = ?, version = ?, free_bytes = ?, last_seen = ? WHERE agent_id = ?`,
+		state, version, freeBytes, fmtTime(at), id)
+}
+
+// SetAgentState changes only the state (offline, error); the last poll's data stays.
+func (s *Store) SetAgentState(ctx context.Context, id, state string) error {
+	return s.update(ctx, id, `UPDATE agents SET state = ? WHERE agent_id = ?`, state, id)
 }

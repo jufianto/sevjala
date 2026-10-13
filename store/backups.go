@@ -16,12 +16,15 @@ const (
 	BackupCreated     = "created"
 	BackupDistributed = "distributed"
 	BackupPartial     = "partial"
+	BackupExpired     = "expired" // set only by Expire; no copy and no staging file left
 
 	CopyPending      = "pending"
 	CopyTransferring = "transferring"
 	CopyVerified     = "verified"
 	CopyFailed       = "failed"
 	CopyOffline      = "offline"
+	CopyCorrupt      = "corrupt"
+	CopyDeleted      = "deleted"
 )
 
 type Backup struct {
@@ -74,8 +77,13 @@ func (s *Store) InsertBackup(ctx context.Context, b Backup, agentIDs []string) e
 	return tx.Commit()
 }
 
-func (s *Store) Backups(ctx context.Context) ([]Backup, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+backupCols+` FROM backups ORDER BY backup_id DESC`)
+// Backups lists newest first; expired backups only when withExpired.
+func (s *Store) Backups(ctx context.Context, withExpired bool) ([]Backup, error) {
+	where := ` WHERE state <> 'expired'`
+	if withExpired {
+		where = ""
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT `+backupCols+` FROM backups`+where+` ORDER BY backup_id DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +142,68 @@ func (s *Store) SetCopy(ctx context.Context, c Copy) error {
 	} else if n == 0 {
 		return fmt.Errorf("copy %s on %s: %w", c.BackupID, c.AgentID, ErrNotFound)
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT state FROM backup_copies WHERE backup_id = ?`, c.BackupID)
+	if err := recompute(ctx, tx, c.BackupID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// EnsureCopy plans a copy for a push: a new pending row, or a failed, offline,
+// corrupt or deleted one back to pending. A copy in flight or verified stays.
+func (s *Store) EnsureCopy(ctx context.Context, backupID, agentID string) error {
+	return s.inTx(ctx, backupID, `INSERT INTO backup_copies (backup_id, agent_id, state) VALUES (?1, ?2, 'pending')
+		ON CONFLICT(backup_id, agent_id) DO UPDATE SET state = 'pending'
+		WHERE state IN ('failed', 'offline', 'corrupt', 'deleted')`, backupID, agentID)
+}
+
+// MarkCopy records what a node's inventory showed, keeping the attempt count:
+// verified sets verified_at to at and clears the error; another state keeps
+// verified_at and stores reason when given.
+func (s *Store) MarkCopy(ctx context.Context, backupID, agentID, state, reason string, at time.Time) error {
+	return s.inTx(ctx, backupID, `INSERT INTO backup_copies (backup_id, agent_id, state, last_error, verified_at)
+		VALUES (?1, ?2, ?3, ?4, CASE WHEN ?3 = 'verified' THEN ?5 ELSE '' END)
+		ON CONFLICT(backup_id, agent_id) DO UPDATE SET state = ?3,
+		last_error = CASE WHEN ?3 = 'verified' THEN '' WHEN ?4 <> '' THEN ?4 ELSE last_error END,
+		verified_at = CASE WHEN ?3 = 'verified' THEN ?5 ELSE verified_at END`,
+		backupID, agentID, state, reason, fmtTime(at))
+}
+
+// Unstage records that the staging file is gone.
+func (s *Store) Unstage(ctx context.Context, id string) error {
+	return s.inTx(ctx, id, `UPDATE backups SET staging_path = '' WHERE backup_id = ?`, id)
+}
+
+func (s *Store) Expire(ctx context.Context, id string) error {
+	return s.affect(ctx, "backup "+id, `UPDATE backups SET state = 'expired' WHERE backup_id = ?`, id)
+}
+
+// inTx runs one statement and recomputes the backup's state in the same transaction.
+func (s *Store) inTx(ctx context.Context, backupID, query string, args ...any) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+		return err
+	}
+	if err := recompute(ctx, tx, backupID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// recompute derives a backup's state from its copies; an expired backup stays expired.
+func recompute(ctx context.Context, tx *sql.Tx, id string) error {
+	var state string
+	err := tx.QueryRowContext(ctx, `SELECT state FROM backups WHERE backup_id = ?`, id).Scan(&state)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("backup %s: %w", id, ErrNotFound)
+	}
+	if err != nil || state == BackupExpired {
+		return err
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT state FROM backup_copies WHERE backup_id = ?`, id)
 	if err != nil {
 		return err
 	}
@@ -148,26 +217,32 @@ func (s *Store) SetCopy(ctx context.Context, c Copy) error {
 		states = append(states, st)
 	}
 	rows.Close()
-	if _, err := tx.ExecContext(ctx, `UPDATE backups SET state = ? WHERE backup_id = ?`, backupState(states), c.BackupID); err != nil {
+	if err := rows.Err(); err != nil {
 		return err
 	}
-	return tx.Commit()
+	_, err = tx.ExecContext(ctx, `UPDATE backups SET state = ? WHERE backup_id = ?`, backupState(states), id)
+	return err
 }
 
+// backupState ignores deleted copies: retention removing a copy does not make
+// a backup partial.
 func backupState(copies []string) string {
-	verified := 0
+	live, verified := 0, 0
 	for _, st := range copies {
 		switch st {
 		case CopyPending, CopyTransferring:
 			return BackupCreated
+		case CopyDeleted:
+			continue
 		case CopyVerified:
 			verified++
 		}
+		live++
 	}
-	if len(copies) == 0 {
+	switch {
+	case live == 0:
 		return BackupCreated
-	}
-	if verified == len(copies) {
+	case verified == live:
 		return BackupDistributed
 	}
 	return BackupPartial

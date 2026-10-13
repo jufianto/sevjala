@@ -36,7 +36,7 @@ func TestMigrateV1ToV2KeepsAgents(t *testing.T) {
 	defer s.Close()
 	var v int
 	_ = s.db.QueryRow("PRAGMA user_version").Scan(&v)
-	if v != 2 {
+	if v != len(migrations) {
 		t.Errorf("user_version %d", v)
 	}
 	if _, err := s.Agent(context.Background(), "n1"); err != nil {
@@ -53,7 +53,7 @@ func TestInsertAndListBackups(t *testing.T) {
 	if err := s.InsertBackup(ctx, backup("BK-20261013-110000-0002"), nil); err != nil {
 		t.Fatal(err)
 	}
-	bs, err := s.Backups(ctx)
+	bs, err := s.Backups(ctx, true)
 	if err != nil || len(bs) != 2 || bs[0].BackupID != "BK-20261013-110000-0002" {
 		t.Fatalf("backups %+v, %v", bs, err)
 	}

@@ -227,7 +227,7 @@ func (c *Controller) Backups(ctx context.Context) ([]localapi.Backup, error) {
 		jobs = append(jobs, j.view())
 	}
 	c.mu.Unlock()
-	bs, err := c.Store.Backups(ctx)
+	bs, err := c.Store.Backups(ctx, true)
 	if err != nil {
 		return nil, err
 	}
