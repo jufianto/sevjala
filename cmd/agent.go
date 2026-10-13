@@ -50,6 +50,6 @@ func newAgentCmd(g *globals) *cobra.Command {
 			return nil
 		},
 	}
-	c.Flags().StringVar(&role, "role", "", "override the configured role: controller or node")
+	c.Flags().StringVar(&role, "role", "", "override the configured role: `ROLE` is controller or node")
 	return c
 }

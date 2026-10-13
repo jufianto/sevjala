@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 func TestRunExitCodes(t *testing.T) {
@@ -101,4 +102,39 @@ func TestEveryCommandHasHelpWithExamples(t *testing.T) {
 		}
 	}
 	walk(root)
+}
+
+// A command used wrongly says what is missing and shows its own help.
+func TestUsageErrorShowsTheCommandsHelp(t *testing.T) {
+	for _, args := range [][]string{{"policy", "set"}, {"policy", "set", "daily", "--nope"}, {"agents", "remove"}} {
+		var out, errOut bytes.Buffer
+		if code := run(args, &out, &errOut); code != 2 {
+			t.Fatalf("%v: exit %d", args, code)
+		}
+		e := errOut.String()
+		if strings.Contains(e, "arg(s)") || !strings.Contains(e, "Usage:") || !strings.Contains(e, "Examples:") {
+			t.Errorf("%v:\n%s", args, e)
+		}
+	}
+	var out, errOut bytes.Buffer
+	run([]string{"policy", "set"}, &out, &errOut)
+	if !strings.Contains(errOut.String(), "missing <name>") {
+		t.Errorf("does not say what is missing:\n%s", errOut.String())
+	}
+}
+
+// Options show what to type, not Go type names.
+func TestFlagsNameWhatToType(t *testing.T) {
+	var walk func(c *cobra.Command)
+	walk = func(c *cobra.Command) {
+		c.LocalFlags().VisitAll(func(f *pflag.Flag) {
+			if name, _ := pflag.UnquoteUsage(f); name == "string" || name == "int" || name == "strings" {
+				t.Errorf("%s --%s shows %q", c.CommandPath(), f.Name, name)
+			}
+		})
+		for _, sub := range c.Commands() {
+			walk(sub)
+		}
+	}
+	walk(newRootCmd())
 }

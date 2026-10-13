@@ -173,8 +173,8 @@ first, by 'sevjala discover' or 'sevjala agents add <IP>'.`,
 			return nil
 		},
 	}
-	c.Flags().StringVar(&code, "code", "", "6-digit code from 'sevjala code' on the node")
-	c.Flags().StringVar(&fp, "fp", "", "fingerprint from 'sevjala code' on the node")
+	c.Flags().StringVar(&code, "code", "", "the 6-digit `CODE` shown by 'sevjala code' on the backup PC")
+	c.Flags().StringVar(&fp, "fp", "", "the `FINGERPRINT` shown by 'sevjala code' on the backup PC")
 	return c
 }
 
@@ -244,7 +244,7 @@ only to that PC, and, without --force, while some backup exists only there.`,
 			return nil
 		},
 	}
-	remove.Flags().BoolVar(&force, "force", false, "remove even if some backups have their only copy on that node")
+	remove.Flags().BoolVar(&force, "force", false, "remove even if some backups have their only copy on that PC")
 	c.AddCommand(remove)
 	return c
 }

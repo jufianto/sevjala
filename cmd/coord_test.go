@@ -88,10 +88,10 @@ func TestCoordUsageErrors(t *testing.T) {
 		{[]string{"pair", "abcd"}, "6-digit"},
 		{[]string{"pair", "x", "--code", "123456"}, "--fp"},
 		{[]string{"pair", "x", "--code", "123456", "--fp", "abc"}, "--fp"},
-		{[]string{"pair", "--code", "123456"}, "accepts 1 arg"},
-		{[]string{"ping"}, "accepts 1 arg"},
-		{[]string{"agents", "add"}, "accepts 1 arg"},
-		{[]string{"agents", "remove"}, "accepts 1 arg"},
+		{[]string{"pair", "--code", "123456"}, "missing <agent>"},
+		{[]string{"ping"}, "missing <agent>"},
+		{[]string{"agents", "add"}, "missing <host[:port]>"},
+		{[]string{"agents", "remove"}, "missing <agent>"},
 	}
 	for _, tt := range tests {
 		var out, errOut bytes.Buffer

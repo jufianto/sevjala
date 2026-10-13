@@ -134,7 +134,7 @@ runs this and the next steps for you.`,
 			return nil
 		},
 	}
-	c.Flags().StringVar(&role, "role", "", "agent role: controller or node (required)")
+	c.Flags().StringVar(&role, "role", "", "`ROLE`: controller (the PC with the database) or node (a backup PC); required")
 	return c
 }
 

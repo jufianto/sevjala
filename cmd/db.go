@@ -81,11 +81,11 @@ system keyring, never in a file.`,
 		},
 	}
 	fl := c.Flags()
-	fl.StringVar(&f.host, "host", "", "database host")
-	fl.IntVar(&f.port, "port", 0, "database port")
-	fl.StringVar(&f.user, "user", "", "database user")
-	fl.StringVar(&f.dumper, "dumper", "", "path to mysqldump (default: XAMPP, then PATH)")
-	fl.StringSliceVar(&f.dbs, "db", nil, "databases to back up, comma separated")
+	fl.StringVar(&f.host, "host", "", "`HOST` of the MySQL server (default 127.0.0.1)")
+	fl.IntVar(&f.port, "port", 0, "`PORT` of the MySQL server (default 3306)")
+	fl.StringVar(&f.user, "user", "", "MySQL `USER` (default root)")
+	fl.StringVar(&f.dumper, "dumper", "", "`FILE`: full path to mysqldump (default: XAMPP, then PATH)")
+	fl.StringSliceVar(&f.dbs, "db", nil, "`NAMES` of the databases to back up, comma separated")
 	fl.BoolVar(&f.password, "password", false, "prompt for the password")
 	fl.BoolVar(&f.passwordStdin, "password-stdin", false, "read the password from the first line of stdin")
 	fl.BoolVar(&f.noPassword, "no-password", false, "connect without a password")

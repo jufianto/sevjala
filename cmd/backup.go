@@ -59,8 +59,8 @@ carries on.`,
 			return nil
 		},
 	}
-	now.Flags().StringVar(&db, "db", "", "back up only this configured database")
-	now.Flags().StringSliceVar(&tags, "tag", nil, "tag the backup (default: manual)")
+	now.Flags().StringVar(&db, "db", "", "back up only this database (`NAME`, one of those set with db set)")
+	now.Flags().StringSliceVar(&tags, "tag", nil, "`POLICY` to keep it under, from 'sevjala policy list' (default: manual)")
 	c.AddCommand(now)
 	return c
 }

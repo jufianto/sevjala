@@ -81,6 +81,9 @@ func policyEditCmd(g *globals, adding bool) (*cobra.Command, *policyFlags) {
 	c := &cobra.Command{
 		Use:   "set <name>",
 		Short: "Change a policy; only the flags you give change",
+		Long: `Changes one policy. Only the options you give change; the others stay as they are.
+<name> is a policy shown by 'sevjala policy list' (built in: frequent, hourly, daily,
+monthly, manual). How to write a schedule: 'sevjala policy --help'.`,
 		Example: `  sevjala policy set daily --keep 14
   sevjala policy set daily --schedule "30 2 * * *"      (every day at 02:30)
   sevjala policy set frequent --disable                 (pause; --enable resumes)
@@ -89,6 +92,9 @@ func policyEditCmd(g *globals, adding bool) (*cobra.Command, *policyFlags) {
 	}
 	if adding {
 		c.Use, c.Short = "add <name> --keep N", "Add a policy"
+		c.Long = `Adds a policy. <name> is new; it becomes the tag on the backups the policy makes.
+--keep is required. Without --schedule the policy runs only by hand:
+sevjala backup now --tag <name>. How to write a schedule: 'sevjala policy --help'.`
 		c.Example = `  sevjala policy add weekly --schedule "0 3 * * 0" --keep 8     (Sundays at 03:00)
   sevjala policy add yearend --keep 5                          (only via backup now --tag yearend)`
 	}
@@ -111,9 +117,9 @@ func policyEditCmd(g *globals, adding bool) (*cobra.Command, *policyFlags) {
 		return nil
 	}
 	fl := c.Flags()
-	fl.StringVar(&f.schedule, "schedule", "", `cron "minute hour day month weekday" or @hourly, @daily, @weekly, @monthly; empty: only 'backup now --tag'`)
-	fl.IntVar(&f.keep, "keep", 0, "how many backups with this tag each node keeps")
-	fl.StringSliceVar(&f.to, "to", nil, "nodes to send to, comma separated, or all")
+	fl.StringVar(&f.schedule, "schedule", "", "when it runs: `CRON` is \"minute hour day month weekday\", e.g. \"30 2 * * *\" = every day at 02:30, or @hourly, @daily, @weekly, @monthly; \"\" = only by hand (backup now --tag)")
+	fl.IntVar(&f.keep, "keep", 0, "each backup PC keeps the newest `N` backups with this policy")
+	fl.StringSliceVar(&f.to, "to", nil, "which backup `PCs` get its backups: names or ids from 'sevjala agents', comma separated, or all")
 	if !adding {
 		fl.BoolVar(&f.enable, "enable", false, "run on schedule again")
 		fl.BoolVar(&f.disable, "disable", false, "stop running on schedule (retention still keeps its backups)")

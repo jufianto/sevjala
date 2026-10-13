@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
+	"strconv"
 
 	"github.com/spf13/cobra"
 
@@ -59,7 +61,7 @@ Windows, or with sudo on macOS/Linux. New here? Start with: sevjala setup`,
 		SilenceErrors: true,
 	}
 	root.CompletionOptions.DisableDefaultCmd = true
-	root.PersistentFlags().StringVar(&g.dataDirFlag, "data-dir", "", "data folder (default: $SEVJALA_DATA_DIR, else the OS default)")
+	root.PersistentFlags().StringVar(&g.dataDirFlag, "data-dir", "", "`FOLDER` holding Sevjala's data (default: $SEVJALA_DATA_DIR, else the OS default)")
 	root.AddCommand(newAgentCmd(g))
 	for _, grp := range []struct {
 		id, title string
@@ -100,7 +102,32 @@ func run(args []string, out, errOut io.Writer) int {
 	root.SetArgs(args)
 	root.SetOut(out)
 	root.SetErr(errOut)
-	return exitCode(root.Execute(), errOut)
+	c, err := root.ExecuteC()
+	code := exitCode(plainArgsError(c, err), errOut)
+	if code == 2 && c != nil {
+		fmt.Fprintf(errOut, "\n%s", c.UsageString())
+	}
+	return code
+}
+
+var (
+	argCount    = regexp.MustCompile(`^accepts (\d+) arg\(s\), received (\d+)$`)
+	placeholder = regexp.MustCompile(`<[^>]+>`)
+)
+
+// plainArgsError replaces cobra's "accepts 1 arg(s), received 0" with what
+// is missing, named as in the command's usage line.
+func plainArgsError(c *cobra.Command, err error) error {
+	m := argCount.FindStringSubmatch(fmt.Sprint(err))
+	if err == nil || c == nil || m == nil {
+		return err
+	}
+	want, _ := strconv.Atoi(m[1])
+	got, _ := strconv.Atoi(m[2])
+	if p := placeholder.FindString(c.Use); got < want && p != "" {
+		return fmt.Errorf("missing %s", p)
+	}
+	return fmt.Errorf("expected %d argument(s), got %d", want, got)
 }
 
 // exitCode maps an error to the process exit code. Errors our commands return
