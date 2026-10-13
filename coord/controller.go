@@ -45,6 +45,10 @@ type Controller struct {
 	failedAt map[string]time.Time           // database → creation time of its last failed dump
 
 	cfgMu sync.Mutex
+
+	PollTimeout time.Duration // per /status call; 0 means 10 s
+	pollMu      sync.Mutex
+	nodes       map[string]*nodeState
 }
 
 func (c *Controller) config() config.Config {
@@ -175,9 +179,11 @@ func (c *Controller) Agents(ctx context.Context) ([]localapi.Agent, error) {
 	if err != nil {
 		return nil, err
 	}
+	polls := c.pollSnapshot()
 	out := make([]localapi.Agent, len(as))
 	for i, a := range as {
 		out[i] = toAPI(a)
+		out[i].Problem = polls[a.AgentID].problem
 	}
 	return out, nil
 }
@@ -219,5 +225,6 @@ func (c *Controller) remember(ds ...localapi.Discovered) {
 
 func toAPI(a store.Agent) localapi.Agent {
 	return localapi.Agent{AgentID: a.AgentID, Hostname: a.Hostname, Addr: net.JoinHostPort(a.LastIP, strconv.Itoa(a.Port)),
-		Role: a.Role, Version: a.Version, FP: a.FP, PairedAt: a.PairedAt, LastSeen: a.LastSeen, State: a.State}
+		Role: a.Role, Version: a.Version, FP: a.FP, PairedAt: a.PairedAt, LastSeen: a.LastSeen, State: a.State,
+		FreeBytes: a.FreeBytes}
 }

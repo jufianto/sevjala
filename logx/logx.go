@@ -40,6 +40,10 @@ const (
 	EventBackupDeleted      = "backup_deleted"
 	EventPolicyChanged      = "policy_changed"
 	EventScheduleFired      = "schedule_fired"
+	EventAgentOnline        = "agent_online"
+	EventAgentWarning       = "agent_warning"
+	EventAgentOffline       = "agent_offline"
+	EventAgentError         = "agent_error"
 )
 
 func Event(name string) slog.Attr { return slog.String("event", name) }

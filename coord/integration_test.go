@@ -26,6 +26,8 @@ import (
 var discard = slog.New(slog.DiscardHandler)
 
 type testAgent struct {
+	dir   string
+	host  string
 	id    *identity.Identity
 	codes *pairing.Codes
 	lan   *lanapi.Server
@@ -44,9 +46,7 @@ func startAgent(t *testing.T, role, hostname string) testAgent {
 	var inv *inventory.Store
 	if role == "node" {
 		codes = pairing.New(time.Now)
-		if inv, err = inventory.Open(filepath.Join(dir, "store"), 0, discard); err != nil {
-			t.Fatal(err)
-		}
+		inv = mustInventory(t, dir, 0)
 	}
 	lan, err := lanapi.Start(lanapi.Options{Addr: "127.0.0.1:0", DataDir: dir, Identity: id, Role: role,
 		Version: "test", Hostname: hostname, Started: time.Now(), Codes: codes, Store: inv, Log: discard})
@@ -61,7 +61,37 @@ func startAgent(t *testing.T, role, hostname string) testAgent {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { disco.Close() })
-	return testAgent{id: id, codes: codes, lan: lan, disco: disco, inv: inv}
+	return testAgent{dir: dir, host: hostname, id: id, codes: codes, lan: lan, disco: disco, inv: inv}
+}
+
+// stop takes the node off the LAN; restart brings it back on a new port and
+// points the controller at it, as a discovery would.
+func (n *testAgent) stop(t *testing.T) {
+	t.Helper()
+	n.lan.Shutdown(context.Background())
+}
+
+func (n *testAgent) restart(t *testing.T, ctrl *Controller) {
+	t.Helper()
+	lan, err := lanapi.Start(lanapi.Options{Addr: "127.0.0.1:0", DataDir: n.dir, Identity: n.id, Role: "node",
+		Version: "test", Hostname: n.host, Started: time.Now(), Codes: n.codes, Store: n.inv, Log: discard})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { lan.Shutdown(context.Background()) })
+	n.lan = lan
+	if err := ctrl.Store.UpdateAddress(context.Background(), n.id.AgentID, n.host, "127.0.0.1", lan.Port()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func mustInventory(t *testing.T, dir string, minFree int64) *inventory.Store {
+	t.Helper()
+	inv, err := inventory.Open(filepath.Join(dir, "store"), minFree, discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return inv
 }
 
 func newController(t *testing.T, targets ...*discovery.Responder) *Controller {

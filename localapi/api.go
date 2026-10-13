@@ -36,15 +36,17 @@ type Discovered struct {
 }
 
 type Agent struct {
-	AgentID  string    `json:"agent_id"`
-	Hostname string    `json:"hostname"`
-	Addr     string    `json:"addr"`
-	Role     string    `json:"role"`
-	Version  string    `json:"version"`
-	FP       string    `json:"fp"`
-	PairedAt time.Time `json:"paired_at"`
-	LastSeen time.Time `json:"last_seen,omitzero"`
-	State    string    `json:"state"`
+	AgentID   string    `json:"agent_id"`
+	Hostname  string    `json:"hostname"`
+	Addr      string    `json:"addr"`
+	Role      string    `json:"role"`
+	Version   string    `json:"version"`
+	FP        string    `json:"fp"`
+	PairedAt  time.Time `json:"paired_at"`
+	LastSeen  time.Time `json:"last_seen,omitzero"`
+	State     string    `json:"state"`
+	FreeBytes int64     `json:"free_bytes"`
+	Problem   string    `json:"problem,omitempty"` // why the last poll warned or failed
 }
 
 type Ping struct {
