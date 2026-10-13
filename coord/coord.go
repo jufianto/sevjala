@@ -49,11 +49,11 @@ func (s *Service) AddAgent(ctx context.Context, addr string) (localapi.Discovere
 	return s.Controller.AddAgent(ctx, addr)
 }
 
-func (s *Service) Pair(ctx context.Context, agent, code string) (localapi.Agent, error) {
+func (s *Service) Pair(ctx context.Context, agent, code, fp string) (localapi.Agent, error) {
 	if s.Controller == nil {
 		return localapi.Agent{}, errNotController
 	}
-	return s.Controller.Pair(ctx, agent, code)
+	return s.Controller.Pair(ctx, agent, code, fp)
 }
 
 func (s *Service) Agents(ctx context.Context) ([]localapi.Agent, error) {
@@ -72,6 +72,7 @@ func (s *Service) Ping(ctx context.Context, agent string) (localapi.Ping, error)
 
 type Node struct {
 	AgentID string
+	FP      string
 	Codes   *pairing.Codes
 	Log     *slog.Logger
 }
@@ -82,5 +83,5 @@ func (n *Node) Code() (localapi.Code, error) {
 		return localapi.Code{}, err
 	}
 	n.Log.Info("pairing code issued", logx.Event(logx.EventPairCodeIssued), "expires_at", exp)
-	return localapi.Code{Code: code, ExpiresAt: exp, AgentID: n.AgentID}, nil
+	return localapi.Code{Code: code, ExpiresAt: exp, AgentID: n.AgentID, FP: n.FP}, nil
 }

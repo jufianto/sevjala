@@ -20,6 +20,7 @@ type Code struct {
 	Code      string    `json:"code"`
 	ExpiresAt time.Time `json:"expires_at"`
 	AgentID   string    `json:"agent_id"`
+	FP        string    `json:"fp"`
 }
 
 type Discovered struct {
@@ -59,7 +60,7 @@ type Backend interface {
 	Code() (Code, error)
 	Discover(ctx context.Context) ([]Discovered, error)
 	AddAgent(ctx context.Context, addr string) (Discovered, error)
-	Pair(ctx context.Context, agent, code string) (Agent, error)
+	Pair(ctx context.Context, agent, code, fp string) (Agent, error)
 	Agents(ctx context.Context) ([]Agent, error)
 	Ping(ctx context.Context, agent string) (Ping, error)
 }

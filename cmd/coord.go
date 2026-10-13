@@ -97,22 +97,27 @@ func newCodeCmd(g *globals) *cobra.Command {
 }
 
 func renderCode(w io.Writer, c localapi.Code) {
+	fp := pairing.ShortFP(c.FP)
 	fmt.Fprintf(w, "pairing code %s, valid until %s\n", c.Code, c.ExpiresAt.Local().Format("15:04"))
-	fmt.Fprintf(w, "on the controller run: sevjala pair %s --code %s\n", shortID(c.AgentID), c.Code)
+	fmt.Fprintf(w, "fingerprint  %s\n", fp)
+	fmt.Fprintf(w, "on the controller run: sevjala pair %s --code %s --fp %s\n", shortID(c.AgentID), c.Code, fp)
 }
 
 func newPairCmd(g *globals) *cobra.Command {
-	var code string
+	var code, fp string
 	c := &cobra.Command{
-		Use:   "pair <agent> --code <code>",
+		Use:   "pair <agent> --code <code> --fp <fingerprint>",
 		Short: "Pair with a discovered node using its code (controller)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			if !pairing.ValidCode(code) {
 				return usagef("--code must be the 6-digit code shown by 'sevjala code' on the node")
 			}
+			if _, ok := pairing.ParseFP(fp); !ok {
+				return usagef("--fp must be the %d-character fingerprint shown by 'sevjala code' on the node", pairing.FPChars)
+			}
 			a, err := callAgent(g, 20*time.Second, func(ctx context.Context, cl *localapi.Client) (localapi.Agent, error) {
-				return cl.Pair(ctx, args[0], code)
+				return cl.Pair(ctx, args[0], code, fp)
 			})
 			if err != nil {
 				return err
@@ -122,6 +127,7 @@ func newPairCmd(g *globals) *cobra.Command {
 		},
 	}
 	c.Flags().StringVar(&code, "code", "", "6-digit code from 'sevjala code' on the node")
+	c.Flags().StringVar(&fp, "fp", "", "fingerprint from 'sevjala code' on the node")
 	return c
 }
 

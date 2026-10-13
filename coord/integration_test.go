@@ -87,7 +87,7 @@ func TestDiscoverPairPing(t *testing.T) {
 	}
 
 	code, _, _ := node.codes.Issue()
-	a, err := ctrl.Pair(ctx, node.id.AgentID[:8], code)
+	a, err := ctrl.Pair(ctx, node.id.AgentID[:8], code, node.id.FP)
 	if err != nil || a.AgentID != node.id.AgentID || a.FP != node.id.FP || a.State != "online" {
 		t.Fatalf("pair: %+v %v", a, err)
 	}
@@ -123,7 +123,7 @@ func TestPairWrongCode(t *testing.T) {
 	if code == wrong {
 		wrong = "111111"
 	}
-	if _, err := ctrl.Pair(ctx, "PC", wrong); err == nil || !strings.Contains(err.Error(), "wrong pairing code") {
+	if _, err := ctrl.Pair(ctx, "PC", wrong, node.id.FP); err == nil || !strings.Contains(err.Error(), "wrong pairing code") {
 		t.Errorf("err = %v", err)
 	}
 	if as, _ := ctrl.Agents(ctx); len(as) != 0 {
@@ -132,14 +132,14 @@ func TestPairWrongCode(t *testing.T) {
 }
 
 func TestPairNeedsDiscovery(t *testing.T) {
-	_, err := newController(t).Pair(context.Background(), "abcd", "123456")
+	_, err := newController(t).Pair(context.Background(), "abcd", "123456", strings.Repeat("a", 16))
 	if err == nil || !strings.Contains(err.Error(), "sevjala discover") {
 		t.Errorf("err = %v", err)
 	}
 }
 
 func TestPairRejectsBadCode(t *testing.T) {
-	_, err := newController(t).Pair(context.Background(), "abcd", "12")
+	_, err := newController(t).Pair(context.Background(), "abcd", "12", strings.Repeat("a", 16))
 	if err == nil || !strings.Contains(err.Error(), "6 digits") {
 		t.Errorf("err = %v", err)
 	}
@@ -150,7 +150,7 @@ func TestPairRefusesController(t *testing.T) {
 	other := startAgent(t, "controller", "SERVER-02")
 	ctrl := newController(t, other.disco)
 	ctrl.Discover(ctx)
-	if _, err := ctrl.Pair(ctx, "SERVER-02", "123456"); err == nil || !strings.Contains(err.Error(), "only nodes can be paired") {
+	if _, err := ctrl.Pair(ctx, "SERVER-02", "123456", other.id.FP); err == nil || !strings.Contains(err.Error(), "only nodes can be paired") {
 		t.Errorf("err = %v", err)
 	}
 }
@@ -164,7 +164,7 @@ func TestAddAgentThenPair(t *testing.T) {
 		t.Fatalf("add: %+v %v", d, err)
 	}
 	code, _, _ := node.codes.Issue()
-	if _, err := ctrl.Pair(ctx, "PC-MANUAL", code); err != nil {
+	if _, err := ctrl.Pair(ctx, "PC-MANUAL", code, node.id.FP); err != nil {
 		t.Fatalf("pair: %v", err)
 	}
 }
@@ -190,7 +190,7 @@ func TestDiscoverRefreshesPairedAddress(t *testing.T) {
 	ctrl := newController(t, node.disco)
 	ctrl.Discover(ctx)
 	code, _, _ := node.codes.Issue()
-	if _, err := ctrl.Pair(ctx, "PC-DHCP", code); err != nil {
+	if _, err := ctrl.Pair(ctx, "PC-DHCP", code, node.id.FP); err != nil {
 		t.Fatal(err)
 	}
 	if err := ctrl.Store.UpdateAddress(ctx, node.id.AgentID, "PC-DHCP", "10.255.255.1", 1); err != nil {
@@ -210,7 +210,7 @@ func TestAddAgentRefreshesPairedAddress(t *testing.T) {
 	ctrl := newController(t)
 	ctrl.AddAgent(ctx, node.lan.Addr())
 	code, _, _ := node.codes.Issue()
-	if _, err := ctrl.Pair(ctx, "PC-VLAN", code); err != nil {
+	if _, err := ctrl.Pair(ctx, "PC-VLAN", code, node.id.FP); err != nil {
 		t.Fatal(err)
 	}
 	if err := ctrl.Store.UpdateAddress(ctx, node.id.AgentID, "PC-VLAN", "10.255.255.1", 1); err != nil {
@@ -231,8 +231,27 @@ func TestPairWithoutActiveCodeSaysWhy(t *testing.T) {
 	node := startAgent(t, "node", "PC-LATE")
 	ctrl := newController(t, node.disco)
 	ctrl.Discover(ctx)
-	_, err := ctrl.Pair(ctx, "PC-LATE", "123456")
+	_, err := ctrl.Pair(ctx, "PC-LATE", "123456", node.id.FP)
 	if err == nil || !strings.Contains(err.Error(), "no active pairing code") || !strings.Contains(err.Error(), "sevjala code") {
 		t.Errorf("err = %v", err)
+	}
+}
+
+// The fingerprint shown next to the code is checked before anything is sent,
+// so a device answering discovery for the node never sees a proof.
+func TestPairChecksFingerprint(t *testing.T) {
+	ctx := context.Background()
+	node := startAgent(t, "node", "PC-FP")
+	ctrl := newController(t, node.disco)
+	ctrl.Discover(ctx)
+	code, _, _ := node.codes.Issue()
+	if _, err := ctrl.Pair(ctx, "PC-FP", code, "0000000000000000"); err == nil || !strings.Contains(err.Error(), "do not pair") {
+		t.Fatalf("wrong fp: %v", err)
+	}
+	if _, err := ctrl.Pair(ctx, "PC-FP", code, "abc"); err == nil || !strings.Contains(err.Error(), "16 hex") {
+		t.Fatalf("short fp: %v", err)
+	}
+	if _, err := ctrl.Pair(ctx, "PC-FP", code, "SHA256:"+strings.ToUpper(pairing.ShortFP(node.id.FP))); err != nil {
+		t.Fatalf("pair after refusals: %v", err)
 	}
 }

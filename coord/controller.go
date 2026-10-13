@@ -102,9 +102,14 @@ func (c *Controller) AddAgent(ctx context.Context, addr string) (localapi.Discov
 	return d, nil
 }
 
-func (c *Controller) Pair(ctx context.Context, agent, code string) (localapi.Agent, error) {
+func (c *Controller) Pair(ctx context.Context, agent, code, fp string) (localapi.Agent, error) {
 	if !pairing.ValidCode(code) {
 		return localapi.Agent{}, localapi.Errorf(http.StatusBadRequest, "the code must be the 6 digits shown by 'sevjala code' on the node")
+	}
+	prefix, ok := pairing.ParseFP(fp)
+	if !ok {
+		return localapi.Agent{}, localapi.Errorf(http.StatusBadRequest,
+			"the fingerprint must be the %d hex characters shown by 'sevjala code' on the node", pairing.FPChars)
 	}
 	c.mu.Lock()
 	seen := slices.Collect(maps.Values(c.seen))
@@ -115,6 +120,13 @@ func (c *Controller) Pair(ctx context.Context, agent, code string) (localapi.Age
 	}
 	if d.Role != config.RoleNode {
 		return localapi.Agent{}, localapi.Errorf(http.StatusConflict, "%s is a %s; only nodes can be paired", d.Hostname, d.Role)
+	}
+	if !pairing.MatchFP(d.FP, prefix) {
+		c.Log.Warn("pairing refused", logx.Event(logx.EventPairRejected), "agent_id", d.AgentID, "addr", d.Addr,
+			"reason", "fingerprint mismatch")
+		return localapi.Agent{}, localapi.Errorf(http.StatusConflict,
+			"the agent found at %s has fingerprint %s, not the one shown by 'sevjala code'; do not pair: another device may be answering for it",
+			d.Addr, pairing.ShortFP(d.FP))
 	}
 	if _, err := c.LAN.Pair(ctx, d.Addr, d.FP, code); err != nil {
 		c.Log.Warn("pairing failed", logx.Event(logx.EventPairRejected), "agent_id", d.AgentID, "addr", d.Addr, "err", err)

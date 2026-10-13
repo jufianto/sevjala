@@ -43,9 +43,10 @@ func NewHandler(b Backend) http.Handler {
 		var req struct {
 			Agent string `json:"agent"`
 			Code  string `json:"code"`
+			FP    string `json:"fp"`
 		}
 		if decode(w, r, &req) {
-			a, err := b.Pair(r.Context(), req.Agent, req.Code)
+			a, err := b.Pair(r.Context(), req.Agent, req.Code, req.FP)
 			reply(w, a, err)
 		}
 	})

@@ -30,8 +30,10 @@ func TestRenderDiscovered(t *testing.T) {
 
 func TestRenderCode(t *testing.T) {
 	var b bytes.Buffer
-	renderCode(&b, localapi.Code{Code: "123456", AgentID: "3f2a9c1e-1111", ExpiresAt: time.Date(2026, 10, 12, 16, 42, 0, 0, time.Local)})
-	want := "pairing code 123456, valid until 16:42\non the controller run: sevjala pair 3f2a9c1e --code 123456\n"
+	renderCode(&b, localapi.Code{Code: "123456", AgentID: "3f2a9c1e-1111", FP: "sha256:3f2a9b1c77de0a41ffff",
+		ExpiresAt: time.Date(2026, 10, 12, 16, 42, 0, 0, time.Local)})
+	want := "pairing code 123456, valid until 16:42\nfingerprint  3f2a9b1c77de0a41\n" +
+		"on the controller run: sevjala pair 3f2a9c1e --code 123456 --fp 3f2a9b1c77de0a41\n"
 	if b.String() != want {
 		t.Errorf("got %q", b.String())
 	}
@@ -74,6 +76,8 @@ func TestCoordUsageErrors(t *testing.T) {
 	}{
 		{[]string{"pair", "abcd", "--code", "12"}, "6-digit"},
 		{[]string{"pair", "abcd"}, "6-digit"},
+		{[]string{"pair", "x", "--code", "123456"}, "--fp"},
+		{[]string{"pair", "x", "--code", "123456", "--fp", "abc"}, "--fp"},
 		{[]string{"pair", "--code", "123456"}, "accepts 1 arg"},
 		{[]string{"ping"}, "accepts 1 arg"},
 		{[]string{"agents", "add"}, "accepts 1 arg"},

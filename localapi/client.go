@@ -47,9 +47,9 @@ func (c *Client) AddAgent(ctx context.Context, addr string) (Discovered, error) 
 	return d, c.do(ctx, http.MethodPost, "/agents", map[string]string{"addr": addr}, &d)
 }
 
-func (c *Client) Pair(ctx context.Context, agent, code string) (Agent, error) {
+func (c *Client) Pair(ctx context.Context, agent, code, fp string) (Agent, error) {
 	var a Agent
-	return a, c.do(ctx, http.MethodPost, "/pair", map[string]string{"agent": agent, "code": code}, &a)
+	return a, c.do(ctx, http.MethodPost, "/pair", map[string]string{"agent": agent, "code": code, "fp": fp}, &a)
 }
 
 func (c *Client) Agents(ctx context.Context) ([]Agent, error) {

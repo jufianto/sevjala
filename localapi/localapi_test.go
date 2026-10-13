@@ -37,8 +37,8 @@ type fakeBackend struct {
 	status Status
 	err    error
 
-	mu                         sync.Mutex
-	gotAgent, gotCode, gotAddr string
+	mu                                sync.Mutex
+	gotAgent, gotCode, gotAddr, gotFP string
 }
 
 func (f *fakeBackend) Status() Status { return f.status }
@@ -61,9 +61,9 @@ func (f *fakeBackend) AddAgent(_ context.Context, addr string) (Discovered, erro
 	return Discovered{AgentID: "n1", Addr: addr}, f.err
 }
 
-func (f *fakeBackend) Pair(_ context.Context, agent, code string) (Agent, error) {
+func (f *fakeBackend) Pair(_ context.Context, agent, code, fp string) (Agent, error) {
 	f.mu.Lock()
-	f.gotAgent, f.gotCode = agent, code
+	f.gotAgent, f.gotCode, f.gotFP = agent, code, fp
 	f.mu.Unlock()
 	return Agent{AgentID: agent}, f.err
 }
@@ -156,12 +156,12 @@ func TestRoutesRoundTrip(t *testing.T) {
 	if d, err := c.AddAgent(ctx, "10.0.0.9:17891"); err != nil || d.Addr != "10.0.0.9:17891" {
 		t.Errorf("AddAgent: %+v %v", d, err)
 	}
-	if a, err := c.Pair(ctx, "3f2a", "654321"); err != nil || a.AgentID != "3f2a" {
+	if a, err := c.Pair(ctx, "3f2a", "654321", "3f2a9b1c77de0a41"); err != nil || a.AgentID != "3f2a" {
 		t.Errorf("Pair: %+v %v", a, err)
 	}
 	f.mu.Lock()
-	if f.gotAgent != "3f2a" || f.gotCode != "654321" || f.gotAddr != "10.0.0.9:17891" {
-		t.Errorf("backend got agent=%q code=%q addr=%q", f.gotAgent, f.gotCode, f.gotAddr)
+	if f.gotAgent != "3f2a" || f.gotCode != "654321" || f.gotFP != "3f2a9b1c77de0a41" || f.gotAddr != "10.0.0.9:17891" {
+		t.Errorf("backend got agent=%q code=%q fp=%q addr=%q", f.gotAgent, f.gotCode, f.gotFP, f.gotAddr)
 	}
 	f.mu.Unlock()
 	if as, err := c.Agents(ctx); err != nil || as == nil || len(as) != 0 {
