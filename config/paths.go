@@ -49,3 +49,5 @@ func IsDefaultDataDir(dir string) bool {
 func Path(dataDir string) string { return filepath.Join(dataDir, FileName) }
 
 func LogDir(dataDir string) string { return filepath.Join(dataDir, "logs") }
+
+func StagingDir(dataDir string) string { return filepath.Join(dataDir, "staging") }

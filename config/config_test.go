@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -121,5 +122,51 @@ func TestListenPort(t *testing.T) {
 	c.Listen = "192.168.1.5:9000"
 	if got := c.ListenPort(); got != 9000 {
 		t.Errorf("ListenPort = %d, want 9000", got)
+	}
+}
+
+func TestDefaultsForM2(t *testing.T) {
+	c := Default(RoleController)
+	if c.Controller.Database.Host != "127.0.0.1" || c.Controller.Database.Port != 3306 || c.Controller.Database.User != "root" {
+		t.Errorf("database defaults %+v", c.Controller.Database)
+	}
+	if c.Node.Store.MinFreeBytes != 2<<30 {
+		t.Errorf("min_free_bytes %d", c.Node.Store.MinFreeBytes)
+	}
+	if got := c.StorePath("/data"); got != filepath.Join("/data", "store") {
+		t.Errorf("StorePath = %q", got)
+	}
+	c.Node.Store.Path = "/backups"
+	if got := c.StorePath("/data"); got != "/backups" {
+		t.Errorf("StorePath = %q", got)
+	}
+}
+
+func TestWriteFullRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), FileName)
+	c := Default(RoleController)
+	c.Controller.Database.PasswordRef = "keyring:db"
+	c.Controller.Database.Dumper = `C:\xampp\mysql\bin\mysqldump.exe`
+	c.Controller.Database.Databases = []string{"shop", "legacy"}
+	c.Controller.Staging.Keep = 12
+	if err := Write(path, c); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, c) {
+		t.Errorf("round trip\n got %+v\nwant %+v", got, c)
+	}
+	if _, err := os.Stat(path + ".tmp"); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("temp file left: %v", err)
+	}
+}
+
+func TestValidateDatabasePort(t *testing.T) {
+	_, err := Load(writeFile(t, "role = \"controller\"\n[controller.database]\nport = 0"))
+	if err == nil || !strings.Contains(err.Error(), "controller.database.port") {
+		t.Errorf("err = %v", err)
 	}
 }

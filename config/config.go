@@ -1,21 +1,27 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/BurntSushi/toml"
 )
 
 const (
-	FileName             = "config.toml"
-	RoleController       = "controller"
-	RoleNode             = "node"
-	DefaultListen        = "0.0.0.0:17891"
-	DefaultDiscoveryPort = 17890
-	DefaultLANPort       = 17891
+	FileName                   = "config.toml"
+	RoleController             = "controller"
+	RoleNode                   = "node"
+	DefaultListen              = "0.0.0.0:17891"
+	DefaultDiscoveryPort       = 17890
+	DefaultLANPort             = 17891
+	DefaultDBHost              = "127.0.0.1"
+	DefaultDBPort              = 3306
+	DefaultDBUser              = "root"
+	DefaultMinFreeBytes  int64 = 2 << 30
 )
 
 type Config struct {
@@ -54,7 +60,11 @@ type Store struct {
 }
 
 func Default(role string) Config {
-	return Config{Role: role, Listen: DefaultListen, DiscoveryPort: DefaultDiscoveryPort}
+	return Config{
+		Role: role, Listen: DefaultListen, DiscoveryPort: DefaultDiscoveryPort,
+		Controller: Controller{Database: Database{Host: DefaultDBHost, Port: DefaultDBPort, User: DefaultDBUser}},
+		Node:       Node{Store: Store{MinFreeBytes: DefaultMinFreeBytes}},
+	}
 }
 
 func ValidRole(role string) bool {
@@ -75,6 +85,12 @@ func (c Config) Validate() error {
 	if c.DiscoveryPort < 1 || c.DiscoveryPort > 65535 {
 		return fmt.Errorf("discovery_port %d: must be 1-65535", c.DiscoveryPort)
 	}
+	if p := c.Controller.Database.Port; p < 1 || p > 65535 {
+		return fmt.Errorf("controller.database.port %d: must be 1-65535", p)
+	}
+	if c.Node.Store.MinFreeBytes < 0 {
+		return fmt.Errorf("node.store.min_free_bytes %d: must not be negative", c.Node.Store.MinFreeBytes)
+	}
 	return nil
 }
 
@@ -83,6 +99,15 @@ func (c Config) ListenPort() int {
 	_, port, _ := net.SplitHostPort(c.Listen)
 	p, _ := strconv.Atoi(port)
 	return p
+}
+
+// StorePath is where a node keeps backups: [node.store] path, else
+// <data-dir>/store, which inherits the locked data dir ACL.
+func (c Config) StorePath(dataDir string) string {
+	if c.Node.Store.Path != "" {
+		return c.Node.Store.Path
+	}
+	return filepath.Join(dataDir, "store")
 }
 
 // Load reads and validates a config file; keys it omits keep their defaults.
@@ -101,9 +126,33 @@ func Load(path string) (Config, error) {
 	return c, nil
 }
 
-// Write writes the top-level keys only; role sections are added by the
-// milestones that use them.
+// Write replaces the whole file atomically; the agent is the only writer.
 func Write(path string, c Config) error {
-	data := fmt.Sprintf("role = %q\nlisten = %q\ndiscovery_port = %d\n", c.Role, c.Listen, c.DiscoveryPort)
-	return os.WriteFile(path, []byte(data), 0o644)
+	var b bytes.Buffer
+	if err := toml.NewEncoder(&b).Encode(c); err != nil {
+		return err
+	}
+	return writeAtomic(path, b.Bytes(), 0o644)
+}
+
+// writeAtomic goes through a synced temp file and a rename, so a crash leaves
+// the old file or the complete new one.
+func writeAtomic(path string, data []byte, mode os.FileMode) error {
+	tmp := path + ".tmp"
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(data)
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return os.Rename(tmp, path)
 }
