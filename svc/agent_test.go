@@ -115,3 +115,41 @@ func TestControllerAgentOpensStore(t *testing.T) {
 		t.Errorf("code on a controller: %v", err)
 	}
 }
+
+func TestNodeAgentServesItsStore(t *testing.T) {
+	dir := shortDir(t)
+	a := &Agent{DataDir: dir, Config: testConfig(config.RoleNode), Version: "test"}
+	if err := a.Start(nil); err != nil {
+		t.Fatal(err)
+	}
+	defer a.Stop(nil)
+	st, err := localapi.NewClient(localapi.Endpoint(dir)).Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Store == nil || st.Store.Path != filepath.Join(dir, "store") || st.Store.FreeBytes <= 0 {
+		t.Errorf("store %+v", st.Store)
+	}
+}
+
+func TestControllerStartRemovesUnfinishedDumps(t *testing.T) {
+	dir := shortDir(t)
+	staging := filepath.Join(dir, "staging")
+	if err := os.MkdirAll(staging, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	part := filepath.Join(staging, "BK-20261013-101500-A8F2.part")
+	_ = os.WriteFile(part, []byte("x"), 0o600)
+	a := &Agent{DataDir: dir, Config: testConfig(config.RoleController), Version: "test"}
+	if err := a.Start(nil); err != nil {
+		t.Fatal(err)
+	}
+	defer a.Stop(nil)
+	if _, err := os.Stat(part); !os.IsNotExist(err) {
+		t.Errorf("unfinished dump kept: %v", err)
+	}
+	bs, err := localapi.NewClient(localapi.Endpoint(dir)).Backups(context.Background())
+	if err != nil || len(bs) != 0 {
+		t.Errorf("backups %+v, %v", bs, err)
+	}
+}

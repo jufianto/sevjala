@@ -17,12 +17,15 @@ import (
 	"github.com/jufianto/sevjala/config"
 	"github.com/jufianto/sevjala/coord"
 	"github.com/jufianto/sevjala/discovery"
+	"github.com/jufianto/sevjala/dump"
 	"github.com/jufianto/sevjala/identity"
+	"github.com/jufianto/sevjala/inventory"
 	"github.com/jufianto/sevjala/lanapi"
 	"github.com/jufianto/sevjala/localapi"
 	"github.com/jufianto/sevjala/logx"
 	"github.com/jufianto/sevjala/pairing"
 	"github.com/jufianto/sevjala/store"
+	"github.com/jufianto/sevjala/transfer"
 )
 
 type Agent struct {
@@ -39,6 +42,9 @@ type Agent struct {
 	api     *localapi.Server
 	lan     *lanapi.Server
 	disco   *discovery.Responder
+	inv     *inventory.Store
+	pool    *transfer.Pool
+	cancel  context.CancelFunc
 }
 
 // Start must not block: kardianos/service calls it on the service thread.
@@ -74,23 +80,48 @@ func (a *Agent) start() error {
 	var codes *pairing.Codes
 	switch a.Config.Role {
 	case config.RoleNode:
+		if a.inv, err = inventory.Open(a.Config.StorePath(a.DataDir), a.Config.Node.Store.MinFreeBytes, a.log); err != nil {
+			return err
+		}
 		codes = pairing.New(time.Now)
 		backend.Node = &coord.Node{AgentID: id.AgentID, FP: id.FP, Codes: codes, Log: a.log}
 	case config.RoleController:
 		if a.store, err = store.Open(filepath.Join(a.DataDir, store.FileName)); err != nil {
 			return err
 		}
+		staging := config.StagingDir(a.DataDir)
+		if err := os.MkdirAll(staging, 0o700); err != nil {
+			return err
+		}
+		removed, err := dump.CleanStaging(staging)
+		if err != nil {
+			return err
+		}
+		for _, name := range removed {
+			a.log.Warn("removed unfinished dump", logx.Event(logx.EventPartRemoved), "file", name)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		a.cancel = cancel
 		port := a.Config.DiscoveryPort
-		backend.Controller = &coord.Controller{Self: id, Store: a.store, LAN: lanapi.NewClient(id),
+		ctrl := &coord.Controller{Self: id, Store: a.store, LAN: lanapi.NewClient(id),
 			Targets: func() ([]*net.UDPAddr, error) { return discovery.BroadcastTargets(port) },
-			Wait:    discovery.DefaultWait, Log: a.log}
+			Wait:    discovery.DefaultWait, Log: a.log, DataDir: a.DataDir, Staging: staging, Config: a.Config,
+			Ctx: ctx, FindTools: dump.FindTools}
+		a.pool = transfer.NewPool(ctrl.Push, ctrl.Settle, transfer.DefaultDelays)
+		ctrl.Pool = a.pool
+		backend.Controller = ctrl
 	}
 	if a.api, err = localapi.Start(localapi.Endpoint(a.DataDir), localapi.NewHandler(backend), a.log); err != nil {
 		return err
 	}
-	if a.lan, err = lanapi.Start(lanapi.Options{Addr: a.Config.Listen, DataDir: a.DataDir, Identity: id,
-		Role: a.Config.Role, Version: a.Version, Hostname: hostname, Started: a.started, Codes: codes, Log: a.log}); err != nil {
+	if a.lan, err = lanapi.Start(lanapi.Options{Addr: a.Config.Listen, DataDir: a.DataDir, Identity: id, Role: a.Config.Role,
+		Version: a.Version, Hostname: hostname, Started: a.started, Codes: codes, Store: a.inv, Log: a.log}); err != nil {
 		return err
+	}
+	if backend.Controller != nil {
+		if err := backend.Controller.Resume(context.Background()); err != nil {
+			return err
+		}
 	}
 	info := discovery.Reply{AgentID: id.AgentID, Hostname: hostname, Port: a.lan.Port(), Role: a.Config.Role,
 		Version: a.Version, OS: runtime.GOOS, FP: id.FP}
@@ -103,6 +134,14 @@ func (a *Agent) shutdown() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var errs []error
+	if a.cancel != nil {
+		a.cancel()
+		a.cancel = nil
+	}
+	if a.pool != nil {
+		a.pool.Close()
+		a.pool = nil
+	}
 	if a.disco != nil {
 		errs = append(errs, a.disco.Close())
 		a.disco = nil
@@ -115,6 +154,7 @@ func (a *Agent) shutdown() error {
 		errs = append(errs, a.api.Shutdown(ctx))
 		a.api = nil
 	}
+	a.inv = nil
 	if a.store != nil {
 		errs = append(errs, a.store.Close())
 		a.store = nil
@@ -134,7 +174,7 @@ func (a *Agent) Stop(service.Service) error {
 }
 
 func (a *Agent) status() localapi.Status {
-	return localapi.Status{
+	st := localapi.Status{
 		Version: a.Version,
 		Role:    a.Config.Role,
 		PID:     os.Getpid(),
@@ -143,4 +183,19 @@ func (a *Agent) status() localapi.Status {
 		AgentID: a.id.AgentID,
 		FP:      a.id.FP,
 	}
+	if a.inv != nil {
+		info := &localapi.StoreInfo{Path: a.inv.Dir(), Problems: []string{}}
+		if inv, err := a.inv.Scan(); err != nil {
+			info.Problems = append(info.Problems, err.Error())
+		} else {
+			info.Backups, info.Problems = len(inv.Backups), append(info.Problems, inv.Problems...)
+		}
+		if free, err := a.inv.FreeBytes(); err != nil {
+			info.Problems = append(info.Problems, err.Error())
+		} else {
+			info.FreeBytes = free
+		}
+		st.Store = info
+	}
+	return st
 }
