@@ -50,15 +50,33 @@ func (g *globals) dataDir() (string, error) {
 func newRootCmd() *cobra.Command {
 	g := &globals{}
 	root := &cobra.Command{
-		Use:           "sevjala",
-		Short:         "Sevjala — Database Backup & Replication",
+		Use:   "sevjala",
+		Short: "Sevjala — Database Backup & Replication",
+		Long: `Sevjala backs up a MySQL/MariaDB database (the controller PC) to backup PCs
+on the same network (nodes). Run commands from an Administrator prompt on
+Windows, or with sudo on macOS/Linux. New here? Start with: sevjala setup`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	root.PersistentFlags().StringVar(&g.dataDirFlag, "data-dir", "", "data directory (default: $SEVJALA_DATA_DIR, else the OS default)")
-	root.AddCommand(newVersionCmd(), newAgentCmd(g), newServiceCmd(g), newDoctorCmd(g),
-		newDiscoverCmd(g), newCodeCmd(g), newPairCmd(g), newAgentsCmd(g), newPingCmd(g),
-		newDBCmd(g), newBackupCmd(g), newBackupsCmd(g), newPolicyCmd(g), newRetentionCmd(g), newSetupCmd(g))
+	root.CompletionOptions.DisableDefaultCmd = true
+	root.PersistentFlags().StringVar(&g.dataDirFlag, "data-dir", "", "data folder (default: $SEVJALA_DATA_DIR, else the OS default)")
+	root.AddCommand(newAgentCmd(g))
+	for _, grp := range []struct {
+		id, title string
+		cmds      []*cobra.Command
+	}{
+		{"install", "Install & status:", []*cobra.Command{newSetupCmd(g), newServiceCmd(g), newDoctorCmd(g), newVersionCmd()}},
+		{"connect", "Connect PCs:", []*cobra.Command{newDiscoverCmd(g), newCodeCmd(g), newPairCmd(g), newAgentsCmd(g), newPingCmd(g)}},
+		{"database", "Database:", []*cobra.Command{newDBCmd(g)}},
+		{"backups", "Backups:", []*cobra.Command{newBackupCmd(g), newBackupsCmd(g)}},
+		{"schedule", "Schedules & cleanup:", []*cobra.Command{newPolicyCmd(g), newRetentionCmd(g)}},
+	} {
+		root.AddGroup(&cobra.Group{ID: grp.id, Title: grp.title})
+		for _, c := range grp.cmds {
+			c.GroupID = grp.id
+			root.AddCommand(c)
+		}
+	}
 	return root
 }
 

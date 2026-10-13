@@ -15,11 +15,19 @@ import (
 )
 
 func newPolicyCmd(g *globals) *cobra.Command {
-	c := &cobra.Command{Use: "policy", Short: "Backup schedules and how many backups each node keeps (controller)"}
+	c := &cobra.Command{Use: "policy", Short: "Backup schedules and how many backups each PC keeps (controller)", Long: `A policy is a schedule plus a keep count. Every backup is tagged with the policies that
+were due when it was made; a backup PC keeps, per policy, that many of the newest backups
+with its tag. A backup stays while any of its tags still keeps it.
+
+Schedules use cron: minute hour day month weekday (* = any, 0 = Sunday).
+  */10 * * * *     every 10 minutes
+  0 1 * * *        every day at 01:00
+  0 3 * * 0        Sundays at 03:00
+  0 1 1 * *        the 1st of every month at 01:00`}
 	c.AddCommand(&cobra.Command{
 		Use:   "list",
-		Short: "List policies and when each runs next",
-		Args:  cobra.NoArgs,
+		Short: "List policies, when each runs and how many backups each keeps", Long: `KEEP is how many backups with that policy's tag each backup PC keeps.`, Example: `  sevjala policy list`,
+		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			ps, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) ([]localapi.Policy, error) {
 				return cl.Policies(ctx)
@@ -35,8 +43,9 @@ func newPolicyCmd(g *globals) *cobra.Command {
 	set, _ := policyEditCmd(g, false)
 	c.AddCommand(add, set, &cobra.Command{
 		Use:   "remove <name>",
-		Short: "Remove a policy; backups carrying its tag are kept",
-		Args:  cobra.ExactArgs(1),
+		Short: "Remove a policy; backups already made with it stay", Long: `Prefer 'policy set <name> --disable' for the built-in policies: it stops new backups
+but keeps applying the policy's keep count.`, Example: `  sevjala policy remove weekly`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			if _, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) (struct{}, error) {
 				return struct{}{}, cl.RemovePolicy(ctx, args[0])
@@ -63,11 +72,17 @@ func policyEditCmd(g *globals, adding bool) (*cobra.Command, *policyFlags) {
 	f := &policyFlags{}
 	c := &cobra.Command{
 		Use:   "set <name>",
-		Short: "Change a policy; only the flags given change",
-		Args:  cobra.ExactArgs(1),
+		Short: "Change a policy; only the flags you give change",
+		Example: `  sevjala policy set daily --keep 14
+  sevjala policy set daily --schedule "30 2 * * *"      (every day at 02:30)
+  sevjala policy set frequent --disable                 (pause; --enable resumes)
+  sevjala policy set monthly --to BACKUP-PC-1           (or --to all)`,
+		Args: cobra.ExactArgs(1),
 	}
 	if adding {
 		c.Use, c.Short = "add <name> --keep N", "Add a policy"
+		c.Example = `  sevjala policy add weekly --schedule "0 3 * * 0" --keep 8     (Sundays at 03:00)
+  sevjala policy add yearend --keep 5                          (only via backup now --tag yearend)`
 	}
 	c.RunE = func(c *cobra.Command, args []string) error {
 		ch, err := f.change(c.Flags(), adding)
@@ -152,12 +167,19 @@ func renderPolicies(w io.Writer, ps []localapi.Policy) {
 }
 
 func newRetentionCmd(g *globals) *cobra.Command {
-	c := &cobra.Command{Use: "retention", Short: "Delete what policies no longer keep and fill in missing copies (controller)"}
+	c := &cobra.Command{Use: "retention", Short: "Clean up old backups and fill in missing copies (controller)", Long: `Retention runs by itself every 5 minutes and when a backup PC comes back online. For
+each backup PC it keeps, per policy, the newest backups that policy keeps, deletes the
+rest, sends what is missing, and replaces damaged copies.
+
+Safety rules: the last copy of a backup a PC still needs is never deleted; nothing is
+deleted while the clock looks wrong (a backup dated in the future); a PC below its
+free-space floor gets no new copies until space is freed.`}
 	var dryRun bool
 	run := &cobra.Command{
 		Use:   "run",
-		Short: "Run retention and reconciliation now",
-		Args:  cobra.NoArgs,
+		Short: "Clean up and fill in missing copies now (it also runs every 5 minutes)", Long: `Use --dry-run to see what would happen and why, without changing anything.`, Example: `  sevjala retention run --dry-run
+  sevjala retention run`,
+		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			p, err := callAgent(g, 2*time.Minute, func(ctx context.Context, cl *localapi.Client) (localapi.RetentionPlan, error) {
 				return cl.RunRetention(ctx, dryRun)

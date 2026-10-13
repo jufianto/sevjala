@@ -21,8 +21,11 @@ import (
 func newSetupCmd(g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use:   "setup",
-		Short: "Install, update or remove this agent step by step (what a double-click runs on Windows)",
-		Args:  cobra.NoArgs,
+		Short: "Install, update or remove Sevjala step by step (what a double-click runs on Windows)", Long: `Asks whether this PC runs the database (controller) or keeps backup copies (node),
+installs the service, and walks you through the database and pairing. Run it again
+later to update to a newer sevjala.exe, pair another PC, or uninstall.`, Example: `  sevjala setup                 (or double-click sevjala.exe on Windows)
+  sudo ./sevjala setup          (macOS/Linux)`,
+		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			if !svc.IsAdmin() {
 				return elevate(g)

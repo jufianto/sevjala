@@ -19,13 +19,17 @@ import (
 )
 
 func newBackupCmd(g *globals) *cobra.Command {
-	c := &cobra.Command{Use: "backup", Short: "Run a backup (controller)"}
+	c := &cobra.Command{Use: "backup", Short: "Back up the database now (controller)"}
 	var db string
 	var tags []string
 	now := &cobra.Command{
 		Use:   "now",
-		Short: "Dump the database now and push it to every paired node",
-		Args:  cobra.NoArgs,
+		Short: "Back up the database now and send it to the backup PCs", Long: `Shows progress until every copy is verified. Tag it with a policy to keep it as long
+as that policy keeps backups (default tag: manual). Ctrl-C stops watching; the backup
+carries on.`, Example: `  sevjala backup now
+  sevjala backup now --db shop
+  sevjala backup now --tag weekly`,
+		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			jobs, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) ([]localapi.BackupJob, error) {
 				return cl.BackupNow(ctx, db, tags)
@@ -130,12 +134,14 @@ func backupLines(b localapi.Backup) (lines string, done, good bool) {
 }
 
 func newBackupsCmd(g *globals) *cobra.Command {
-	c := &cobra.Command{Use: "backups", Short: "Backups the controller knows about"}
+	c := &cobra.Command{Use: "backups", Short: "List backups and where their copies are (controller)"}
 	var matrix, all bool
 	list := &cobra.Command{
 		Use:   "list",
-		Short: "List backups and where their copies are",
-		Args:  cobra.NoArgs,
+		Short: "List backups and where their copies are", Long: `COPIES counts the backup PCs holding a verified copy. --matrix shows one column per PC.`, Example: `  sevjala backups list
+  sevjala backups list --matrix
+  sevjala backups list --all       (also expired backups)`,
+		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			bs, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) ([]localapi.Backup, error) {
 				return cl.Backups(ctx, all)

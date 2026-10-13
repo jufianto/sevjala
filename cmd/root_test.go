@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 func TestRunExitCodes(t *testing.T) {
@@ -69,4 +71,34 @@ func TestHelpHidesTheServiceOnlyAgentCommand(t *testing.T) {
 	if strings.Contains(out.String(), "\n  agent ") || !strings.Contains(out.String(), "\n  agents ") {
 		t.Errorf("help must list agents, not agent:\n%s", out.String())
 	}
+}
+
+// Operators learn the CLI from --help: every command a user can run explains
+// itself with an example, and the top level is grouped by task.
+func TestEveryCommandHasHelpWithExamples(t *testing.T) {
+	root := newRootCmd()
+	var walk func(c *cobra.Command)
+	walk = func(c *cobra.Command) {
+		for _, sub := range c.Commands() {
+			if sub.Hidden || sub.Name() == "help" {
+				continue
+			}
+			if sub.Short == "" {
+				t.Errorf("%s: no short description", sub.CommandPath())
+			}
+			if sub.Runnable() && sub.Example == "" {
+				t.Errorf("%s: no example", sub.CommandPath())
+			}
+			if c == root && sub.GroupID == "" {
+				t.Errorf("%s: not in a help group", sub.CommandPath())
+			}
+			for _, jargon := range []string{"mutual TLS", "reconciliation", "data dir"} {
+				if strings.Contains(sub.Short, jargon) {
+					t.Errorf("%s: %q in %q", sub.CommandPath(), jargon, sub.Short)
+				}
+			}
+			walk(sub)
+		}
+	}
+	walk(root)
 }

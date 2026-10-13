@@ -211,8 +211,9 @@ func nodesCheck(as []localapi.Agent, err error) checkResult {
 func newDoctorCmd(g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",
-		Short: "Check the data dir, config, identity, service, APIs, database or store",
-		Args:  cobra.NoArgs,
+		Short: "Check everything and say what is wrong", Long: `Checks the data folder, settings, service, network, database, schedule and backup PCs.
+Each line is ok, WARN or FAIL with the reason; exit code 1 when something fails.`, Example: `  sevjala doctor`,
+		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			if err := requireAdmin(); err != nil {
 				return err
