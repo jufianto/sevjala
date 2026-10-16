@@ -388,3 +388,20 @@ func TestRestoreFileRefuses(t *testing.T) {
 		}
 	}
 }
+
+func TestRestoreDryRunStartsNothing(t *testing.T) {
+	dumptest.Use(t, dumptest.OK)
+	ctx := context.Background()
+	ctrl := newController(t)
+	b := backupOne(t, ctrl, store.BackupCreated)
+	v, err := ctrl.Restore(ctx, localapi.RestoreRequest{Backup: "latest", Replace: true, DryRun: true})
+	if err != nil || v.State != "" || v.Target != "shop" || v.BackupID != b.BackupID || !v.BackupCreatedAt.Equal(b.CreatedAt) || v.Size != b.Size {
+		t.Errorf("dry run %+v, %v", v, err)
+	}
+	if _, err := ctrl.RestoreStatus(ctx); apiCode(err) != http.StatusNotFound {
+		t.Errorf("a dry run started a restore: %v", err)
+	}
+	if _, err := ctrl.Restore(ctx, localapi.RestoreRequest{Backup: b.BackupID, Into: "shop", DryRun: true}); apiCode(err) != http.StatusConflict {
+		t.Errorf("dry run into an existing database: %v", err)
+	}
+}

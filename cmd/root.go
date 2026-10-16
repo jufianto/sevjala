@@ -70,7 +70,7 @@ Windows, or with sudo on macOS/Linux. New here? Start with: sevjala setup`,
 		{"install", "Install & status:", []*cobra.Command{newSetupCmd(g), newUpdateCmd(g), newServiceCmd(g), newDoctorCmd(g), newVersionCmd()}},
 		{"connect", "Connect PCs:", []*cobra.Command{newDiscoverCmd(g), newCodeCmd(g), newPairCmd(g), newAgentsCmd(g), newPingCmd(g)}},
 		{"database", "Database:", []*cobra.Command{newDBCmd(g)}},
-		{"backups", "Backups:", []*cobra.Command{newBackupCmd(g), newBackupsCmd(g)}},
+		{"backups", "Backups:", []*cobra.Command{newBackupCmd(g), newBackupsCmd(g), newRestoreCmd(g)}},
 		{"schedule", "Schedules & cleanup:", []*cobra.Command{newPolicyCmd(g), newRetentionCmd(g)}},
 	} {
 		root.AddGroup(&cobra.Group{ID: grp.id, Title: grp.title})

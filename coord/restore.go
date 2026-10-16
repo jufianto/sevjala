@@ -88,7 +88,7 @@ func (c *Controller) Restore(ctx context.Context, req localapi.RestoreRequest) (
 		return localapi.Restore{}, localapi.Errorf(http.StatusBadRequest,
 			"%q cannot be a database name here: use letters, digits, _, $ or -, at most 64", target)
 	}
-	if req.Replace && req.Confirm != target {
+	if req.Replace && !req.DryRun && req.Confirm != target {
 		return localapi.Restore{}, localapi.Errorf(http.StatusConflict, "not confirmed: type the database name, %s, to replace it", target)
 	}
 	_, _, exists, err := dump.Schema(ctx, tools, conn, target)
@@ -100,8 +100,13 @@ func (c *Controller) Restore(ctx context.Context, req localapi.RestoreRequest) (
 	case !exists && req.Replace:
 		return localapi.Restore{}, localapi.Errorf(http.StatusConflict, "database %s does not exist, so there is nothing to replace; restore it with --into %s", target, target)
 	}
-	run := &restoreRun{file: req.File, view: localapi.Restore{BackupID: b.BackupID, Database: b.Database, Target: target, Replace: req.Replace,
-		State: localapi.RestoreRunning, Step: "starting", Size: b.Size, StartedAt: time.Now()}}
+	view := localapi.Restore{BackupID: b.BackupID, BackupCreatedAt: b.CreatedAt, Database: b.Database, Target: target,
+		Replace: req.Replace, Size: b.Size}
+	if req.DryRun {
+		return view, nil
+	}
+	view.State, view.Step, view.StartedAt = localapi.RestoreRunning, "starting", time.Now()
+	run := &restoreRun{file: req.File, view: view}
 	if err := c.claimRestore(run); err != nil {
 		return localapi.Restore{}, err
 	}
