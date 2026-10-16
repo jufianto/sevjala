@@ -39,6 +39,7 @@ const (
 	EventDBConfigured       = "db_configured"
 	EventKeyringFallback    = "keyring_fallback"
 	EventBackupDeleted      = "backup_deleted"
+	EventBackupServed       = "backup_served"
 	EventPolicyChanged      = "policy_changed"
 	EventScheduleFired      = "schedule_fired"
 	EventAgentOnline        = "agent_online"

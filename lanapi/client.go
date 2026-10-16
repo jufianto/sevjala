@@ -132,25 +132,35 @@ func (c *Client) do(ctx context.Context, hc *http.Client, method, addr, path str
 }
 
 func send(hc *http.Client, req *http.Request, addr string, out any) error {
+	resp, err := roundTrip(hc, req, addr)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+// roundTrip returns the response of a 200; anything else is an error.
+func roundTrip(hc *http.Client, req *http.Request, addr string) (*http.Response, error) {
 	resp, err := hc.Do(req)
 	if err != nil {
 		// The node's alert is not a typed error; this is the only signal.
 		if strings.Contains(err.Error(), "tls: bad certificate") {
-			return fmt.Errorf("%s %w", addr, ErrRejected)
+			return nil, fmt.Errorf("%s %w", addr, ErrRejected)
 		}
-		return plain(addr, err)
+		return nil, plain(addr, err)
 	}
-	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		defer resp.Body.Close()
 		var e struct {
 			Error string `json:"error"`
 		}
 		if json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(&e) != nil || e.Error == "" {
 			e.Error = resp.Status
 		}
-		return &HTTPError{Code: resp.StatusCode, Msg: e.Error}
+		return nil, &HTTPError{Code: resp.StatusCode, Msg: e.Error}
 	}
-	return json.NewDecoder(resp.Body).Decode(out)
+	return resp, nil
 }
 
 var errStalled = errors.New("transfer stalled: no progress for too long")
@@ -166,24 +176,7 @@ func (c *Client) PutBackup(ctx context.Context, addr, nodeFP string, m inventory
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	pr := &progressReader{r: body}
-	pr.last.Store(time.Now().UnixNano())
-	stop := make(chan struct{})
-	defer close(stop)
-	go func() {
-		t := time.NewTicker(c.Stall / 4)
-		defer t.Stop()
-		for {
-			select {
-			case <-stop:
-				return
-			case <-t.C:
-				if !pr.done.Load() && time.Since(time.Unix(0, pr.last.Load())) > c.Stall {
-					cancel(errStalled)
-					return
-				}
-			}
-		}
-	}()
+	defer watchStall(cancel, pr, c.Stall)()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, "https://"+addr+"/backups/"+url.PathEscape(m.BackupID), pr)
 	if err != nil {
 		return err
@@ -225,3 +218,68 @@ func (p *progressReader) Read(b []byte) (int, error) {
 	}
 	return n, err
 }
+
+// watchStall cancels with errStalled when p has not moved for stall; call
+// the returned func to stop watching.
+func watchStall(cancel context.CancelCauseFunc, p *progressReader, stall time.Duration) func() {
+	p.last.Store(time.Now().UnixNano())
+	stop := make(chan struct{})
+	go func() {
+		t := time.NewTicker(stall / 4)
+		defer t.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-t.C:
+				if !p.done.Load() && time.Since(time.Unix(0, p.last.Load())) > stall {
+					cancel(errStalled)
+					return
+				}
+			}
+		}
+	}()
+	return func() { close(stop) }
+}
+
+// GetBackup streams a stored backup from the node pinned by nodeFP. Like
+// PutBackup it has no overall timeout; a read stalled for c.Stall fails.
+// The manifest comes from the response headers and must name id.
+func (c *Client) GetBackup(ctx context.Context, addr, nodeFP, id string) (inventory.Manifest, io.ReadCloser, error) {
+	ctx, cancel := context.WithCancelCause(ctx)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+addr+"/backups/"+url.PathEscape(id), nil)
+	if err != nil {
+		cancel(nil)
+		return inventory.Manifest{}, nil, plain(addr, err)
+	}
+	tr := c.transport(nodeFP, true, nil)
+	tr.ResponseHeaderTimeout = 5 * c.Stall
+	resp, err := roundTrip(&http.Client{Transport: tr}, req, addr)
+	if err != nil {
+		cancel(nil)
+		return inventory.Manifest{}, nil, err
+	}
+	m, sha, size, err := backupHeaders(resp.Header, id)
+	if err == nil && (sha != m.SHA256 || size != m.Size) {
+		err = fmt.Errorf("%s sent headers that do not match its manifest", addr)
+	}
+	if err != nil {
+		resp.Body.Close()
+		cancel(nil)
+		return inventory.Manifest{}, nil, err
+	}
+	pr := &progressReader{r: resp.Body}
+	stop := watchStall(cancel, pr, c.Stall)
+	return m, &streamBody{progressReader: pr, close: func() error {
+		stop()
+		cancel(nil)
+		return resp.Body.Close()
+	}}, nil
+}
+
+type streamBody struct {
+	*progressReader
+	close func() error
+}
+
+func (s *streamBody) Close() error { return s.close() }

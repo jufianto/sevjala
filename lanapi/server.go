@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -141,6 +142,7 @@ func (s *Server) routes() http.Handler {
 	})
 	mux.HandleFunc("POST /pair", s.pair)
 	mux.HandleFunc("GET /status", s.pairedOnly(s.status))
+	mux.HandleFunc("GET /backups/{id}", s.pairedOnly(s.getBackup))
 	mux.HandleFunc("PUT /backups/{id}", s.pairedOnly(s.putBackup))
 	mux.HandleFunc("DELETE /backups/{id}", s.pairedOnly(s.deleteBackup))
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
@@ -241,7 +243,7 @@ func (s *Server) putBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	m, sha, size, err := backupHeaders(r, id)
+	m, sha, size, err := backupHeaders(r.Header, id)
 	if err == nil {
 		body := &deadlineReader{r: r.Body, rc: http.NewResponseController(w)}
 		err = s.opt.Store.Receive(m, sha, size, body)
@@ -256,6 +258,41 @@ func (s *Server) putBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, PutResponse{BackupID: id, SHA256: sha, Size: size})
+}
+
+// getBackup streams a stored backup to the controller (restore). The store holds
+// it until the stream ends, so a DELETE of it waits.
+func (s *Server) getBackup(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Store == nil {
+		writeError(w, http.StatusConflict, "this agent is a controller; backups live on nodes")
+		return
+	}
+	id := r.PathValue("id")
+	m, rc, err := s.opt.Store.Open(id)
+	if err != nil {
+		code := receiveStatus(err)
+		if errors.Is(err, fs.ErrNotExist) {
+			code = http.StatusNotFound
+		}
+		writeError(w, code, err.Error())
+		return
+	}
+	defer rc.Close()
+	raw, err := json.Marshal(m)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h := w.Header()
+	h.Set("Content-Type", "application/gzip")
+	h.Set("Content-Length", strconv.FormatInt(m.Size, 10))
+	h.Set(HeaderSHA256, m.SHA256)
+	h.Set(HeaderSize, strconv.FormatInt(m.Size, 10))
+	h.Set(HeaderManifest, base64.StdEncoding.EncodeToString(raw))
+	w.WriteHeader(http.StatusOK)
+	n, err := io.Copy(&deadlineWriter{w: w, rc: http.NewResponseController(w)}, rc)
+	s.opt.Log.Info("backup served", logx.Event(logx.EventBackupServed), "backup_id", id, "bytes", n, "complete", err == nil && n == m.Size,
+		"remote", r.RemoteAddr)
 }
 
 // deleteBackup is retention's only way to remove a backup (blueprint AD-08);
@@ -281,13 +318,13 @@ func (s *Server) deleteBackup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, DeleteResponse{BackupID: id, Deleted: deleted})
 }
 
-func backupHeaders(r *http.Request, id string) (inventory.Manifest, string, int64, error) {
+func backupHeaders(h http.Header, id string) (inventory.Manifest, string, int64, error) {
 	var m inventory.Manifest
-	size, err := strconv.ParseInt(r.Header.Get(HeaderSize), 10, 64)
+	size, err := strconv.ParseInt(h.Get(HeaderSize), 10, 64)
 	if err != nil {
 		return m, "", 0, fmt.Errorf("%w: %s: %w", inventory.ErrInvalid, HeaderSize, err)
 	}
-	raw := r.Header.Get(HeaderManifest)
+	raw := h.Get(HeaderManifest)
 	if len(raw) > 8<<10 {
 		return m, "", 0, fmt.Errorf("%w: %s over 8 KiB", inventory.ErrInvalid, HeaderManifest)
 	}
@@ -301,7 +338,7 @@ func backupHeaders(r *http.Request, id string) (inventory.Manifest, string, int6
 	if m.BackupID != id {
 		return m, "", 0, fmt.Errorf("%w: manifest is for %q, not %q", inventory.ErrInvalid, m.BackupID, id)
 	}
-	return m, r.Header.Get(HeaderSHA256), size, nil
+	return m, h.Get(HeaderSHA256), size, nil
 }
 
 func receiveStatus(err error) int {
@@ -330,6 +367,17 @@ type deadlineReader struct {
 func (d *deadlineReader) Read(p []byte) (int, error) {
 	_ = d.rc.SetReadDeadline(time.Now().Add(bodyIdle))
 	return d.r.Read(p)
+}
+
+// deadlineWriter frees the slot when the controller stops reading.
+type deadlineWriter struct {
+	w  io.Writer
+	rc *http.ResponseController
+}
+
+func (d *deadlineWriter) Write(p []byte) (int, error) {
+	_ = d.rc.SetWriteDeadline(time.Now().Add(bodyIdle))
+	return d.w.Write(p)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
