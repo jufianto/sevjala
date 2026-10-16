@@ -9,7 +9,7 @@ the row when a milestone's PR merges, and set the next one to `next`.
 | M1 Coordination | code done — two-PC smoke pending ([how to test](./smoke-tests.md)) | [spec](./superpowers/specs/2026-10-12-m1-coordination-design.md) · [plan](./superpowers/plans/2026-10-12-m1-coordination.md) | |
 | M2 First backup | code done — 3-PC smoke pending ([how to test](./smoke-tests.md)) | [spec](./superpowers/specs/2026-10-13-m2-first-backup-design.md) · [plan](./superpowers/plans/2026-10-13-m2-first-backup.md) | |
 | M3 Unattended | code done — 48 h smoke pending ([how to test](./smoke-tests.md)) | [spec](./superpowers/specs/2026-10-13-m3-unattended-design.md) · no written plan (owner waived it) | |
-| M4 Restore | code done — restore on the real controller passed (CHECKSUM TABLE equal, 21/21 tables); node, replace and multi-PC smokes pending ([how to test](./smoke-tests.md)) | [spec](./superpowers/specs/2026-10-16-m4-restore-design.md) · [plan](./superpowers/plans/2026-10-16-m4-restore.md) | |
+| M4 Restore | code done — controller smokes passed on the real PC (restore, replace, failed replace, file, CHECKSUM TABLE equal); node smokes pending ([how to test](./smoke-tests.md)) | [spec](./superpowers/specs/2026-10-16-m4-restore-design.md) · [plan](./superpowers/plans/2026-10-16-m4-restore.md) | |
 | M5 Operator comfort | | | |
 | M6 UI shell | | | |
 | M7 UI screens | | | |

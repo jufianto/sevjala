@@ -290,6 +290,16 @@ that dumps to 10.8 MiB): `backup now`, then `restore latest --into <db>_smoke` t
 <db>_smoke.t EXTENDED` was equal for all 21. Loading is the slow direction: expect a few
 minutes for a 500 MB database.
 
+Also done there (2026-10-17, build `0.3.0-alpha.2+16`, on a scratch copy of that database added to
+the backup list for the test): replace with a wrong name cancels; replace with the name typed
+backs up first and finishes in 6 s, `CHECKSUM TABLE` equal 21/21; export then `--file` restore in
+4 s, equal 21/21; a damaged exported file is refused before any database exists; `--status`
+follows a restore started elsewhere; MySQL killed mid-load: the restore fails naming the way
+back, `backup now` of that database is refused with the same command also after `service stop`
+/ `start`, and the way back finishes in 8 s without a new pre-restore backup, clears the block,
+equal 21/21, and backups of it work again. Still undone: everything that needs a node (fetch
+from a node, damaged node copy, restore asked on a node).
+
 Still to do on real PCs (controller + at least one node):
 
 ```bat
