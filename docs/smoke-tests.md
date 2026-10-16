@@ -297,8 +297,16 @@ backs up first and finishes in 6 s, `CHECKSUM TABLE` equal 21/21; export then `-
 follows a restore started elsewhere; MySQL killed mid-load: the restore fails naming the way
 back, `backup now` of that database is refused with the same command also after `service stop`
 / `start`, and the way back finishes in 8 s without a new pre-restore backup, clears the block,
-equal 21/21, and backups of it work again. Still undone: everything that needs a node (fetch
-from a node, damaged node copy, restore asked on a node).
+equal 21/21, and backups of it work again.
+
+With a macOS node (2026-10-17): a backup whose only copy was on the node (the controller's
+own copy moved aside) was fetched from it and restored, equal 21/21; `backup now` while the
+node was off ended with "missing copies are sent when those PCs answer again" instead of
+waiting; `sevjala restore` asked on the node is refused with the export hint; a byte flipped in
+the node's copy: the restore refuses it ("damaged"), creates no database and `backups list
+--matrix` shows that copy `!`. With build `0.3.0-alpha.2+25` (D-065) the next reconciliation
+deleted that copy on the node and sent the controller's good copy again (`!`, then `.`, then
+`v` within 5 min); exporting it on the node passes the sha256 check.
 
 Still to do on real PCs (controller + at least one node):
 
@@ -330,7 +338,7 @@ copy.` and `The live database <db> was not touched.` Compare a few tables:
    changed". Typing the name: a pre-restore backup `BK-…` tagged `pre-restore` appears first, then
    the drop and load; the result names the pre-restore backup and the command to undo. While
    it loads, `sevjala backup now` is refused ("being replaced by a restore").
-. Failed replace, on the scratch database: stop MySQL while `--replace-production` loads. The
+6. Failed replace, on the scratch database: stop MySQL while `--replace-production` loads. The
    restore fails naming `sevjala restore <pre-restore id> --replace-production`; `backup now`
    of it is refused with the same command, also after restarting the service
    (`<data-dir>\replace-incomplete-<db>` exists). Start MySQL and run that command: it does
