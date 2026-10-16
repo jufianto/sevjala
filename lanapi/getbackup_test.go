@@ -5,8 +5,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"testing"
+	"time"
 )
 
 func TestGetBackupRoundTrip(t *testing.T) {
@@ -53,5 +55,31 @@ func TestControllerServesNoBackups(t *testing.T) {
 	s := start(t, "controller", dir, id, nil)
 	if _, _, err := controller(t).GetBackup(context.Background(), s.Addr(), id.FP, "BK-20261013-101500-A8F2"); err == nil {
 		t.Error("a controller must not serve backups")
+	}
+}
+
+// A node address that accepts TCP but never speaks TLS (reassigned address,
+// frozen process) must not hold a restore forever.
+func TestGetBackupSilentPeerStalls(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+		}
+	}()
+	c := controller(t)
+	c.Stall = 200 * time.Millisecond
+	start := time.Now()
+	_, _, err = c.GetBackup(context.Background(), ln.Addr().String(), "sha256:00", "BK-20261013-101500-A8F2")
+	if err == nil || time.Since(start) > 3*time.Second {
+		t.Errorf("err = %v after %v", err, time.Since(start))
 	}
 }

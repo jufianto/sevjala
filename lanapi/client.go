@@ -254,9 +254,15 @@ func (c *Client) GetBackup(ctx context.Context, addr, nodeFP, id string) (invent
 	}
 	tr := c.transport(nodeFP, true, nil)
 	tr.ResponseHeaderTimeout = 5 * c.Stall
+	pr := &progressReader{}
+	stop := watchStall(cancel, pr, c.Stall) // also bounds the dial and the TLS handshake
 	resp, err := roundTrip(&http.Client{Transport: tr}, req, addr)
 	if err != nil {
+		stop()
 		cancel(nil)
+		if errors.Is(context.Cause(ctx), errStalled) {
+			return inventory.Manifest{}, nil, fmt.Errorf("%s: %w", addr, errStalled)
+		}
 		return inventory.Manifest{}, nil, err
 	}
 	m, sha, size, err := backupHeaders(resp.Header, id)
@@ -264,12 +270,13 @@ func (c *Client) GetBackup(ctx context.Context, addr, nodeFP, id string) (invent
 		err = fmt.Errorf("%s sent headers that do not match its manifest", addr)
 	}
 	if err != nil {
+		stop()
 		resp.Body.Close()
 		cancel(nil)
 		return inventory.Manifest{}, nil, err
 	}
-	pr := &progressReader{r: resp.Body}
-	stop := watchStall(cancel, pr, c.Stall)
+	pr.r = resp.Body
+	pr.last.Store(time.Now().UnixNano())
 	return m, &streamBody{progressReader: pr, close: func() error {
 		stop()
 		cancel(nil)
