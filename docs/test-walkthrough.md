@@ -171,6 +171,7 @@ sevjala restore latest
 (checking, loading with a percentage), then `Restored … : N tables, in …s, from the controller's
 own copy.` and `The live database … was not touched.` The new database appears in phpMyAdmin
 next to the original; drop it there when you have looked at it.
+Triggers or views that name the original database explicitly still point at it from the copy.
 
 Do not try `--replace-production` on a database you use: it drops and reloads it (after a
 backup). Ctrl-C stops watching only; `sevjala restore --status` shows the restore again.

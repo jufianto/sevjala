@@ -225,8 +225,11 @@ an authenticated `DELETE` removes them.
 written as mysqldump → gzip → (file, sha256) into `<id>.part`, then renamed. A dump that
 fails, is cancelled, or prints `error` on stderr deletes its `.part`; an agent start deletes
 any `.part` left behind.
-Since M4 a restore that fetches from a node writes `<id>.restore.part` here while hashing and
-deletes it when the restore ends; an agent start deletes it like any `.part`.
+Since M4 a restore that fetches from a node, or restores an exported file, writes
+`<id>.restore.part` here while hashing and loads that copy; it is deleted when the restore
+ends, and an agent start deletes it like any `.part`. A `--replace-production` that fails after
+the drop leaves `<data-dir>/replace-incomplete-<db>` (one line: the pre-restore backup id);
+while it exists backups of `<db>` are refused, and a replace that succeeds removes it.
 
 Since M3, reconciliation (every 5 min) removes from staging every backup that is not among
 the newest `[controller.staging] keep` (default 12; 0 means 12) of its database, is not
@@ -304,9 +307,9 @@ the store, then `created`, `distributed`, `partial` or (M3) `expired`. Copy stat
 `transferring`, `verified`, `failed`, `offline`, and since M3 `corrupt` and `deleted`.
 `RestoreRequest` (M4): `{"backup":"<id>|latest","db","into","replace":bool,"confirm","file","dry_run":bool}`.
 `latest` (or empty) is the newest backup of `db`, or of the only configured database, that is
-in the controller's own copy or has a verified copy. `into` defaults to
+in the controller's own copy or has a verified copy on an answering (online or warning) node. `into` defaults to
 `<database>_restored_<yyyymmdd_hhmm>` (the backup's local creation time; names are 1-64 of
-`[A-Za-z0-9_$-]`) and must not exist. `replace` targets the backup's own database instead and
+`[A-Za-z0-9_$-]`, not starting with `-`) and must not exist. `replace` targets the backup's own database instead and
 needs `confirm` equal to it. `file` is an absolute path to an exported `.sql.gz` with its
 `.json` beside it.
 `Restore` (M4): `{"backup_id","backup_created_at","database","target","replace","source","state","step","bytes","size","pre_restore_id","tables","error","started_at","finished_at"}`;

@@ -320,8 +320,15 @@ copy.` and `The live database <db> was not touched.` Compare a few tables:
    changed". Typing the name: a pre-restore backup `BK-…` tagged `manual` appears first, then
    the drop and load; the result names the pre-restore backup and the command to undo. While
    it loads, `sevjala backup now` is refused ("being replaced by a restore").
-6. Restore on a node: `sevjala restore latest` answers that restores run on the controller and
-   how to export the file.
+. Failed replace, on the scratch database: stop MySQL while `--replace-production` loads. The
+   restore fails naming `sevjala restore <pre-restore id> --replace-production`; `backup now`
+   of it is refused with the same command, also after restarting the service
+   (`<data-dir>\replace-incomplete-<db>` exists). Start MySQL and run that command: it does
+   not back the broken database up again, finishes, and backups of it work again.
+
+Caution: a restored copy keeps the triggers, views and routines as they were dumped. One
+that names the original database explicitly (`shop.orders` rather than `orders`) still
+points at the original from inside the copy; check before testing an application against it.
 
 Logs: the controller has `restore_started`, `restore_succeeded` (source, duration, tables) or
 `restore_failed` (step, error), and `restore_source_failed` / `copy_corrupt` per bad source.
