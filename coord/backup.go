@@ -78,7 +78,10 @@ func (c *Controller) start(dbs, tags []string, now time.Time, cfg config.Config)
 			return nil, localapi.Errorf(http.StatusConflict, "a backup of %s is already running (%s)", name, id)
 		}
 		if c.replacing[name] {
-			return nil, localapi.Errorf(http.StatusConflict, "%s is being replaced by a restore; its backups resume when the restore ends", name)
+			return nil, localapi.Errorf(http.StatusConflict, "%s is being loaded by a restore; its backups resume when the restore ends", name)
+		}
+		if id := c.incompleteReplace(name); id != "" {
+			return nil, localapi.Errorf(http.StatusConflict, "%s was left partly loaded by a failed restore; its backups resume once 'sevjala restore %s --replace-production' succeeds", name, id)
 		}
 	}
 	if c.jobs == nil {

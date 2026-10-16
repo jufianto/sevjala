@@ -85,9 +85,13 @@ func (c *Controller) Restore(ctx context.Context, req localapi.RestoreRequest) (
 		}
 		target = b.Database
 	}
-	if !dump.ValidName(target) {
+	switch {
+	case !dump.ValidName(target) && req.Replace:
 		return localapi.Restore{}, localapi.Errorf(http.StatusBadRequest,
-			"%q cannot be a database name here: use letters, digits, _, $ or -, at most 64", target)
+			"Sevjala cannot replace %q: its name has characters it cannot use safely; restore it with --into NAME instead", target)
+	case !dump.ValidName(target):
+		return localapi.Restore{}, localapi.Errorf(http.StatusBadRequest,
+			"%q cannot be a database name here: use letters, digits, _, $ or - (not first), at most 64", target)
 	}
 	if req.Replace && !req.DryRun && req.Confirm != target {
 		return localapi.Restore{}, localapi.Errorf(http.StatusConflict, "not confirmed: type the database name, %s, to replace it", target)
@@ -111,7 +115,10 @@ func (c *Controller) Restore(ctx context.Context, req localapi.RestoreRequest) (
 	if err := c.claimRestore(run); err != nil {
 		return localapi.Restore{}, err
 	}
-	go c.runRestore(run, b, tools, conn, cfg)
+	go func() {
+		defer c.restores.Done()
+		c.runRestore(run, b, tools, conn, cfg)
+	}()
 	return run.get(), nil
 }
 
@@ -133,13 +140,59 @@ func (c *Controller) claimRestore(run *restoreRun) error {
 			return localapi.Errorf(http.StatusConflict, "a restore is already running: %s into %s", v.BackupID, v.Target)
 		}
 	}
-	if v := run.get(); v.Replace {
-		if id, busy := c.running[v.Target]; busy {
-			return localapi.Errorf(http.StatusConflict, "a backup of %s is running (%s); replace it after that backup ends", v.Target, id)
-		}
+	if v := run.get(); c.running[v.Target] != "" {
+		return localapi.Errorf(http.StatusConflict, "a backup of %s is running (%s); restore after that backup ends", v.Target, c.running[v.Target])
 	}
 	c.restore = run
+	c.restores.Add(1)
 	return nil
+}
+
+// WaitRestore waits up to d for a restore to end once the agent's context is done.
+func (c *Controller) WaitRestore(d time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		c.restores.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-time.After(d):
+		return false
+	}
+}
+
+func (c *Controller) incompletePath(db string) string {
+	return filepath.Join(c.DataDir, "replace-incomplete-"+db)
+}
+
+// incompleteReplace is the pre-restore backup named by a replace of db that
+// failed after the drop, "" when none; it survives a restart.
+func (c *Controller) incompleteReplace(db string) string {
+	if c.DataDir == "" {
+		return ""
+	}
+	raw, err := os.ReadFile(c.incompletePath(db))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+func (c *Controller) markIncomplete(db, safety string) error {
+	f, err := os.OpenFile(c.incompletePath(db), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	_, err = f.WriteString(safety + "\n")
+	if serr := f.Sync(); err == nil {
+		err = serr
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	return err
 }
 
 // restoringID is the backup a running restore reads, which retention must
@@ -185,9 +238,17 @@ func (c *Controller) restoreBackup(ctx context.Context, req localapi.RestoreRequ
 	if err != nil {
 		return store.Backup{}, err
 	}
+	as, err := c.Store.Agents(ctx)
+	if err != nil {
+		return store.Backup{}, err
+	}
+	answering := map[string]bool{}
+	for _, a := range as {
+		answering[a.AgentID] = a.State == store.AgentOnline || a.State == store.AgentWarning
+	}
 	for _, b := range bs { // newest first
 		if b.Database == db && (b.StagingPath != "" || slices.ContainsFunc(b.Copies, func(cp store.Copy) bool {
-			return cp.State == store.CopyVerified
+			return cp.State == store.CopyVerified && answering[cp.AgentID]
 		})) {
 			return b, nil
 		}
@@ -275,45 +336,58 @@ func (c *Controller) restoreInto(run *restoreRun, b store.Backup, tools dump.Too
 		}
 	}
 	if v.Replace {
-		return c.replace(run, path, b.Size, charset, collation, tools, conn, cfg)
+		return c.replace(run, path, b.Size, charset, collation, tools, conn, cfg, log)
 	}
 	target := v.Target
+	if err := c.holdBackups(target); err != nil {
+		return err
+	}
+	defer c.releaseBackups(target)
 	run.step("", "creating database "+target, 0)
 	if err := dump.CreateDatabase(c.Ctx, tools, conn, target, charset, collation); err != nil {
 		return err
 	}
 	if err := c.load(run, tools, conn, target, path, b.Size); err != nil {
-		if derr := dump.DropDatabase(context.WithoutCancel(c.Ctx), tools, conn, target); derr != nil {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(c.Ctx), 15*time.Second)
+		defer cancel()
+		if derr := dump.DropDatabase(ctx, tools, conn, target); derr != nil {
 			return fmt.Errorf("%w; the half-made database %s could not be removed: %w", err, target, derr)
 		}
 		return fmt.Errorf("%w; the half-made database %s was removed", err, target)
 	}
-	return c.countTables(run, tools, conn, target)
+	c.countTables(run, tools, conn, target, log)
+	return nil
 }
 
 // replace backs production up, then drops and reloads it (blueprint: Backup
-// engine → Restore). Backups of it are refused from the drop until the end.
+// engine → Restore). Backups of it are refused from the drop until the end,
+// and after a failure past the drop until a replace succeeds. A database a
+// failed replace left partly loaded is not backed up again: the first
+// pre-restore backup still names how it was.
 func (c *Controller) replace(run *restoreRun, path string, size int64, charset, collation string,
-	tools dump.Tools, conn dump.Conn, cfg config.Config) error {
+	tools dump.Tools, conn dump.Conn, cfg config.Config, log *slog.Logger) error {
 	db := run.get().Target
-	run.step("", "backing up "+db+" before replacing it", 0)
-	jobs, err := c.start([]string{db}, []string{defaultTag}, time.Now(), cfg)
-	if err != nil {
-		return fmt.Errorf("the pre-restore backup did not start: %w; %s was not touched", err, db)
+	safety := c.incompleteReplace(db)
+	if safety == "" {
+		run.step("", "backing up "+db+" before replacing it", 0)
+		jobs, err := c.start([]string{db}, []string{defaultTag}, time.Now(), cfg)
+		if err != nil {
+			return fmt.Errorf("the pre-restore backup did not start: %w; %s was not touched", err, db)
+		}
+		safety = jobs[0].BackupID
+		run.set(func(v *localapi.Restore) { v.PreRestoreID = safety })
+		if err := c.waitBackup(safety, db); err != nil {
+			return fmt.Errorf("the pre-restore backup %s failed: %w; %s was not touched", safety, err, db)
+		}
 	}
-	safety := jobs[0].BackupID
 	run.set(func(v *localapi.Restore) { v.PreRestoreID = safety })
-	if err := c.waitBackup(safety, db); err != nil {
-		return fmt.Errorf("the pre-restore backup %s failed: %w; %s was not touched", safety, err, db)
-	}
 	if err := c.holdBackups(db); err != nil {
 		return fmt.Errorf("%w; %s was not touched", err, db)
 	}
-	defer func() {
-		c.mu.Lock()
-		delete(c.replacing, db)
-		c.mu.Unlock()
-	}()
+	defer c.releaseBackups(db)
+	if err := c.markIncomplete(db, safety); err != nil {
+		return fmt.Errorf("%w; %s was not touched", err, db)
+	}
 	back := fmt.Sprintf("put it back as it was with: sevjala restore %s --replace-production", safety)
 	run.step("", "dropping "+db, 0)
 	if err := dump.DropDatabase(c.Ctx, tools, conn, db); err != nil {
@@ -326,7 +400,11 @@ func (c *Controller) replace(run *restoreRun, path string, size int64, charset, 
 	if err := c.load(run, tools, conn, db, path, size); err != nil {
 		return fmt.Errorf("%w; %s is only partly loaded: %s", err, db, back)
 	}
-	return c.countTables(run, tools, conn, db)
+	if err := os.Remove(c.incompletePath(db)); err != nil {
+		log.Error("restore: clear the partly-loaded mark", "err", err)
+	}
+	c.countTables(run, tools, conn, db, log)
+	return nil
 }
 
 // waitBackup waits for the dump id of db to land in the catalog.
@@ -356,8 +434,14 @@ func (c *Controller) waitBackup(id, db string) error {
 	}
 }
 
-// holdBackups marks db as being replaced, then waits out a backup of it that
-// started before the mark; it dumps production as it still is.
+func (c *Controller) releaseBackups(db string) {
+	c.mu.Lock()
+	delete(c.replacing, db)
+	c.mu.Unlock()
+}
+
+// holdBackups marks db as being loaded, then waits out a backup of it that
+// started before the mark; it dumps the database as it still is.
 func (c *Controller) holdBackups(db string) error {
 	c.mu.Lock()
 	if c.replacing == nil {
@@ -395,13 +479,14 @@ func (c *Controller) load(run *restoreRun, tools dump.Tools, conn dump.Conn, db,
 	return dump.Load(c.Ctx, tools, conn, db, &progress{r: f, run: run})
 }
 
-func (c *Controller) countTables(run *restoreRun, tools dump.Tools, conn dump.Conn, db string) error {
+// countTables only reports: a load that succeeded stays a success.
+func (c *Controller) countTables(run *restoreRun, tools dump.Tools, conn dump.Conn, db string, log *slog.Logger) {
 	n, err := dump.TableCount(c.Ctx, tools, conn, db)
 	if err != nil {
-		return err
+		log.Warn("restore: count tables", "err", err)
+		return
 	}
 	run.set(func(v *localapi.Restore) { v.Tables = n })
-	return nil
 }
 
 // fetchVerified returns a file holding b with the catalog's size and sha256:
@@ -415,11 +500,12 @@ func (c *Controller) fetchVerified(run *restoreRun, b store.Backup, log *slog.Lo
 	}
 	if run.file != "" {
 		run.step(run.file, "checking "+run.file, b.Size)
-		if err := verifyFile(run.file, b, run); err != nil {
+		path, err := c.copyFile(run, b)
+		if err != nil {
 			fail(run.file, err)
 			return "", nil, fmt.Errorf("%s cannot be restored: %w", run.file, err)
 		}
-		return run.file, func() {}, nil
+		return path, func() { _ = os.Remove(path) }, nil
 	}
 	if b.StagingPath != "" {
 		path := filepath.Join(c.Staging, b.BackupID+inventory.DataExt)
@@ -491,13 +577,29 @@ func (c *Controller) download(run *restoreRun, b store.Backup, n store.Agent) (s
 		return "", err
 	}
 	defer body.Close()
+	return c.receive(run, b, body)
+}
+
+// copyFile copies an exported file into the controller's folder while
+// checking it, so what is loaded is what was checked.
+func (c *Controller) copyFile(run *restoreRun, b store.Backup) (string, error) {
+	f, err := os.Open(run.file)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	return c.receive(run, b, f)
+}
+
+// receive writes r to staging/<id>.restore.part while hashing it against the catalog.
+func (c *Controller) receive(run *restoreRun, b store.Backup, r io.Reader) (string, error) {
 	path := filepath.Join(c.Staging, b.BackupID+".restore"+inventory.PartExt)
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return "", err
 	}
 	h := sha256.New()
-	written, err := io.Copy(io.MultiWriter(f, h), &progress{r: io.LimitReader(body, b.Size+1), run: run})
+	written, err := io.Copy(io.MultiWriter(f, h), &progress{r: io.LimitReader(r, b.Size+1), run: run})
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
@@ -533,6 +635,7 @@ func (c *Controller) dropOwnCopy(id string, log *slog.Logger) {
 	for _, ext := range []string{inventory.DataExt, inventory.ManifestExt} {
 		if err := os.Remove(filepath.Join(c.Staging, id+ext)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			log.Error("restore: remove damaged copy", "file", id+ext, "err", err)
+			return // still staged, so reconciliation tries again
 		}
 	}
 	if err := c.Store.Unstage(c.Ctx, id); err != nil {

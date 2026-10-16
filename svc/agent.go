@@ -46,6 +46,7 @@ type Agent struct {
 	pool    *transfer.Pool
 	cancel  context.CancelFunc
 	runDone chan struct{}
+	ctrl    *coord.Controller
 }
 
 // The controller's unattended loops (blueprint: /status every 15 s,
@@ -117,7 +118,7 @@ func (a *Agent) start() error {
 			Ctx: ctx, FindTools: dump.FindTools, PollEvery: PollEvery, ReconcileEvery: ReconcileEvery}
 		a.pool = transfer.NewPool(ctrl.Push, ctrl.Settle, transfer.DefaultDelays)
 		ctrl.Pool = a.pool
-		backend.Controller = ctrl
+		backend.Controller, a.ctrl = ctrl, ctrl
 	}
 	if a.api, err = localapi.Start(localapi.Endpoint(a.DataDir), localapi.NewHandler(backend), a.log); err != nil {
 		return err
@@ -154,6 +155,13 @@ func (a *Agent) shutdown() error {
 	if a.runDone != nil {
 		<-a.runDone // Run may still enqueue; the pool closes after it
 		a.runDone = nil
+	}
+	if a.ctrl != nil {
+		// A cancelled restore drops its half-made database and logs why before the store closes.
+		if !a.ctrl.WaitRestore(20 * time.Second) {
+			a.log.Warn("restore still running at shutdown")
+		}
+		a.ctrl = nil
 	}
 	if a.pool != nil {
 		a.pool.Close()

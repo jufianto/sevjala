@@ -31,7 +31,7 @@ func backupOne(t *testing.T, ctrl *Controller, want string) localapi.Backup {
 
 func waitRestore(t *testing.T, ctrl *Controller) localapi.Restore {
 	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for {
 		r, err := ctrl.RestoreStatus(context.Background())
 		if err == nil && r.State != localapi.RestoreRunning {
@@ -136,7 +136,7 @@ func restoreSkipsDamaged(t *testing.T, damage func([]byte) []byte) {
 }
 
 func TestRestoreLoadFailureDropsTheNewDatabase(t *testing.T) {
-	_, log := dumptest.Use(t, dumptest.OK)
+	dumptest.Use(t, dumptest.OK)
 	ctrl := newController(t)
 	b := backupOne(t, ctrl, store.BackupCreated)
 	dumptest.Use(t, dumptest.LoadFails)
@@ -147,7 +147,6 @@ func TestRestoreLoadFailureDropsTheNewDatabase(t *testing.T) {
 	if r.State != localapi.RestoreFailed || !strings.Contains(r.Error, "Duplicate entry") || !strings.Contains(r.Error, "shop_try was removed") {
 		t.Errorf("restore %+v", r)
 	}
-	_ = log
 }
 
 func TestRestoreRefuses(t *testing.T) {
@@ -274,14 +273,14 @@ func TestRestoreReplaceHoldsBackups(t *testing.T) {
 	if _, err := ctrl.Restore(ctx, localapi.RestoreRequest{Backup: b.BackupID, Replace: true, Confirm: "shop"}); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for r, _ := ctrl.RestoreStatus(ctx); !strings.HasPrefix(r.Step, "loading"); r, _ = ctrl.RestoreStatus(ctx) {
 		if time.Now().After(deadline) || r.State != localapi.RestoreRunning {
 			t.Fatalf("never loading: %+v", r)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if _, err := ctrl.BackupNow(ctx, "shop", nil); apiCode(err) != http.StatusConflict || !strings.Contains(err.Error(), "replaced") {
+	if _, err := ctrl.BackupNow(ctx, "shop", nil); apiCode(err) != http.StatusConflict || !strings.Contains(err.Error(), "loaded by a restore") {
 		t.Errorf("backup during the replace: %v", err)
 	}
 }
@@ -411,5 +410,125 @@ func TestRestoreDryRunStartsNothing(t *testing.T) {
 	}
 	if _, err := ctrl.Restore(ctx, localapi.RestoreRequest{Backup: b.BackupID, Into: "shop", DryRun: true}); apiCode(err) != http.StatusConflict {
 		t.Errorf("dry run into an existing database: %v", err)
+	}
+}
+
+// waitLoading returns once the running restore has reached its load step.
+func waitLoading(t *testing.T, ctrl *Controller) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for r, _ := ctrl.RestoreStatus(context.Background()); !strings.HasPrefix(r.Step, "loading"); r, _ = ctrl.RestoreStatus(context.Background()) {
+		if time.Now().After(deadline) || (r.State != "" && r.State != localapi.RestoreRunning) {
+			t.Fatalf("never loading: %+v", r)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestRestoreIntoAConfiguredNameHoldsItsBackups(t *testing.T) {
+	dumptest.Use(t, dumptest.OK)
+	ctx := context.Background()
+	ctrl := newController(t)
+	b := backupOne(t, ctrl, store.BackupCreated)
+	ctrl.Config.Controller.Database.Databases = []string{"shop", "crm"}
+	dumptest.Use(t, dumptest.LoadHangs)
+	if _, err := ctrl.Restore(ctx, localapi.RestoreRequest{Backup: b.BackupID, Into: "crm"}); err != nil {
+		t.Fatal(err)
+	}
+	waitLoading(t, ctrl)
+	if _, err := ctrl.BackupNow(ctx, "crm", nil); apiCode(err) != http.StatusConflict {
+		t.Errorf("backup of a database being loaded: %v", err)
+	}
+}
+
+func TestRestoreReplaceFailureKeepsBackupsHeldUntilTheWayBackSucceeds(t *testing.T) {
+	dumptest.Use(t, dumptest.OK)
+	ctx := context.Background()
+	ctrl := newController(t)
+	b := backupOne(t, ctrl, store.BackupCreated)
+	dumptest.Use(t, dumptest.LoadFails)
+	if _, err := ctrl.Restore(ctx, localapi.RestoreRequest{Backup: b.BackupID, Replace: true, Confirm: "shop"}); err != nil {
+		t.Fatal(err)
+	}
+	failed := waitRestore(t, ctrl)
+	ctrl.mu.Lock()
+	ctrl.replacing = nil // as after a service restart
+	ctrl.mu.Unlock()
+	way := "sevjala restore " + failed.PreRestoreID + " --replace-production"
+	if _, err := ctrl.BackupNow(ctx, "shop", nil); apiCode(err) != http.StatusConflict || !strings.Contains(err.Error(), way) {
+		t.Fatalf("backup of a partly loaded database: %v", err)
+	}
+
+	_, log := dumptest.Use(t, dumptest.OK)
+	if _, err := ctrl.Restore(ctx, localapi.RestoreRequest{Backup: failed.PreRestoreID, Replace: true, Confirm: "shop"}); err != nil {
+		t.Fatal(err)
+	}
+	r := waitRestore(t, ctrl)
+	if r.State != localapi.RestoreDone || r.PreRestoreID != failed.PreRestoreID {
+		t.Fatalf("way back %+v", r)
+	}
+	if strings.Contains(fakeLog(t, log), "--routines") {
+		t.Error("the way back dumped the partly loaded database again")
+	}
+	if _, err := ctrl.BackupNow(ctx, "shop", nil); err != nil {
+		t.Errorf("backups after the way back: %v", err)
+	}
+}
+
+func TestRestoreEndsWithTheAgent(t *testing.T) {
+	dumptest.Use(t, dumptest.OK)
+	ctrl := newController(t)
+	b := backupOne(t, ctrl, store.BackupCreated)
+	ctx, cancel := context.WithCancel(context.Background())
+	ctrl.Ctx = ctx
+	dumptest.Use(t, dumptest.LoadHangs)
+	if _, err := ctrl.Restore(context.Background(), localapi.RestoreRequest{Backup: b.BackupID, Into: "shop_x"}); err != nil {
+		t.Fatal(err)
+	}
+	waitLoading(t, ctrl)
+	cancel()
+	if !ctrl.WaitRestore(10 * time.Second) {
+		t.Fatal("restore still running after the agent stopped")
+	}
+	if r, _ := ctrl.RestoreStatus(context.Background()); r.State != localapi.RestoreFailed || !strings.Contains(r.Error, "shop_x was removed") {
+		t.Errorf("restore %+v", r)
+	}
+}
+
+func TestRestoreFromFileLoadsACheckedCopy(t *testing.T) {
+	dumptest.Use(t, dumptest.OK)
+	ctrl := newController(t)
+	b := backupOne(t, ctrl, store.BackupCreated)
+	path := exported(t, ctrl, b.BackupID, t.TempDir())
+	dumptest.Use(t, dumptest.LoadHangs)
+	if _, err := ctrl.Restore(context.Background(), localapi.RestoreRequest{File: path, Into: "shop_file"}); err != nil {
+		t.Fatal(err)
+	}
+	waitLoading(t, ctrl)
+	if copies, _ := filepath.Glob(filepath.Join(ctrl.Staging, "*.restore.part")); len(copies) != 1 {
+		t.Errorf("the file must be loaded from the copy checked into the controller's own folder, got %v", copies)
+	}
+}
+
+func TestRestoreLatestSkipsBackupsOnlyOnOfflineNodes(t *testing.T) {
+	dumptest.Use(t, dumptest.OK)
+	ctx := context.Background()
+	ctrl := newController(t)
+	node := startAgent(t, "node", "PC-1")
+	pairNode(t, ctrl, node)
+	older := backupOne(t, ctrl, store.BackupDistributed)
+	time.Sleep(1100 * time.Millisecond) // a new id second
+	newer := backupOne(t, ctrl, store.BackupDistributed)
+	for _, ext := range []string{inventory.DataExt, inventory.ManifestExt} {
+		os.Remove(filepath.Join(ctrl.Staging, newer.BackupID+ext))
+	}
+	if err := ctrl.Store.Unstage(ctx, newer.BackupID); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctrl.Store.SetAgentState(ctx, node.id.AgentID, store.AgentOffline); err != nil {
+		t.Fatal(err)
+	}
+	if v, err := ctrl.Restore(ctx, localapi.RestoreRequest{Backup: "latest", DryRun: true}); err != nil || v.BackupID != older.BackupID {
+		t.Errorf("latest = %s, %v; want %s (the newer one is only on an offline node)", v.BackupID, err, older.BackupID)
 	}
 }

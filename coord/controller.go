@@ -53,6 +53,7 @@ type Controller struct {
 	nodes          map[string]*nodeState
 
 	restore   *restoreRun     // the running or last restore, guarded by mu
+	restores  sync.WaitGroup  // restore goroutines, for a bounded wait at shutdown
 	replacing map[string]bool // databases a restore is replacing, guarded by mu
 
 	reconcileMu sync.Mutex
