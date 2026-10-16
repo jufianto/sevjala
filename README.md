@@ -64,6 +64,15 @@ sevjala retention run --dry-run        # what would be deleted or sent, and why
 sevjala backups list --all             # includes expired backups
 ```
 
+Restore (controller): into a new database by default, so the live one is never touched.
+
+```sh
+sevjala restore latest                 # into shop_restored_<date>; prints table count and time
+sevjala restore BK-20261016-101500-A8F2 --into shop_check
+sevjala restore latest --replace-production   # backs shop up first, then asks you to type "shop"
+sevjala restore --file D:\export\shop\2026-10-16_10-15-00.sql.gz   # a file from backups export
+```
+
 ## Commands
 
 Every command explains itself with examples: `sevjala <command> --help`.
@@ -73,7 +82,7 @@ Every command explains itself with examples: `sevjala <command> --help`.
 | Install & status | `setup`, `update [--from FILE]`, `service install/start/stop/status/uninstall`, `doctor`, `version` |
 | Connect PCs | `discover`, `code` (on the backup PC), `pair`, `agents`, `agents add/remove`, `ping` |
 | Database | `db detect`, `db set` |
-| Backups | `backup now`, `backups list [--matrix]`, `backups export <backup\|latest\|all> --to FOLDER` (copy out, no sudo needed on macOS/Linux) |
+| Backups | `backup now`, `backups list [--matrix]`, `backups export <backup\|latest\|all> --to FOLDER` (copy out, no sudo needed on macOS/Linux), `restore <backup\|latest> [--into NAME \| --replace-production]`, `restore --file PATH`, `restore --status` |
 | Schedules & cleanup | `policy list/add/set/remove`, `retention run [--dry-run]` |
 
 Build: `make build` (host), `make build-all` (every asset incl. Windows 7), `make test`,

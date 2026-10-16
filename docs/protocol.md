@@ -88,6 +88,7 @@ except `PUT /backups/{id}`.
 | `GET /status` | paired controller cert | see below | 403 otherwise |
 | `PUT /backups/{id}` | paired controller cert | see below | see below |
 | `DELETE /backups/{id}` (M3) | paired controller cert | see below | see below |
+| `GET /backups/{id}` (M4) | paired controller cert | see below | see below |
 | anything else | | | 404 `not found` |
 
 `POST /pair` body: `{"controller_id":"…","controller_fp":"sha256:…","proof":"<hex>"}` with
@@ -140,6 +141,25 @@ Each body read must arrive within 60 s; the controller cancels after 60 s withou
 | 422 | the received bytes do not match `size`/`sha256`; nothing is kept |
 | 507 | storing it would leave less than `min_free_bytes` free |
 | 500 | anything else (disk error) |
+
+### `GET /backups/{id}` (since M4)
+
+Paired controller only; a restore fetches a node's copy with it. The body is the `.sql.gz` file
+with the same `X-Sevjala-Sha256`, `X-Sevjala-Size` and `X-Sevjala-Manifest` headers as `PUT`,
+plus `Content-Length`. The node holds the backup while it streams, so a `DELETE` of it waits
+(503) until the stream ends; each write must leave within 60 s. The controller checks the
+headers against the manifest, and size and sha256 against its catalog while it writes
+`staging/<id>.restore.part`, which it deletes when the restore ends.
+
+| Status | Meaning |
+|---|---|
+| 200 | the file follows |
+| 400 | bad id |
+| 403 | not the paired controller |
+| 404 | not held here |
+| 503 | being received or deleted right now |
+| 422 | the file on disk is not the size its manifest says (damaged) |
+| 409 | the agent is a controller |
 
 ## Manifest (since M2)
 
@@ -205,6 +225,8 @@ an authenticated `DELETE` removes them.
 written as mysqldump → gzip → (file, sha256) into `<id>.part`, then renamed. A dump that
 fails, is cancelled, or prints `error` on stderr deletes its `.part`; an agent start deletes
 any `.part` left behind.
+Since M4 a restore that fetches from a node writes `<id>.restore.part` here while hashing and
+deletes it when the restore ends; an agent start deletes it like any `.part`.
 
 Since M3, reconciliation (every 5 min) removes from staging every backup that is not among
 the newest `[controller.staging] keep` (default 12; 0 means 12) of its database, is not
@@ -250,6 +272,8 @@ on a node`); a LAN failure behind a route is 502. Bodies are capped at 4 KiB.
 | `PATCH /policies/{name}` (M3) | controller | `PolicyChange`; omitted fields keep their value | `Policy`; 404 unknown |
 | `DELETE /policies/{name}` (M3) | controller | — | `{}`; 404 unknown, 409 for `manual`. Backups carrying the tag are kept. |
 | `POST /retention/run` (M3) | controller | `{"dry_run":bool}` | `RetentionPlan` |
+| `POST /restore` (M4) | controller | `RestoreRequest` | `Restore` as started (`state` `running`), or with `dry_run` what would run (`state` `""`). 400 bad input or both `backup` and `file`; 404 no such backup, or none of that database to restore; 409 a restore is running, the target exists, `replace` without `confirm` equal to the database, `replace` while that database is dumping or does not exist, or the backup expired. On a node: 409 saying to export the file and restore it with `--file` on the controller. |
+| `GET /restore` (M4) | controller | — | the running or last `Restore`; 404 when none ran since the agent started |
 | `GET /held` | both | — | `{"backups":[Manifest…]}`, oldest first: the complete backups this PC holds (a node's store, the controller's staging). Read-only: unlike the scan behind the LAN `GET /status`, it removes nothing and reports no problems. |
 | `GET /held/{id}` | both | — | The `.sql.gz` bytes, `Content-Length` = manifest size. 400 not a backup id, 404 not here, 409 being received or deleted (a node holds the backup until the stream ends, so a `DELETE` from the controller waits) or damaged. The CLI checks size and sha256 itself. |
 | anything else | | | 404 `not found` |
@@ -278,6 +302,18 @@ with `Action` `{"backup_id","agent_id","hostname","reason"}`; a `kept` entry wit
 `state` is `dumping` (with `bytes` so far) or `failed` (with `error`) before the backup is in
 the store, then `created`, `distributed`, `partial` or (M3) `expired`. Copy states: `pending`,
 `transferring`, `verified`, `failed`, `offline`, and since M3 `corrupt` and `deleted`.
+`RestoreRequest` (M4): `{"backup":"<id>|latest","db","into","replace":bool,"confirm","file","dry_run":bool}`.
+`latest` (or empty) is the newest backup of `db`, or of the only configured database, that is
+in the controller's own copy or has a verified copy. `into` defaults to
+`<database>_restored_<yyyymmdd_hhmm>` (the backup's local creation time; names are 1-64 of
+`[A-Za-z0-9_$-]`) and must not exist. `replace` targets the backup's own database instead and
+needs `confirm` equal to it. `file` is an absolute path to an exported `.sql.gz` with its
+`.json` beside it.
+`Restore` (M4): `{"backup_id","backup_created_at","database","target","replace","source","state","step","bytes","size","pre_restore_id","tables","error","started_at","finished_at"}`;
+`state` `running`, `done` or `failed`; `step` says in words what runs now, `bytes` of `size`
+its progress; `source` is `the controller's own copy`, a node's hostname or the file path;
+`pre_restore_id` is the backup made just before a replace; `tables` counts the base tables
+loaded.
 
 ### `GET /status`
 

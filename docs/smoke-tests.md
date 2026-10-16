@@ -273,3 +273,55 @@ sevjala policy set daily --disable                         # ENABLED no; retenti
 
 Logs: the controller has `schedule_fired`, `agent_online`/`agent_offline`, `backfill_queued`,
 `retention_delete`, `staging_pruned`; each node has `backup_deleted` with the reason.
+
+## M4 — restore
+
+Exit criterion: a restored database's `CHECKSUM TABLE` equals the original's for every table.
+
+Already covered without real PCs: the coord tests restore from the controller's own copy,
+from a node (skipping a changed or truncated copy on another node and marking it corrupt),
+from an exported file, and replace production (pre-restore backup first, backups refused
+during the load, the way back named on failure). `make test-integration` loads a real dump
+into MariaDB 10.4 and compares `CHECKSUM TABLE` per table.
+
+Done on the owner's controller (2026-10-16, Windows, XAMPP MariaDB 10.1.38, a 45 MB database
+that dumps to 10.8 MiB): `backup now`, then `restore latest --into <db>_smoke` took 8 s
+(checking the controller's own copy, then loading), 21 tables, and `CHECKSUM TABLE <db>.t,
+<db>_smoke.t EXTENDED` was equal for all 21. Loading is the slow direction: expect a few
+minutes for a 500 MB database.
+
+Still to do on real PCs (controller + at least one node):
+
+```bat
+sevjala restore latest
+```
+
+**Expect:** `Restoring BK-… (<db>) into <db>_restored_<date>`, a step line per step, a
+percentage at most every 5 s, then `Restored … : N tables, in …, from the controller's own
+copy.` and `The live database <db> was not touched.` Compare a few tables:
+`CHECKSUM TABLE <db>.<t>, <db>_restored_<date>.<t> EXTENDED`. Drop the copy when done.
+
+1. From a node: pick a backup no longer in the controller's own copy (older than the newest
+   12, `backups list` shows it `distributed`) and restore it with `--into <db>_fromnode`.
+   The result says `from <node hostname>`; the node's log has `backup_served`.
+2. Damaged node copy: with two nodes holding the backup, flip a byte in the newer node's
+   `BK-….sql.gz`. The restore logs `restore_source_failed` and `copy_corrupt` for that node,
+   finishes from the other one, and `backups list` shows that copy `corrupt` until retention
+   replaces it.
+3. Ctrl-C while it loads: the CLI says it is still running; `sevjala restore --status`
+   follows it to the end.
+4. From a file (on a second PC acting as a new controller, or the same one):
+   `sevjala backups export latest --to D:\export` on a node, copy the folder over, then
+   `sevjala restore --file D:\export\<db>\<date>.sql.gz --into <db>_fromfile`. Change one
+   byte of the file: the restore fails with "damaged" before anything is created.
+5. Replace production, **on a test database only** (configure a scratch database first, e.g.
+   `db set --db scratch`): `sevjala restore latest --replace-production`. It shows the backup,
+   its date and size, and asks for the name; typing anything else cancels with "nothing was
+   changed". Typing the name: a pre-restore backup `BK-…` tagged `manual` appears first, then
+   the drop and load; the result names the pre-restore backup and the command to undo. While
+   it loads, `sevjala backup now` is refused ("being replaced by a restore").
+6. Restore on a node: `sevjala restore latest` answers that restores run on the controller and
+   how to export the file.
+
+Logs: the controller has `restore_started`, `restore_succeeded` (source, duration, tables) or
+`restore_failed` (step, error), and `restore_source_failed` / `copy_corrupt` per bad source.

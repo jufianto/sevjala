@@ -161,7 +161,21 @@ sudo sevjala service start
 controller log, `C:\ProgramData\Sevjala\logs\sevjala.log`), and `backups list --matrix` is
 all `v` again.
 
-## 10. Run setup again (Windows)
+## 10. Restore (Windows)
+
+```bat
+sevjala restore latest
+```
+
+**Expect:** `Restoring BK-… (<database>) into <database>_restored_<date>`, a few step lines
+(checking, loading with a percentage), then `Restored … : N tables, in …s, from the controller's
+own copy.` and `The live database … was not touched.` The new database appears in phpMyAdmin
+next to the original; drop it there when you have looked at it.
+
+Do not try `--replace-production` on a database you use: it drops and reloads it (after a
+backup). Ctrl-C stops watching only; `sevjala restore --status` shows the restore again.
+
+## 11. Run setup again (Windows)
 
 Double-click the downloaded `.exe` again and accept UAC.
 
@@ -180,7 +194,7 @@ downloads it ("checksum ok"), stops the service, replaces it and starts it again
 installs that file the same way without Internet. `sevjala version` shows the new version;
 `C:\Program Files\Sevjala\sevjala.exe.old` is the previous one.
 
-## 11. Clean up
+## 12. Clean up
 
 ```sh
 sevjala agents remove <node-id>        # Windows: stop backing up to the Mac (its files stay)
