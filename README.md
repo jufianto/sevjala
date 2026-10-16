@@ -57,7 +57,7 @@ Unattended (controller): backups run on policy schedules (local time) and each n
 newest N per policy; a node that was off is filled in when it comes back.
 
 ```sh
-sevjala policy list                    # frequent, hourly, daily, monthly, manual (backup now)
+sevjala policy list                    # frequent, hourly, daily, monthly, manual (backup now), pre-restore
 sevjala policy add weekly --schedule @weekly --keep 4
 sevjala policy set frequent --keep 6 --to pc-2,pc-3
 sevjala retention run --dry-run        # what would be deleted or sent, and why

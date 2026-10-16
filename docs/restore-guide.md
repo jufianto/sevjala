@@ -58,7 +58,8 @@ Only when the live database is broken and you want it exactly as it was in a bac
 
 3. Sevjala shows which backup, when it was made and its size, and asks you to type the database
    name. Type it exactly (`shop`) and press Enter. Anything else cancels and changes nothing.
-4. Sevjala first makes a fresh backup of the live database as it is now, then drops it and loads
+4. Sevjala first makes a fresh backup of the live database as it is now (labelled `pre-restore`
+   in `sevjala backups list`; the newest 5 per database are kept), then drops it and loads
    the backup. The database is unavailable until loading ends.
 
    ```

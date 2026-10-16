@@ -189,7 +189,7 @@ headers against the manifest, and size and sha256 against its catalog while it w
 | `created_at` | RFC 3339, whole seconds |
 | `dump_flags` | content flags, then `--single-transaction` (all tables InnoDB) or `--lock-tables` |
 | `size`, `sha256` | of the `.sql.gz` file (gzip of the mysqldump output) |
-| `tags` | `manual` unless `backup now --tag` |
+| `tags` | `manual` unless `backup now --tag`; `pre-restore` for the backup `--replace-production` makes first (M4) |
 
 ### `DELETE /backups/{id}` (since M3)
 
@@ -273,7 +273,7 @@ on a node`); a LAN failure behind a route is 502. Bodies are capped at 4 KiB.
 | `GET /policies` (M3) | controller | — | `{"policies":[Policy…]}` in creation order |
 | `POST /policies` (M3) | controller | `PolicyChange` with `name` and `keep` | `Policy`; 400 invalid, 409 exists |
 | `PATCH /policies/{name}` (M3) | controller | `PolicyChange`; omitted fields keep their value | `Policy`; 404 unknown |
-| `DELETE /policies/{name}` (M3) | controller | — | `{}`; 404 unknown, 409 for `manual`. Backups carrying the tag are kept. |
+| `DELETE /policies/{name}` (M3) | controller | — | `{}`; 404 unknown, 409 for `manual` and `pre-restore` (M4). Backups carrying the tag are kept. |
 | `POST /retention/run` (M3) | controller | `{"dry_run":bool}` | `RetentionPlan` |
 | `POST /restore` (M4) | controller | `RestoreRequest` | `Restore` as started (`state` `running`), or with `dry_run` what would run (`state` `""`). 400 bad input or both `backup` and `file`; 404 no such backup, or none of that database to restore; 409 a restore is running, the target exists, `replace` without `confirm` equal to the database, `replace` while that database is dumping or does not exist, or the backup expired. On a node: 409 saying to export the file and restore it with `--file` on the controller. |
 | `GET /restore` (M4) | controller | — | the running or last `Restore`; 404 when none ran since the agent started |

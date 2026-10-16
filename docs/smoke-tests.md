@@ -221,7 +221,7 @@ Setup: the M2 setup (controller with a database chosen, three paired nodes).
 
 ```sh
 # controller
-sevjala policy list                  # frequent, hourly, daily, monthly, manual; NEXT RUN filled in
+sevjala policy list                  # frequent, hourly, daily, monthly, manual, pre-restore; NEXT RUN filled in
 sevjala doctor                       # ok schedule (next run …), ok nodes (3 online)
 sevjala agents                 # STATE online, FREE filled in for every node
 ```
@@ -327,7 +327,7 @@ copy.` and `The live database <db> was not touched.` Compare a few tables:
 5. Replace production, **on a test database only** (configure a scratch database first, e.g.
    `db set --db scratch`): `sevjala restore latest --replace-production`. It shows the backup,
    its date and size, and asks for the name; typing anything else cancels with "nothing was
-   changed". Typing the name: a pre-restore backup `BK-…` tagged `manual` appears first, then
+   changed". Typing the name: a pre-restore backup `BK-…` tagged `pre-restore` appears first, then
    the drop and load; the result names the pre-restore backup and the command to undo. While
    it loads, `sevjala backup now` is refused ("being replaced by a restore").
 . Failed replace, on the scratch database: stop MySQL while `--replace-production` loads. The
