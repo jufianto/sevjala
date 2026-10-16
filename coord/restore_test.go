@@ -84,6 +84,15 @@ func TestRestoreFromOwnCopy(t *testing.T) {
 }
 
 func TestRestoreFetchesFromANodeAndSkipsADamagedCopy(t *testing.T) {
+	for name, damage := range map[string]func([]byte) []byte{
+		"bytes changed": func(raw []byte) []byte { raw[len(raw)/2] ^= 0xff; return raw },
+		"truncated":     func(raw []byte) []byte { return raw[:len(raw)/2] },
+	} {
+		t.Run(name, func(t *testing.T) { restoreSkipsDamaged(t, damage) })
+	}
+}
+
+func restoreSkipsDamaged(t *testing.T, damage func([]byte) []byte) {
 	_, log := dumptest.Use(t, dumptest.OK)
 	ctx := context.Background()
 	ctrl := newController(t)
@@ -99,8 +108,7 @@ func TestRestoreFetchesFromANodeAndSkipsADamagedCopy(t *testing.T) {
 	}
 	path := filepath.Join(bad.inv.Dir(), b.BackupID+inventory.DataExt)
 	raw, _ := os.ReadFile(path)
-	raw[len(raw)/2] ^= 0xff
-	os.WriteFile(path, raw, 0o600)
+	os.WriteFile(path, damage(raw), 0o600)
 	if err := ctrl.Store.MarkCopy(ctx, b.BackupID, bad.id.AgentID, store.CopyVerified, "", time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}

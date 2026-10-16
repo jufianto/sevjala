@@ -22,6 +22,7 @@ import (
 	"github.com/jufianto/sevjala/config"
 	"github.com/jufianto/sevjala/dump"
 	"github.com/jufianto/sevjala/inventory"
+	"github.com/jufianto/sevjala/lanapi"
 	"github.com/jufianto/sevjala/localapi"
 	"github.com/jufianto/sevjala/logx"
 	"github.com/jufianto/sevjala/store"
@@ -456,7 +457,7 @@ func (c *Controller) fetchVerified(run *restoreRun, b store.Backup, log *slog.Lo
 	return "", nil, fmt.Errorf("no good copy of %s could be read: %s", b.BackupID, strings.Join(tried, "; "))
 }
 
-// restoreNodes are the online nodes holding a verified copy of b, newest copy first.
+// restoreNodes are the answering nodes (online or warning) holding a verified copy of b, newest copy first.
 func (c *Controller) restoreNodes(b store.Backup) ([]store.Agent, error) {
 	copies := slices.Clone(b.Copies)
 	slices.SortFunc(copies, func(x, y store.Copy) int { return y.VerifiedAt.Compare(x.VerifiedAt) })
@@ -472,7 +473,7 @@ func (c *Controller) restoreNodes(b store.Backup) ([]store.Agent, error) {
 		if err != nil {
 			return nil, err
 		}
-		if a.State == store.AgentOnline {
+		if a.State == store.AgentOnline || a.State == store.AgentWarning {
 			out = append(out, a)
 		}
 	}
@@ -482,6 +483,10 @@ func (c *Controller) restoreNodes(b store.Backup) ([]store.Agent, error) {
 // download writes n's copy of b to staging/<id>.restore.part while hashing it.
 func (c *Controller) download(run *restoreRun, b store.Backup, n store.Agent) (string, error) {
 	_, body, err := c.LAN.GetBackup(c.Ctx, net.JoinHostPort(n.LastIP, strconv.Itoa(n.Port)), n.FP, b.BackupID)
+	var he *lanapi.HTTPError
+	if errors.As(err, &he) && he.Code == http.StatusUnprocessableEntity {
+		return "", fmt.Errorf("%w (%w)", errDamaged, err)
+	}
 	if err != nil {
 		return "", err
 	}
