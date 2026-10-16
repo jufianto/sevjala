@@ -370,7 +370,7 @@ func (c *Controller) replace(run *restoreRun, path string, size int64, charset, 
 	safety := c.incompleteReplace(db)
 	if safety == "" {
 		run.step("", "backing up "+db+" before replacing it", 0)
-		jobs, err := c.start([]string{db}, []string{defaultTag}, time.Now(), cfg)
+		jobs, err := c.start([]string{db}, []string{preRestoreTag}, time.Now(), cfg)
 		if err != nil {
 			return fmt.Errorf("the pre-restore backup did not start: %w; %s was not touched", err, db)
 		}

@@ -25,7 +25,12 @@ import (
 	"github.com/jufianto/sevjala/transfer"
 )
 
-const defaultTag = "manual"
+const (
+	defaultTag = "manual"
+	// preRestoreTag labels the backup --replace-production makes first; its own
+	// keep count means replaces never push out backups made by hand.
+	preRestoreTag = "pre-restore"
+)
 
 var tagPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
 

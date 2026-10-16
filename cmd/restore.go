@@ -28,7 +28,7 @@ func newRestoreCmd(g *globals) *cobra.Command {
 copy, then point your application at it or copy what you need from it.
 
 --replace-production replaces the live database instead. Sevjala first backs it up (an
-ordinary backup tagged manual, so you can undo), then drops it and loads the backup. You
+ordinary backup tagged pre-restore, so you can undo), then drops it and loads the backup. You
 type the database name to confirm. The database is unavailable until loading ends.
 
 The backup is read from the controller's own copy, or fetched from a backup PC when this

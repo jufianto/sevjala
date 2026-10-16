@@ -42,6 +42,7 @@ func TestMigrateV2ToV3SeedsPolicies(t *testing.T) {
 		{Name: "daily", Cron: "0 1 * * *", Keep: 30, Destinations: []string{}, Enabled: true},
 		{Name: "monthly", Cron: "0 1 1 * *", Keep: 12, Destinations: []string{}, Enabled: true},
 		{Name: "manual", Cron: "", Keep: 10, Destinations: []string{}, Enabled: true},
+		{Name: "pre-restore", Cron: "", Keep: 5, Destinations: []string{}, Enabled: true},
 	}
 	if !reflect.DeepEqual(ps, want) {
 		t.Errorf("policies\n got %+v\nwant %+v", ps, want)

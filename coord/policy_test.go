@@ -18,7 +18,7 @@ func TestPolicies(t *testing.T) {
 	ctx := context.Background()
 	ctrl := newController(t)
 	ps, err := ctrl.Policies(ctx)
-	if err != nil || len(ps) != 5 || ps[0].Name != "frequent" || ps[4].Name != "manual" {
+	if err != nil || len(ps) != 6 || ps[0].Name != "frequent" || ps[4].Name != "manual" || ps[5].Name != "pre-restore" {
 		t.Fatalf("defaults %+v, %v", ps, err)
 	}
 	if ps[0].NextRun.IsZero() || !ps[4].NextRun.IsZero() || len(ps[0].To) != 0 {
@@ -51,6 +51,7 @@ func TestPolicies(t *testing.T) {
 		{"unknown node", second(ctrl.AddPolicy(ctx, localapi.PolicyChange{Name: "x", Keep: ptr(1), To: []string{"PC-9"}})), http.StatusNotFound, "PC-9"},
 		{"set unknown", second(ctrl.SetPolicy(ctx, "nope", localapi.PolicyChange{Keep: ptr(1)})), http.StatusNotFound, "no policy nope"},
 		{"remove manual", ctrl.RemovePolicy(ctx, "manual"), http.StatusConflict, "backup now"},
+		{"remove pre-restore", ctrl.RemovePolicy(ctx, "pre-restore"), http.StatusConflict, "--replace-production"},
 		{"remove unknown", ctrl.RemovePolicy(ctx, "nope"), http.StatusNotFound, "no policy nope"},
 	}
 	for _, e := range errs {

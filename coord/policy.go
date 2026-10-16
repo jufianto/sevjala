@@ -72,6 +72,9 @@ func (c *Controller) RemovePolicy(ctx context.Context, name string) error {
 	if name == defaultTag {
 		return localapi.Errorf(http.StatusConflict, "the manual policy is used by 'sevjala backup now' and cannot be removed")
 	}
+	if name == preRestoreTag {
+		return localapi.Errorf(http.StatusConflict, "the pre-restore policy keeps the backups made before 'sevjala restore --replace-production' and cannot be removed")
+	}
 	if _, err := c.policy(ctx, name); err != nil {
 		return err
 	}

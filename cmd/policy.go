@@ -159,6 +159,9 @@ func renderPolicies(w io.Writer, ps []localapi.Policy) {
 	fmt.Fprintln(tw, "NAME\tWHEN\tNEXT RUN\tKEEP\tTO\tENABLED")
 	for _, p := range ps {
 		sched, next, to, on := scheduler.Describe(p.Schedule), "-", "all", "yes"
+		if p.Name == "pre-restore" && p.Schedule == "" {
+			sched = "before a restore replaces the database"
+		}
 		if !p.NextRun.IsZero() {
 			next = p.NextRun.Local().Format("2006-01-02 15:04")
 		}

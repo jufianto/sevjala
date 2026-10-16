@@ -72,6 +72,7 @@ var migrations = []string{
 	INSERT INTO policies (name, cron, keep) VALUES
 		('frequent', '*/10 * * * *', 12), ('hourly', '0 * * * *', 24),
 		('daily', '0 1 * * *', 30), ('monthly', '0 1 1 * *', 12), ('manual', '', 10)`,
+	`INSERT OR IGNORE INTO policies (name, cron, keep) VALUES ('pre-restore', '', 5)`,
 }
 
 type Agent struct {

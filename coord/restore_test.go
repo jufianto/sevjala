@@ -205,7 +205,7 @@ func TestRestoreReplaceProduction(t *testing.T) {
 		t.Fatalf("restore %+v", r)
 	}
 	safety, err := ctrl.Store.Backup(ctx, r.PreRestoreID)
-	if err != nil || safety.Database != "shop" || !slices.Contains(safety.Tags, "manual") {
+	if err != nil || safety.Database != "shop" || !slices.Equal(safety.Tags, []string{"pre-restore"}) {
 		t.Errorf("pre-restore backup %+v, %v", safety, err)
 	}
 	calls := strings.Split(fakeLog(t, log), "\n")
