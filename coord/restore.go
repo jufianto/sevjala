@@ -531,7 +531,7 @@ func (c *Controller) fetchVerified(run *restoreRun, b store.Backup, log *slog.Lo
 		}
 		fail(n.Hostname, err)
 		if errors.Is(err, errDamaged) {
-			if err := c.Store.MarkCopy(c.Ctx, b.BackupID, n.AgentID, store.CopyCorrupt, "damaged: found by a restore", time.Now()); err != nil {
+			if err := c.Store.MarkCopy(c.Ctx, b.BackupID, n.AgentID, store.CopyCorrupt, store.ReasonHashMismatch, time.Now()); err != nil {
 				log.Error("restore: mark copy corrupt", "agent_id", n.AgentID, "err", err)
 			}
 			log.Warn("copy corrupt", logx.Event(logx.EventCopyCorrupt), "agent_id", n.AgentID, "host", n.Hostname)

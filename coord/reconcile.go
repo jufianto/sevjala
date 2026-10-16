@@ -92,7 +92,8 @@ func (c *Controller) retentionInput(ctx context.Context) (retention.Input, map[s
 			Tags: b.Tags, Expired: b.State == store.BackupExpired, Staged: b.StagingPath != "" && c.inStaging(b.BackupID),
 			Copies: map[string]retention.Copy{}}
 		for _, cp := range b.Copies {
-			rb.Copies[cp.AgentID] = retention.Copy{State: cp.State, VerifiedAt: cp.VerifiedAt}
+			rb.Copies[cp.AgentID] = retention.Copy{State: cp.State, VerifiedAt: cp.VerifiedAt,
+				HashFailed: cp.State == store.CopyCorrupt && cp.LastError == store.ReasonHashMismatch}
 		}
 		in.Backups = append(in.Backups, rb)
 	}

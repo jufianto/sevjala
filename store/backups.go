@@ -27,6 +27,10 @@ const (
 	CopyDeleted      = "deleted"
 )
 
+// ReasonHashMismatch marks a copy the controller itself read and found damaged;
+// the node's own inventory cannot see that, so retention replaces it.
+const ReasonHashMismatch = "damaged: its sha256 did not match when the controller read it"
+
 type Backup struct {
 	BackupID    string
 	Database    string

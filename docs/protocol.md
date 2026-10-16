@@ -400,7 +400,7 @@ INSERT INTO policies (name, cron, keep) VALUES
   ('daily', '0 1 * * *', 30), ('monthly', '0 1 1 * *', 12), ('manual', '', 10);
 ```
 
-Copy states add `corrupt` (the node reports it corrupt or with another sha256) and `deleted`
+Copy states add `corrupt` (the node reports it corrupt or with another sha256, or the controller read it and its sha256 did not match: `last_error` "damaged: its sha256 did not match when the controller read it", and retention replaces it although the node still lists it) and `deleted`
 (removed by retention). The backup state ignores `deleted` copies: `created` while any copy is
 `pending` or `transferring` or none is left, `distributed` when every remaining copy is
 `verified`, else `partial`; `expired` (no copy and no staging file left) is set by

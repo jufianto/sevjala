@@ -25,6 +25,7 @@ type Policy struct {
 type Copy struct {
 	State      string
 	VerifiedAt time.Time
+	HashFailed bool // the controller read this copy and its sha256 did not match
 }
 
 type Backup struct {
@@ -182,9 +183,11 @@ func (c *computer) lastSource(b *Backup, agent string) bool {
 }
 
 func (c *computer) node(n Node) {
+	// The node's inventory checks size and the manifest's sha256, not the bytes; a
+	// copy the controller read and found damaged stays damaged until replaced.
 	verified := func(b *Backup) bool {
 		h, ok := n.Actual[b.ID]
-		return ok && h.State == inventory.StateVerified && h.SHA256 == b.SHA256
+		return ok && h.State == inventory.StateVerified && h.SHA256 == b.SHA256 && !b.Copies[n.AgentID].HashFailed
 	}
 	// A node drops an old copy only once newer ones are verified on that same node.
 	needed, why := maps.Clone(c.wanted(n.AgentID)), map[string]string{}

@@ -2,6 +2,8 @@ package coord
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"os"
@@ -530,5 +532,47 @@ func TestRestoreLatestSkipsBackupsOnlyOnOfflineNodes(t *testing.T) {
 	}
 	if v, err := ctrl.Restore(ctx, localapi.RestoreRequest{Backup: "latest", DryRun: true}); err != nil || v.BackupID != older.BackupID {
 		t.Errorf("latest = %s, %v; want %s (the newer one is only on an offline node)", v.BackupID, err, older.BackupID)
+	}
+}
+
+// A node lists a copy as fine from its size and manifest; once a restore has
+// read it and found it damaged, reconciliation must replace it, not trust it.
+func TestDamageFoundByARestoreIsRepaired(t *testing.T) {
+	dumptest.Use(t, dumptest.OK)
+	ctx := context.Background()
+	ctrl := newController(t)
+	pc := startAgent(t, "node", "PC-1")
+	pairNode(t, ctrl, pc)
+	b := backupOne(t, ctrl, store.BackupDistributed)
+	onNode := filepath.Join(pc.inv.Dir(), b.BackupID+inventory.DataExt)
+	raw, _ := os.ReadFile(onNode)
+	raw[len(raw)/2] ^= 0xff
+	os.WriteFile(onNode, raw, 0o600)
+	own := filepath.Join(ctrl.Staging, b.BackupID+inventory.DataExt)
+	os.Rename(own, own+".hidden")
+	if _, err := ctrl.Restore(ctx, localapi.RestoreRequest{Backup: b.BackupID, Into: "shop_x"}); err != nil {
+		t.Fatal(err)
+	}
+	if r := waitRestore(t, ctrl); r.State != localapi.RestoreFailed || !strings.Contains(r.Error, "damaged") {
+		t.Fatalf("restore %+v", r)
+	}
+	os.Rename(own+".hidden", own)
+
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		ctrl.PollAll(ctx)
+		if _, err := ctrl.Reconcile(ctx, false); err != nil {
+			t.Fatal(err)
+		}
+		got, _ := os.ReadFile(onNode)
+		sum := sha256.Sum256(got)
+		if hex.EncodeToString(sum[:]) == b.SHA256 {
+			return
+		}
+		if time.Now().After(deadline) {
+			cp, _ := ctrl.Store.Backup(ctx, b.BackupID)
+			t.Fatalf("the damaged copy on PC-1 was never replaced; copies %+v", cp.Copies)
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 }

@@ -27,6 +27,12 @@ func on(b Backup, agents ...string) Backup {
 
 func unstaged(b Backup) Backup { b.Staged = false; return b }
 
+// hashFailed records that the controller read b's copy on agent and its sha256 did not match.
+func hashFailed(b Backup, agent string) Backup {
+	b.Copies[agent] = Copy{State: "corrupt", HashFailed: true}
+	return b
+}
+
 // node is a polled node holding the given backups, verified with their hash.
 func node(agent string, held ...Backup) Node {
 	n := Node{AgentID: agent, Polled: true, PolledAt: t0.Add(24 * time.Hour), FreeBytes: 1 << 40, Actual: map[string]Held{}}
@@ -84,6 +90,15 @@ func TestCompute(t *testing.T) {
 			Plan{Updates: []Update{{id(2), "A", "corrupt", "this PC reports its copy damaged"}},
 				Deletes: []Action{{id(2), "A", "damaged: replaced with a good copy"}},
 				Sends:   []Action{{id(2), "A", "replace a damaged copy"}}}},
+
+		{"a copy the controller read as damaged is replaced although the node lists it", Input{Policies: keep2,
+			Backups: []Backup{b1, hashFailed(bk(2, "p"), "A")}, Nodes: []Node{node("A", b1, bk(2, "p"))}, StagingKeep: 10},
+			Plan{Deletes: []Action{{id(2), "A", "damaged: replaced with a good copy"}},
+				Sends: []Action{{id(2), "A", "replace a damaged copy"}}}},
+
+		{"a copy the controller read as damaged stays damaged without staging", Input{Policies: keep2,
+			Backups: []Backup{b1, unstaged(hashFailed(bk(2, "p"), "A"))}, Nodes: []Node{node("A", b1, bk(2, "p"))}, StagingKeep: 10},
+			Plan{Kept: []Action{{id(2), "A", "damaged, and the controller has no good copy left to replace it"}}}},
 
 		{"corrupt without staging is kept", Input{Policies: keep2, Backups: []Backup{b1, unstaged(b2)},
 			Nodes: []Node{{AgentID: "A", Polled: true, PolledAt: t0, FreeBytes: 1 << 40,
