@@ -33,6 +33,7 @@ const ownCopy = "the controller's own copy"
 var errDamaged = errors.New("damaged: its size or sha256 does not match the backup")
 
 type restoreRun struct {
+	file string // an exported backup to read instead of a catalog copy
 	mu   sync.Mutex
 	view localapi.Restore
 }
@@ -62,7 +63,13 @@ func (r *restoreRun) step(source, step string, size int64) {
 // lifetime (blueprint: Backup engine → Restore); RestoreStatus follows it.
 func (c *Controller) Restore(ctx context.Context, req localapi.RestoreRequest) (localapi.Restore, error) {
 	cfg := c.config()
-	b, err := c.restoreBackup(ctx, req, cfg)
+	var b store.Backup
+	var err error
+	if req.File != "" {
+		b, err = fileBackup(req)
+	} else {
+		b, err = c.restoreBackup(ctx, req, cfg)
+	}
 	if err != nil {
 		return localapi.Restore{}, err
 	}
@@ -93,7 +100,7 @@ func (c *Controller) Restore(ctx context.Context, req localapi.RestoreRequest) (
 	case !exists && req.Replace:
 		return localapi.Restore{}, localapi.Errorf(http.StatusConflict, "database %s does not exist, so there is nothing to replace; restore it with --into %s", target, target)
 	}
-	run := &restoreRun{view: localapi.Restore{BackupID: b.BackupID, Database: b.Database, Target: target, Replace: req.Replace,
+	run := &restoreRun{file: req.File, view: localapi.Restore{BackupID: b.BackupID, Database: b.Database, Target: target, Replace: req.Replace,
 		State: localapi.RestoreRunning, Step: "starting", Size: b.Size, StartedAt: time.Now()}}
 	if err := c.claimRestore(run); err != nil {
 		return localapi.Restore{}, err
@@ -180,6 +187,32 @@ func (c *Controller) restoreBackup(ctx context.Context, req localapi.RestoreRequ
 		}
 	}
 	return store.Backup{}, localapi.Errorf(http.StatusNotFound, "no backup of %s to restore", db)
+}
+
+// fileBackup describes an exported file from the manifest beside it.
+func fileBackup(req localapi.RestoreRequest) (store.Backup, error) {
+	bad := func(format string, a ...any) (store.Backup, error) {
+		return store.Backup{}, localapi.Errorf(http.StatusBadRequest, format, a...)
+	}
+	path := req.File
+	switch {
+	case req.Backup != "":
+		return bad("give a backup or --file, not both")
+	case !filepath.IsAbs(path):
+		return bad("--file needs the full path, e.g. C:\\Sevjala-export\\shop\\2026-10-16_10-00-00.sql.gz")
+	case !strings.HasSuffix(path, inventory.DataExt):
+		return bad("%s is not a backup file: its name must end in %s", path, inventory.DataExt)
+	}
+	if fi, err := os.Lstat(path); err != nil {
+		return bad("cannot read %s: %v", path, err)
+	} else if !fi.Mode().IsRegular() {
+		return bad("%s is not a regular file", path)
+	}
+	m, err := inventory.ReadManifest(strings.TrimSuffix(path, inventory.DataExt) + inventory.ManifestExt)
+	if err != nil {
+		return bad("%s needs the %s file exported with it, to check it is not damaged: %v", path, inventory.ManifestExt, err)
+	}
+	return store.Backup{BackupID: m.BackupID, Database: m.Database, CreatedAt: m.CreatedAt, Size: m.Size, SHA256: m.SHA256, Tags: m.Tags}, nil
 }
 
 // mysql is the configured client and connection; the password comes from the keyring.
@@ -373,6 +406,14 @@ func (c *Controller) fetchVerified(run *restoreRun, b store.Backup, log *slog.Lo
 	fail := func(source string, err error) {
 		tried = append(tried, source+": "+err.Error())
 		log.Warn("restore source failed", logx.Event(logx.EventRestoreSourceFail), "source", source, "err", err)
+	}
+	if run.file != "" {
+		run.step(run.file, "checking "+run.file, b.Size)
+		if err := verifyFile(run.file, b, run); err != nil {
+			fail(run.file, err)
+			return "", nil, fmt.Errorf("%s cannot be restored: %w", run.file, err)
+		}
+		return run.file, func() {}, nil
 	}
 	if b.StagingPath != "" {
 		path := filepath.Join(c.Staging, b.BackupID+inventory.DataExt)

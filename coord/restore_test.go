@@ -309,3 +309,82 @@ func TestRestoreReplaceRefuses(t *testing.T) {
 		t.Errorf("replace while shop is dumping: %v", err)
 	}
 }
+
+// exported copies b's staging files to dir the way 'backups export' names them.
+func exported(t *testing.T, ctrl *Controller, id, dir string) string {
+	t.Helper()
+	path := filepath.Join(dir, "2026-10-16_10-00-00"+inventory.DataExt)
+	for _, ext := range []string{inventory.DataExt, inventory.ManifestExt} {
+		raw, err := os.ReadFile(filepath.Join(ctrl.Staging, id+ext))
+		if err != nil {
+			t.Fatal(err)
+		}
+		os.WriteFile(strings.TrimSuffix(path, inventory.DataExt)+ext, raw, 0o600)
+	}
+	return path
+}
+
+func TestRestoreFromFile(t *testing.T) {
+	_, log := dumptest.Use(t, dumptest.OK)
+	ctx := context.Background()
+	ctrl := newController(t)
+	b := backupOne(t, ctrl, store.BackupCreated)
+	path := exported(t, ctrl, b.BackupID, t.TempDir())
+	os.Remove(filepath.Join(ctrl.Staging, b.BackupID+inventory.DataExt))
+	if _, err := ctrl.Restore(ctx, localapi.RestoreRequest{File: path, Into: "shop_file"}); err != nil {
+		t.Fatal(err)
+	}
+	r := waitRestore(t, ctrl)
+	if r.State != localapi.RestoreDone || r.Source != path || r.BackupID != b.BackupID || r.Database != "shop" {
+		t.Fatalf("restore %+v", r)
+	}
+	if !strings.Contains(fakeLog(t, log), "LOAD shop_file ") {
+		t.Error("nothing loaded")
+	}
+}
+
+func TestRestoreFromDamagedFileMarksNothing(t *testing.T) {
+	_, log := dumptest.Use(t, dumptest.OK)
+	ctx := context.Background()
+	ctrl := newController(t)
+	b := backupOne(t, ctrl, store.BackupCreated)
+	path := exported(t, ctrl, b.BackupID, t.TempDir())
+	raw, _ := os.ReadFile(path)
+	raw[len(raw)/2] ^= 0xff
+	os.WriteFile(path, raw, 0o600)
+	if _, err := ctrl.Restore(ctx, localapi.RestoreRequest{File: path, Into: "shop_file"}); err != nil {
+		t.Fatal(err)
+	}
+	r := waitRestore(t, ctrl)
+	if r.State != localapi.RestoreFailed || !strings.Contains(r.Error, "damaged") {
+		t.Errorf("restore %+v", r)
+	}
+	if got, err := ctrl.Store.Backup(ctx, b.BackupID); err != nil || got.StagingPath == "" {
+		t.Errorf("the controller's own copy must stay: %+v, %v", got, err)
+	}
+	if strings.Contains(fakeLog(t, log), "CREATE DATABASE") {
+		t.Error("a damaged file must not reach the database")
+	}
+}
+
+func TestRestoreFileRefuses(t *testing.T) {
+	dumptest.Use(t, dumptest.OK)
+	ctx := context.Background()
+	ctrl := newController(t)
+	b := backupOne(t, ctrl, store.BackupCreated)
+	dir := t.TempDir()
+	path := exported(t, ctrl, b.BackupID, dir)
+	bare := filepath.Join(dir, "bare"+inventory.DataExt)
+	os.WriteFile(bare, []byte("x"), 0o600)
+	for _, req := range []localapi.RestoreRequest{
+		{File: "shop.sql.gz"},
+		{File: filepath.Join(dir, "missing.sql.gz")},
+		{File: bare},
+		{File: dir},
+		{File: path, Backup: b.BackupID},
+	} {
+		if _, err := ctrl.Restore(ctx, req); apiCode(err) != http.StatusBadRequest {
+			t.Errorf("%+v: err = %v, want 400", req, err)
+		}
+	}
+}
