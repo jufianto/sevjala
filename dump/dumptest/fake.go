@@ -4,6 +4,7 @@ package dumptest
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -21,6 +22,7 @@ const (
 	DumpFails      = "dumpfail"
 	DumpWarnsError = "dumperror"
 	Hang           = "hang"
+	LoadFails      = "loadfail"
 )
 
 // Main turns the process into the fake when a test asked for one.
@@ -47,18 +49,16 @@ func Dump(db string) string {
 }
 
 func fake(mode string, args []string) int {
-	if p := os.Getenv(envLog); p != "" {
-		if f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
-			fmt.Fprintf(f, "%s MYSQL_PWD=%s\n", strings.Join(args, " "), os.Getenv("MYSQL_PWD"))
-			f.Close()
-		}
-	}
+	logLine(fmt.Sprintf("%s MYSQL_PWD=%s", strings.Join(args, " "), os.Getenv("MYSQL_PWD")))
 	if mode == Denied {
 		fmt.Fprintf(os.Stderr, "ERROR 1045 (28000): Access denied for user 'root'@'localhost' (password %s)\n", os.Getenv("MYSQL_PWD"))
 		return 1
 	}
 	if i := slices.Index(args, "-e"); i >= 0 && i+1 < len(args) {
 		return client(args[i+1])
+	}
+	if !slices.Contains(args, "--routines") {
+		return load(mode, args[len(args)-1])
 	}
 	return dumper(mode, args[len(args)-1])
 }
@@ -69,6 +69,13 @@ func client(sql string) int {
 		fmt.Println("10.4.32-MariaDB")
 	case strings.HasPrefix(sql, "SHOW DATABASES"):
 		fmt.Print("information_schema\nlegacy\nmysql\nperformance_schema\nshop\n")
+	case strings.Contains(sql, "information_schema.SCHEMATA"):
+		if strings.Contains(sql, "'shop'") || strings.Contains(sql, "'legacy'") {
+			fmt.Println("utf8mb4\tutf8mb4_general_ci")
+		}
+	case strings.HasPrefix(sql, "CREATE DATABASE"), strings.HasPrefix(sql, "DROP DATABASE"):
+	case strings.Contains(sql, "COUNT(*)"):
+		fmt.Println("2")
 	case strings.Contains(sql, "information_schema.TABLES"):
 		fmt.Print("legacy\tposts\tMyISAM\nlegacy\tusers\tInnoDB\nshop\titems\tInnoDB\nshop\torders\tInnoDB\n")
 	default:
@@ -94,4 +101,24 @@ func dumper(mode, db string) int {
 	}
 	fmt.Print(Dump(db))
 	return 0
+}
+
+// load reads the SQL a restore pipes in and logs "LOAD <db> <bytes>".
+func load(mode, db string) int {
+	n, _ := io.Copy(io.Discard, os.Stdin)
+	logLine(fmt.Sprintf("LOAD %s %d", db, n))
+	if mode == LoadFails {
+		fmt.Fprintln(os.Stderr, "ERROR 1062 (23000) at line 3: Duplicate entry '1' for key 'PRIMARY'")
+		return 1
+	}
+	return 0
+}
+
+func logLine(s string) {
+	if p := os.Getenv(envLog); p != "" {
+		if f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
+			fmt.Fprintln(f, s)
+			f.Close()
+		}
+	}
 }

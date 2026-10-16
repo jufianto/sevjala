@@ -4,7 +4,6 @@ package dump
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"net"
 	"os"
@@ -79,18 +78,27 @@ func TestIntegrationDumpRestoreChecksum(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		raw, _ := os.ReadFile(filepath.Join(staging, m.BackupID+inventory.DataExt))
-		zr, err := gzip.NewReader(bytes.NewReader(raw))
+		restored := db.name + "_restored"
+		sql(nil, "DROP DATABASE IF EXISTS "+restored)
+		cs, coll, ok, err := Schema(ctx, tools, conn, db.name)
+		if err != nil || !ok {
+			t.Fatalf("schema of %s: %v %v", db.name, ok, err)
+		}
+		if err := CreateDatabase(ctx, tools, conn, restored, cs, coll); err != nil {
+			t.Fatal(err)
+		}
+		f, err := os.Open(filepath.Join(staging, m.BackupID+inventory.DataExt))
 		if err != nil {
 			t.Fatal(err)
 		}
-		var plain bytes.Buffer
-		if _, err := plain.ReadFrom(zr); err != nil {
+		err = Load(ctx, tools, conn, restored, f)
+		f.Close()
+		if err != nil {
 			t.Fatal(err)
 		}
-		restored := db.name + "_restored"
-		sql(nil, "DROP DATABASE IF EXISTS "+restored+"; CREATE DATABASE "+restored+" CHARACTER SET utf8mb4")
-		sql(plain.Bytes(), restored)
+		if n, err := TableCount(ctx, tools, conn, restored); err != nil || n != 1 {
+			t.Errorf("%s tables %d, %v", restored, n, err)
+		}
 		sums := strings.Split(sql(nil, "CHECKSUM TABLE "+db.name+"."+db.table+", "+restored+"."+db.table), "\n")
 		if len(sums) != 2 || strings.Fields(sums[0])[1] != strings.Fields(sums[1])[1] {
 			t.Errorf("%s checksums differ: %q", db.name, sums)
