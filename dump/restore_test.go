@@ -17,6 +17,7 @@ func TestValidName(t *testing.T) {
 		"shop": true, "shop_restored_20261014_0030": true, "a$b-c": true, "X9": true,
 		"": false, "a b": false, "a`b": false, "a'b": false, "a.b": false, "a/b": false, `a\b`: false,
 		strings.Repeat("x", 64): true, strings.Repeat("x", 65): false,
+		"-hfoo": false, "--host=x": false, "a-b": true,
 	} {
 		if got := ValidName(name); got != want {
 			t.Errorf("ValidName(%q) = %v", name, got)

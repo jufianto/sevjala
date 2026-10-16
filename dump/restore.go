@@ -12,11 +12,12 @@ import (
 )
 
 var (
-	namePattern    = regexp.MustCompile(`^[A-Za-z0-9_$-]{1,64}$`)
+	namePattern    = regexp.MustCompile(`^[A-Za-z0-9_$][A-Za-z0-9_$-]{0,63}$`)
 	charsetPattern = regexp.MustCompile(`^[A-Za-z0-9_]*$`)
 )
 
-// ValidName accepts database names restore can quote without escaping.
+// ValidName accepts database names restore can quote without escaping and
+// that the mysql client cannot take for an option (no leading -).
 func ValidName(name string) bool { return namePattern.MatchString(name) }
 
 // DefaultTarget names a restore of db made at created, e.g.
