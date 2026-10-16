@@ -13,3 +13,5 @@ the row when a milestone's PR merges, and set the next one to `next`.
 | M5 Operator comfort | | | |
 | M6 UI shell | | | |
 | M7 UI screens | | | |
+
+Phase 3, waiting until after M7: [ADR 0001 replication](./adr/0001-replication-setup-and-monitor.md) (proposed; the owner chose to keep the blueprint order).
