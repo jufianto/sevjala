@@ -45,7 +45,7 @@ Ctrl-C stops watching; the restore carries on. 'sevjala restore --status' shows 
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			switch {
-			case status && (len(args) > 0 || req.File != "" || req.Into != "" || req.Replace):
+			case status && (len(args) > 0 || req.File != "" || req.Into != "" || req.Replace || req.DB != ""):
 				return usagef("--status takes no backup and no other flag")
 			case status:
 				return showRestore(g, c)
@@ -73,10 +73,12 @@ Ctrl-C stops watching; the restore carries on. 'sevjala restore --status' shows 
 				if err != nil {
 					return err
 				}
-				if req.Confirm = confirmReplace(c.InOrStdin(), c.OutOrStdout(), plan); req.Confirm != plan.Target {
+				typed := confirmReplace(c.InOrStdin(), c.OutOrStdout(), plan)
+				if typed != plan.Target {
 					fmt.Fprintln(c.OutOrStdout(), "Cancelled: nothing was changed.")
 					return errSilent1
 				}
+				req = confirmedRequest(req, plan, typed)
 			}
 			r, err := callAgent(g, 30*time.Second, func(ctx context.Context, cl *localapi.Client) (localapi.Restore, error) {
 				return cl.Restore(ctx, req)
@@ -187,4 +189,14 @@ func restoreResult(w io.Writer, r localapi.Restore) bool {
 		fmt.Fprintf(w, "The live database %s was not touched.\n", r.Database)
 	}
 	return true
+}
+
+// confirmedRequest names the backup the operator saw, so "latest" cannot move
+// to a newer backup between the prompt and the restore.
+func confirmedRequest(req localapi.RestoreRequest, plan localapi.Restore, typed string) localapi.RestoreRequest {
+	req.Confirm, req.DryRun = typed, false
+	if req.File == "" {
+		req.Backup, req.DB = plan.BackupID, ""
+	}
+	return req
 }

@@ -96,10 +96,26 @@ func TestRestoreUsageErrors(t *testing.T) {
 		{[]string{"restore", "latest", "--file", "x.sql.gz"}, "not both"},
 		{[]string{"restore", "latest", "--into", "a", "--replace-production"}, "into"},
 		{[]string{"restore", "latest", "--status"}, "--status"},
+		{[]string{"restore", "--status", "--db", "shop"}, "--status"},
 	} {
 		var out, errOut bytes.Buffer
 		if code := run(append(tt.args, "--data-dir", dir), &out, &errOut); code != 2 || !strings.Contains(errOut.String(), tt.want) {
 			t.Errorf("%v: exit %d, stderr %s", tt.args, code, errOut.String())
 		}
+	}
+}
+
+// The backup the operator confirmed is the one restored, even when "latest"
+// moves on while the prompt waits.
+func TestConfirmedRequestPinsTheBackup(t *testing.T) {
+	plan := localapi.Restore{BackupID: "BK-20261016-020000-A8F2", Database: "shop", Target: "shop", Replace: true}
+	req := localapi.RestoreRequest{Backup: "latest", DB: "shop", Replace: true}
+	got := confirmedRequest(req, plan, "shop")
+	if got.Backup != plan.BackupID || got.DB != "" || got.Confirm != "shop" || !got.Replace || got.DryRun {
+		t.Errorf("request %+v", got)
+	}
+	file := localapi.RestoreRequest{File: "/x/a.sql.gz", Replace: true}
+	if got := confirmedRequest(file, plan, "shop"); got.Backup != "" || got.File != file.File {
+		t.Errorf("file request %+v", got)
 	}
 }
