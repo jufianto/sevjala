@@ -124,7 +124,7 @@ func backupLines(b localapi.Backup) (lines string, done, good bool) {
 		return lines + "\n  no paired nodes: the backup is only in staging on this PC", true, true
 	}
 	parts := make([]string, len(b.Copies))
-	good = true
+	good, settled := true, true
 	for i, c := range b.Copies {
 		parts[i] = c.Hostname + " " + c.State
 		if c.State != "verified" {
@@ -133,8 +133,18 @@ func backupLines(b localapi.Backup) (lines string, done, good bool) {
 				parts[i] += " (" + c.LastError + ")"
 			}
 		}
+		// A copy that failed once is retried by the agent for as long as it takes;
+		// watching it would never end while that PC is off.
+		if c.State != "verified" && c.LastError == "" && !slices.Contains([]string{"failed", "offline", "corrupt", "deleted"}, c.State) {
+			settled = false
+		}
 	}
-	return lines + "\n  " + strings.Join(parts, " · "), b.State == "distributed" || b.State == "partial", good
+	lines += "\n  " + strings.Join(parts, " · ")
+	done = b.State == "distributed" || b.State == "partial" || settled
+	if done && !good {
+		lines += "\n  the backup is safe on this PC; missing copies are sent when those PCs answer again (see 'sevjala backups list')"
+	}
+	return lines, done, good
 }
 
 func newBackupsCmd(g *globals) *cobra.Command {

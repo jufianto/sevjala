@@ -53,6 +53,11 @@ func TestWatchBackups(t *testing.T) {
 			with("partial", []localapi.BackupCopy{{Hostname: "PC-1", State: "verified"}, {Hostname: "PC-2", State: "failed", LastError: "422"}}),
 		}, false, []string{"PC-2 failed (422)"}},
 		{"no nodes", []localapi.Backup{with("created", nil)}, true, []string{"no paired nodes"}},
+		{"a node is off", []localapi.Backup{
+			with("created", copies("transferring", "transferring")),
+			with("created", []localapi.BackupCopy{{Hostname: "PC-1", State: "verified"},
+				{Hostname: "PC-2", State: "pending", LastError: "nothing answers at 192.168.1.21:17891"}}),
+		}, false, []string{"PC-2 pending (nothing answers", "safe on this PC", "sent when"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
