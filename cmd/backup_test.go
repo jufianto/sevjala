@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -128,5 +129,29 @@ func TestRenderBackupsOrdersTagsAndExplainsStates(t *testing.T) {
 	}
 	if strings.Contains(out, "expired = ") {
 		t.Errorf("legend explains a state not shown:\n%s", out)
+	}
+}
+
+// A copy queued for a PC that is off never gets an error; after 30 polls with
+// nothing moving the watch ends. A long transfer is not cut short.
+func TestWatchBackupStopsWhenNothingMoves(t *testing.T) {
+	id := "BK-20261013-101500-A8F2"
+	b := localapi.Backup{BackupID: id, Database: "shop", State: "created", Size: 3 << 20, SHA256: strings.Repeat("a", 64)}
+	queued := b
+	queued.Copies = []localapi.BackupCopy{{Hostname: "PC-1", State: "verified"}, {Hostname: "PC-2", State: "pending"}}
+	var out bytes.Buffer
+	ok, err := watchBackups(context.Background(), script(queued), []localapi.BackupJob{{BackupID: id}}, &out, time.Millisecond)
+	if ok || err != nil || !strings.Contains(out.String(), "safe on this PC") {
+		t.Errorf("queued: ok = %v, err = %v\n%s", ok, err, out.String())
+	}
+
+	moving := b
+	moving.Copies = copies("transferring")
+	done := b
+	done.State, done.Copies = "distributed", copies("verified")
+	steps := append(slices.Repeat([]localapi.Backup{moving}, 60), done)
+	out.Reset()
+	if ok, err := watchBackups(context.Background(), script(steps...), []localapi.BackupJob{{BackupID: id}}, &out, time.Millisecond); !ok || err != nil {
+		t.Errorf("long transfer: ok = %v, err = %v\n%s", ok, err, out.String())
 	}
 }

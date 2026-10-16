@@ -82,8 +82,9 @@ func watchBackups(ctx context.Context, get func(context.Context, string) (locala
 }
 
 func watchBackup(ctx context.Context, get func(context.Context, string) (localapi.Backup, error), id string, w io.Writer, every time.Duration) (bool, error) {
-	var last string
+	var last, prev string
 	var printed time.Time
+	still := 0
 	for {
 		b, err := get(ctx, id)
 		if err != nil {
@@ -101,6 +102,19 @@ func watchBackup(ctx context.Context, get func(context.Context, string) (localap
 		if done {
 			return good, nil
 		}
+		// A copy queued for a PC that is off waits without an error; 30 polls with
+		// nothing moving and nothing transferring end the watch.
+		if line == prev {
+			still++
+		} else {
+			prev, still = line, 0
+		}
+		if b.State != localapi.BackupDumping && still >= 30 && !slices.ContainsFunc(b.Copies, func(c localapi.BackupCopy) bool {
+			return c.State == "transferring"
+		}) {
+			fmt.Fprintln(w, missingCopies)
+			return false, nil
+		}
 		select {
 		case <-ctx.Done():
 			return false, nil
@@ -108,6 +122,8 @@ func watchBackup(ctx context.Context, get func(context.Context, string) (localap
 		}
 	}
 }
+
+const missingCopies = "  the backup is safe on this PC; missing copies are sent when those PCs answer again (see 'sevjala backups list')"
 
 // backupLines renders one poll; done once nothing changes without an M3
 // retry, good when every copy is verified.
@@ -142,7 +158,7 @@ func backupLines(b localapi.Backup) (lines string, done, good bool) {
 	lines += "\n  " + strings.Join(parts, " · ")
 	done = b.State == "distributed" || b.State == "partial" || settled
 	if done && !good {
-		lines += "\n  the backup is safe on this PC; missing copies are sent when those PCs answer again (see 'sevjala backups list')"
+		lines += "\n" + missingCopies
 	}
 	return lines, done, good
 }
