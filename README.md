@@ -64,7 +64,8 @@ sevjala retention run --dry-run        # what would be deleted or sent, and why
 sevjala backups list --all             # includes expired backups
 ```
 
-Restore (controller): into a new database by default, so the live one is never touched.
+Restore (controller): into a new database by default, so the live one is never touched. Step by
+step: [docs/restore-guide.md](docs/restore-guide.md).
 
 ```sh
 sevjala restore latest                 # into shop_restored_<date>; prints table count and time

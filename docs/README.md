@@ -8,6 +8,7 @@
 | [protocol.md](./protocol.md) | Wire messages and on-disk formats as implemented |
 | [smoke-tests.md](./smoke-tests.md) | Manual tests CI cannot run (service install, Win7 VM, multi-PC), per milestone |
 | [test-walkthrough.md](./test-walkthrough.md) | Step-by-step run on one Windows PC (controller) and one Mac (node), LAN or Tailscale |
+| [restore-guide.md](./restore-guide.md) | For operators: get a database back (new database, replace, controller PC lost) |
 | [adr/](./adr/) | ADRs: AD changes and Phase 3 items only |
 | `superpowers/specs/`, `superpowers/plans/` | Per-milestone design and implementation plan |
 | [blueprint-v1.pdf](./blueprint-v1.pdf) | Original blueprint export |
