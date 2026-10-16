@@ -84,6 +84,8 @@ type Backend interface {
 	// controller's staging.
 	Held(ctx context.Context) ([]inventory.Manifest, error)
 	OpenHeld(ctx context.Context, id string) (inventory.Manifest, io.ReadCloser, error)
+	Restore(ctx context.Context, req RestoreRequest) (Restore, error)
+	RestoreStatus(ctx context.Context) (Restore, error)
 }
 
 // Error carries an HTTP status across the pipe; Msg is shown to the operator.

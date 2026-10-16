@@ -47,6 +47,7 @@ type fakeBackend struct {
 	gotName                           string
 	gotAll, gotDryRun, gotForce       bool
 	gotPolicy                         PolicyChange
+	gotRestore                        RestoreRequest
 }
 
 func (f *fakeBackend) Status() Status { return f.status }
@@ -353,5 +354,33 @@ func TestRunRetentionOutlastsTheCallCeiling(t *testing.T) {
 	c := NewClient(startBackend(t, &fakeBackend{delay: 200 * time.Millisecond}))
 	if _, err := c.RunRetention(context.Background(), false); err != nil {
 		t.Error(err)
+	}
+}
+
+func (f *fakeBackend) Restore(_ context.Context, req RestoreRequest) (Restore, error) {
+	f.mu.Lock()
+	f.gotRestore = req
+	f.mu.Unlock()
+	return Restore{BackupID: "BK-20261013-101500-A8F2", Target: req.Into, State: RestoreRunning}, f.err
+}
+
+func (f *fakeBackend) RestoreStatus(context.Context) (Restore, error) {
+	return Restore{BackupID: "BK-20261013-101500-A8F2", State: RestoreDone, Tables: 2}, f.err
+}
+
+func TestRestoreRoutesRoundTrip(t *testing.T) {
+	f := &fakeBackend{}
+	c := NewClient(startBackend(t, f))
+	ctx := context.Background()
+	req := RestoreRequest{Backup: "latest", DB: "shop", Into: "shop_copy", Replace: true, Confirm: "shop", File: "/x.sql.gz"}
+	if r, err := c.Restore(ctx, req); err != nil || r.State != RestoreRunning || r.Target != "shop_copy" || f.gotRestore != req {
+		t.Errorf("Restore %+v, %v, got %+v", r, err, f.gotRestore)
+	}
+	if r, err := c.RestoreStatus(ctx); err != nil || r.State != RestoreDone || r.Tables != 2 {
+		t.Errorf("RestoreStatus %+v, %v", r, err)
+	}
+	f.err = Errorf(http.StatusConflict, "a restore is already running")
+	if _, err := c.Restore(ctx, req); err == nil || !strings.Contains(err.Error(), "already running") {
+		t.Errorf("conflict: %v", err)
 	}
 }

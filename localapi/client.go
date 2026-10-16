@@ -200,3 +200,13 @@ func replyError(resp *http.Response, method, path string) error {
 	}
 	return &Error{Code: resp.StatusCode, Msg: e.Error}
 }
+
+func (c *Client) Restore(ctx context.Context, req RestoreRequest) (Restore, error) {
+	var r Restore
+	return r, c.do(ctx, http.MethodPost, "/restore", req, &r)
+}
+
+func (c *Client) RestoreStatus(ctx context.Context) (Restore, error) {
+	var r Restore
+	return r, c.do(ctx, http.MethodGet, "/restore", nil, &r)
+}

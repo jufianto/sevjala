@@ -73,6 +73,12 @@ func TestWrongRoleIs409(t *testing.T) {
 	if _, err := node.DetectDatabase(context.Background()); !is409(err, "this agent is a node") {
 		t.Errorf("DetectDatabase on a node: %v", err)
 	}
+	if _, err := node.Restore(context.Background(), localapi.RestoreRequest{}); !is409(err, "backups export") {
+		t.Errorf("Restore on a node: %v", err)
+	}
+	if _, err := node.RestoreStatus(context.Background()); !is409(err, "this agent is a node") {
+		t.Errorf("RestoreStatus on a node: %v", err)
+	}
 	ctrl := &Service{Controller: &Controller{}}
 	if _, err := ctrl.Code(); !is409(err, "this agent is a controller") {
 		t.Errorf("Code on a controller: %v", err)

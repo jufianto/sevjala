@@ -542,3 +542,18 @@ func (p *progress) Read(b []byte) (int, error) {
 	p.run.set(func(v *localapi.Restore) { v.Bytes += int64(n) })
 	return n, err
 }
+
+func (s *Service) Restore(ctx context.Context, req localapi.RestoreRequest) (localapi.Restore, error) {
+	if s.Controller == nil {
+		return localapi.Restore{}, localapi.Errorf(http.StatusConflict, "this agent is a node, and restores run on the controller: "+
+			"copy a backup out with 'sevjala backups export', then on the controller run 'sevjala restore --file <path>'")
+	}
+	return s.Controller.Restore(ctx, req)
+}
+
+func (s *Service) RestoreStatus(ctx context.Context) (localapi.Restore, error) {
+	if s.Controller == nil {
+		return localapi.Restore{}, errNotController
+	}
+	return s.Controller.RestoreStatus(ctx)
+}

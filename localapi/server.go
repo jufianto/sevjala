@@ -145,6 +145,17 @@ func NewHandler(b Backend) http.Handler {
 		w.Header().Set("Content-Length", strconv.FormatInt(m.Size, 10))
 		_, _ = io.Copy(w, rc)
 	})
+	mux.HandleFunc("POST /restore", func(w http.ResponseWriter, r *http.Request) {
+		var req RestoreRequest
+		if decode(w, r, &req) {
+			v, err := b.Restore(r.Context(), req)
+			reply(w, v, err)
+		}
+	})
+	mux.HandleFunc("GET /restore", func(w http.ResponseWriter, r *http.Request) {
+		v, err := b.RestoreStatus(r.Context())
+		reply(w, v, err)
+	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 	})
