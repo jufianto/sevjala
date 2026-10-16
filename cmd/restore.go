@@ -181,6 +181,9 @@ func restoreResult(w io.Writer, r localapi.Restore) bool {
 	case r.State == localapi.RestoreFailed:
 		fmt.Fprintf(w, "Restore failed: %s\n", r.Error)
 		return false
+	case r.Replace && r.PreRestoreID == r.BackupID:
+		fmt.Fprintf(w, "Replaced %s with %s: %d tables, in %s, from %s.\n", r.Target, r.BackupID, r.Tables, took, r.Source)
+		fmt.Fprintf(w, "This put %s back as it was before the failed restore; its backups run again.\n", r.Target)
 	case r.Replace:
 		fmt.Fprintf(w, "Replaced %s with %s: %d tables, in %s, from %s.\n", r.Target, r.BackupID, r.Tables, took, r.Source)
 		fmt.Fprintf(w, "The backup made just before is %s; to undo: sevjala restore %s --replace-production\n", r.PreRestoreID, r.PreRestoreID)

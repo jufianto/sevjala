@@ -31,6 +31,8 @@ func TestWatchRestore(t *testing.T) {
 	failed.State, failed.Error = localapi.RestoreFailed, "mysql failed: ERROR 1062; the half-made database shop_copy was removed"
 	replaced := done
 	replaced.Replace, replaced.Target, replaced.PreRestoreID = true, "shop", "BK-20261016-100000-B001"
+	wayBack := replaced
+	wayBack.PreRestoreID = wayBack.BackupID
 
 	for _, tt := range []struct {
 		name  string
@@ -49,6 +51,8 @@ func TestWatchRestore(t *testing.T) {
 		{"failed", []localapi.Restore{failed}, false, []string{"Restore failed: mysql failed: ERROR 1062"}},
 		{"replaced", []localapi.Restore{replaced}, true, []string{"Replaced shop with BK-20261016-095500-A8F2: 42 tables",
 			"sevjala restore BK-20261016-100000-B001 --replace-production"}},
+		{"the way back", []localapi.Restore{wayBack}, true, []string{"Replaced shop with BK-20261016-095500-A8F2",
+			"put shop back as it was before the failed restore; its backups run again."}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var b bytes.Buffer
