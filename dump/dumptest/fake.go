@@ -23,6 +23,7 @@ const (
 	DumpWarnsError = "dumperror"
 	Hang           = "hang"
 	LoadFails      = "loadfail"
+	LoadHangs      = "loadhang"
 )
 
 // Main turns the process into the fake when a test asked for one.
@@ -107,7 +108,7 @@ func dumper(mode, db string) int {
 func load(mode, db string) int {
 	n, _ := io.Copy(io.Discard, os.Stdin)
 	logLine(fmt.Sprintf("LOAD %s %d", db, n))
-	if mode == Hang {
+	if mode == Hang || mode == LoadHangs {
 		time.Sleep(time.Hour)
 	}
 	if mode == LoadFails {

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -181,5 +182,130 @@ func TestRestoreRefuses(t *testing.T) {
 	in, _, _, err := ctrl.retentionInput(ctx)
 	if err != nil || !in.Busy[b.BackupID] {
 		t.Errorf("the backup being restored must be busy for retention: %v %v", in.Busy, err)
+	}
+}
+
+func TestRestoreReplaceProduction(t *testing.T) {
+	_, log := dumptest.Use(t, dumptest.OK)
+	ctx := context.Background()
+	ctrl := newController(t)
+	b := backupOne(t, ctrl, store.BackupCreated)
+	if _, err := ctrl.Restore(ctx, localapi.RestoreRequest{Backup: b.BackupID, Replace: true, Confirm: "shop"}); err != nil {
+		t.Fatal(err)
+	}
+	r := waitRestore(t, ctrl)
+	if r.State != localapi.RestoreDone || !r.Replace || r.Target != "shop" || r.PreRestoreID == "" || r.PreRestoreID == b.BackupID {
+		t.Fatalf("restore %+v", r)
+	}
+	safety, err := ctrl.Store.Backup(ctx, r.PreRestoreID)
+	if err != nil || safety.Database != "shop" || !slices.Contains(safety.Tags, "manual") {
+		t.Errorf("pre-restore backup %+v, %v", safety, err)
+	}
+	calls := strings.Split(fakeLog(t, log), "\n")
+	drop := -1
+	for i, c := range calls {
+		if strings.Contains(c, "-e DROP DATABASE `shop`") {
+			drop = i
+		}
+	}
+	dumps := 0
+	for _, c := range calls[:max(drop, 0)] {
+		if strings.Contains(c, "--routines") {
+			dumps++
+		}
+	}
+	if drop < 0 || dumps != 2 {
+		t.Errorf("want the drop after two dumps (the backup, then the pre-restore one):\n%s", strings.Join(calls, "\n"))
+	}
+	rest := strings.Join(calls[max(drop, 0):], "\n")
+	for _, want := range []string{"CREATE DATABASE `shop` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci", "LOAD shop "} {
+		if !strings.Contains(rest, want) {
+			t.Errorf("no %q after the drop in\n%s", want, rest)
+		}
+	}
+}
+
+func TestRestoreReplaceFailureNamesTheWayBack(t *testing.T) {
+	dumptest.Use(t, dumptest.OK)
+	ctrl := newController(t)
+	b := backupOne(t, ctrl, store.BackupCreated)
+	dumptest.Use(t, dumptest.LoadFails)
+	if _, err := ctrl.Restore(context.Background(), localapi.RestoreRequest{Backup: b.BackupID, Replace: true, Confirm: "shop"}); err != nil {
+		t.Fatal(err)
+	}
+	r := waitRestore(t, ctrl)
+	if want := "sevjala restore " + r.PreRestoreID + " --replace-production"; r.State != localapi.RestoreFailed ||
+		r.PreRestoreID == "" || !strings.Contains(r.Error, want) {
+		t.Errorf("restore %+v, want %q in the error", r, want)
+	}
+}
+
+func TestRestoreReplaceFailedSafetyBackupLeavesProduction(t *testing.T) {
+	_, log := dumptest.Use(t, dumptest.OK)
+	ctrl := newController(t)
+	b := backupOne(t, ctrl, store.BackupCreated)
+	dumptest.Use(t, dumptest.DumpFails)
+	if _, err := ctrl.Restore(context.Background(), localapi.RestoreRequest{Backup: b.BackupID, Replace: true, Confirm: "shop"}); err != nil {
+		t.Fatal(err)
+	}
+	r := waitRestore(t, ctrl)
+	if r.State != localapi.RestoreFailed || !strings.Contains(r.Error, "shop was not touched") {
+		t.Errorf("restore %+v", r)
+	}
+	if strings.Contains(fakeLog(t, log), "DROP DATABASE") {
+		t.Error("production dropped although the pre-restore backup failed")
+	}
+}
+
+func TestRestoreReplaceHoldsBackups(t *testing.T) {
+	dumptest.Use(t, dumptest.OK)
+	ctx := context.Background()
+	ctrl := newController(t)
+	b := backupOne(t, ctrl, store.BackupCreated)
+	dumptest.Use(t, dumptest.LoadHangs)
+	if _, err := ctrl.Restore(ctx, localapi.RestoreRequest{Backup: b.BackupID, Replace: true, Confirm: "shop"}); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for r, _ := ctrl.RestoreStatus(ctx); !strings.HasPrefix(r.Step, "loading"); r, _ = ctrl.RestoreStatus(ctx) {
+		if time.Now().After(deadline) || r.State != localapi.RestoreRunning {
+			t.Fatalf("never loading: %+v", r)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if _, err := ctrl.BackupNow(ctx, "shop", nil); apiCode(err) != http.StatusConflict || !strings.Contains(err.Error(), "replaced") {
+		t.Errorf("backup during the replace: %v", err)
+	}
+}
+
+func TestRestoreReplaceRefuses(t *testing.T) {
+	dumptest.Use(t, dumptest.OK)
+	ctx := context.Background()
+	ctrl := newController(t)
+	b := backupOne(t, ctrl, store.BackupCreated)
+	crm := "BK-20261016-101500-C4A1"
+	if err := ctrl.Store.InsertBackup(ctx, store.Backup{BackupID: crm, Database: "crm", CreatedAt: time.Now(), Size: 1,
+		SHA256: strings.Repeat("0", 64), Tags: []string{"manual"}, StagingPath: crm + inventory.DataExt}, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		req  localapi.RestoreRequest
+		code int
+	}{
+		{localapi.RestoreRequest{Backup: b.BackupID, Replace: true}, http.StatusConflict},
+		{localapi.RestoreRequest{Backup: b.BackupID, Replace: true, Confirm: "Shop"}, http.StatusConflict},
+		{localapi.RestoreRequest{Backup: b.BackupID, Replace: true, Confirm: "shop", Into: "x"}, http.StatusBadRequest},
+		{localapi.RestoreRequest{Backup: crm, Replace: true, Confirm: "crm"}, http.StatusConflict},
+	} {
+		if _, err := ctrl.Restore(ctx, tt.req); apiCode(err) != tt.code {
+			t.Errorf("%+v: err = %v, want %d", tt.req, err, tt.code)
+		}
+	}
+	dumptest.Use(t, dumptest.Hang)
+	if _, err := ctrl.BackupNow(ctx, "shop", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ctrl.Restore(ctx, localapi.RestoreRequest{Backup: b.BackupID, Replace: true, Confirm: "shop"}); apiCode(err) != http.StatusConflict {
+		t.Errorf("replace while shop is dumping: %v", err)
 	}
 }

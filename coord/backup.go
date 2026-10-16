@@ -77,6 +77,9 @@ func (c *Controller) start(dbs, tags []string, now time.Time, cfg config.Config)
 		if id, busy := c.running[name]; busy {
 			return nil, localapi.Errorf(http.StatusConflict, "a backup of %s is already running (%s)", name, id)
 		}
+		if c.replacing[name] {
+			return nil, localapi.Errorf(http.StatusConflict, "%s is being replaced by a restore; its backups resume when the restore ends", name)
+		}
 	}
 	if c.jobs == nil {
 		c.jobs, c.running, c.failedAt = map[string]*job{}, map[string]string{}, map[string]time.Time{}

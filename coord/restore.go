@@ -71,21 +71,34 @@ func (c *Controller) Restore(ctx context.Context, req localapi.RestoreRequest) (
 		return localapi.Restore{}, err
 	}
 	target := cmp.Or(req.Into, dump.DefaultTarget(b.Database, b.CreatedAt))
+	if req.Replace {
+		if req.Into != "" {
+			return localapi.Restore{}, localapi.Errorf(http.StatusBadRequest, "use either --into or --replace-production, not both")
+		}
+		target = b.Database
+	}
 	if !dump.ValidName(target) {
 		return localapi.Restore{}, localapi.Errorf(http.StatusBadRequest,
 			"%q cannot be a database name here: use letters, digits, _, $ or -, at most 64", target)
 	}
-	if _, _, exists, err := dump.Schema(ctx, tools, conn, target); err != nil {
-		return localapi.Restore{}, err
-	} else if exists {
-		return localapi.Restore{}, localapi.Errorf(http.StatusConflict, "database %s already exists; choose another name with --into", target)
+	if req.Replace && req.Confirm != target {
+		return localapi.Restore{}, localapi.Errorf(http.StatusConflict, "not confirmed: type the database name, %s, to replace it", target)
 	}
-	run := &restoreRun{view: localapi.Restore{BackupID: b.BackupID, Database: b.Database, Target: target,
+	_, _, exists, err := dump.Schema(ctx, tools, conn, target)
+	switch {
+	case err != nil:
+		return localapi.Restore{}, err
+	case exists && !req.Replace:
+		return localapi.Restore{}, localapi.Errorf(http.StatusConflict, "database %s already exists; choose another name with --into", target)
+	case !exists && req.Replace:
+		return localapi.Restore{}, localapi.Errorf(http.StatusConflict, "database %s does not exist, so there is nothing to replace; restore it with --into %s", target, target)
+	}
+	run := &restoreRun{view: localapi.Restore{BackupID: b.BackupID, Database: b.Database, Target: target, Replace: req.Replace,
 		State: localapi.RestoreRunning, Step: "starting", Size: b.Size, StartedAt: time.Now()}}
 	if err := c.claimRestore(run); err != nil {
 		return localapi.Restore{}, err
 	}
-	go c.runRestore(run, b, tools, conn)
+	go c.runRestore(run, b, tools, conn, cfg)
 	return run.get(), nil
 }
 
@@ -105,6 +118,11 @@ func (c *Controller) claimRestore(run *restoreRun) error {
 	if c.restore != nil {
 		if v := c.restore.get(); v.State == localapi.RestoreRunning {
 			return localapi.Errorf(http.StatusConflict, "a restore is already running: %s into %s", v.BackupID, v.Target)
+		}
+	}
+	if v := run.get(); v.Replace {
+		if id, busy := c.running[v.Target]; busy {
+			return localapi.Errorf(http.StatusConflict, "a backup of %s is running (%s); replace it after that backup ends", v.Target, id)
 		}
 	}
 	c.restore = run
@@ -178,11 +196,11 @@ func (c *Controller) mysql(cfg config.Config) (dump.Tools, dump.Conn, error) {
 	return tools, dump.Conn{Host: db.Host, Port: db.Port, User: db.User, Password: pw}, nil
 }
 
-func (c *Controller) runRestore(run *restoreRun, b store.Backup, tools dump.Tools, conn dump.Conn) {
+func (c *Controller) runRestore(run *restoreRun, b store.Backup, tools dump.Tools, conn dump.Conn, cfg config.Config) {
 	v := run.get()
 	log := c.Log.With("backup_id", b.BackupID, "database", b.Database, "target", v.Target)
 	log.Info("restore started", logx.Event(logx.EventRestoreStarted), "replace", v.Replace)
-	err := c.restoreInto(run, b, tools, conn, log)
+	err := c.restoreInto(run, b, tools, conn, cfg, log)
 	run.set(func(v *localapi.Restore) {
 		v.FinishedAt = time.Now()
 		v.State = localapi.RestoreDone
@@ -191,6 +209,9 @@ func (c *Controller) runRestore(run *restoreRun, b store.Backup, tools dump.Tool
 		}
 	})
 	v = run.get()
+	if v.PreRestoreID != "" {
+		log = log.With("pre_restore_id", v.PreRestoreID)
+	}
 	if err != nil {
 		log.Error("restore failed", logx.Event(logx.EventRestoreFailed), "step", v.Step, "err", err)
 		return
@@ -199,20 +220,25 @@ func (c *Controller) runRestore(run *restoreRun, b store.Backup, tools dump.Tool
 		"duration", v.FinishedAt.Sub(v.StartedAt).Round(time.Second).String(), "tables", v.Tables)
 }
 
-// restoreInto loads b into a new database, which it removes again when loading fails.
-func (c *Controller) restoreInto(run *restoreRun, b store.Backup, tools dump.Tools, conn dump.Conn, log *slog.Logger) error {
+// restoreInto loads b into a new database, which it removes again when
+// loading fails, or replaces production.
+func (c *Controller) restoreInto(run *restoreRun, b store.Backup, tools dump.Tools, conn dump.Conn, cfg config.Config, log *slog.Logger) error {
 	path, done, err := c.fetchVerified(run, b, log)
 	if err != nil {
 		return err
 	}
 	defer done()
-	target := run.get().Target
+	v := run.get()
 	var charset, collation string
 	if dump.ValidName(b.Database) {
 		if charset, collation, _, err = dump.Schema(c.Ctx, tools, conn, b.Database); err != nil {
 			return err
 		}
 	}
+	if v.Replace {
+		return c.replace(run, path, b.Size, charset, collation, tools, conn, cfg)
+	}
+	target := v.Target
 	run.step("", "creating database "+target, 0)
 	if err := dump.CreateDatabase(c.Ctx, tools, conn, target, charset, collation); err != nil {
 		return err
@@ -224,6 +250,100 @@ func (c *Controller) restoreInto(run *restoreRun, b store.Backup, tools dump.Too
 		return fmt.Errorf("%w; the half-made database %s was removed", err, target)
 	}
 	return c.countTables(run, tools, conn, target)
+}
+
+// replace backs production up, then drops and reloads it (blueprint: Backup
+// engine → Restore). Backups of it are refused from the drop until the end.
+func (c *Controller) replace(run *restoreRun, path string, size int64, charset, collation string,
+	tools dump.Tools, conn dump.Conn, cfg config.Config) error {
+	db := run.get().Target
+	run.step("", "backing up "+db+" before replacing it", 0)
+	jobs, err := c.start([]string{db}, []string{defaultTag}, time.Now(), cfg)
+	if err != nil {
+		return fmt.Errorf("the pre-restore backup did not start: %w; %s was not touched", err, db)
+	}
+	safety := jobs[0].BackupID
+	run.set(func(v *localapi.Restore) { v.PreRestoreID = safety })
+	if err := c.waitBackup(safety, db); err != nil {
+		return fmt.Errorf("the pre-restore backup %s failed: %w; %s was not touched", safety, err, db)
+	}
+	if err := c.holdBackups(db); err != nil {
+		return fmt.Errorf("%w; %s was not touched", err, db)
+	}
+	defer func() {
+		c.mu.Lock()
+		delete(c.replacing, db)
+		c.mu.Unlock()
+	}()
+	back := fmt.Sprintf("put it back as it was with: sevjala restore %s --replace-production", safety)
+	run.step("", "dropping "+db, 0)
+	if err := dump.DropDatabase(c.Ctx, tools, conn, db); err != nil {
+		return fmt.Errorf("%w; %s", err, back)
+	}
+	run.step("", "creating database "+db, 0)
+	if err := dump.CreateDatabase(c.Ctx, tools, conn, db, charset, collation); err != nil {
+		return fmt.Errorf("%w; %s no longer exists: %s", err, db, back)
+	}
+	if err := c.load(run, tools, conn, db, path, size); err != nil {
+		return fmt.Errorf("%w; %s is only partly loaded: %s", err, db, back)
+	}
+	return c.countTables(run, tools, conn, db)
+}
+
+// waitBackup waits for the dump id of db to land in the catalog.
+func (c *Controller) waitBackup(id, db string) error {
+	t := time.NewTicker(100 * time.Millisecond)
+	defer t.Stop()
+	for {
+		c.mu.Lock()
+		j, running := c.jobs[id], c.running[db] == id
+		var failed string
+		if j != nil {
+			failed = j.err
+		}
+		c.mu.Unlock()
+		switch {
+		case failed != "":
+			return errors.New(failed)
+		case !running:
+			_, err := c.Store.Backup(c.Ctx, id)
+			return err
+		}
+		select {
+		case <-c.Ctx.Done():
+			return c.Ctx.Err()
+		case <-t.C:
+		}
+	}
+}
+
+// holdBackups marks db as being replaced, then waits out a backup of it that
+// started before the mark; it dumps production as it still is.
+func (c *Controller) holdBackups(db string) error {
+	c.mu.Lock()
+	if c.replacing == nil {
+		c.replacing = map[string]bool{}
+	}
+	c.replacing[db] = true
+	c.mu.Unlock()
+	t := time.NewTicker(100 * time.Millisecond)
+	defer t.Stop()
+	for {
+		c.mu.Lock()
+		_, busy := c.running[db]
+		c.mu.Unlock()
+		if !busy {
+			return nil
+		}
+		select {
+		case <-c.Ctx.Done():
+			c.mu.Lock()
+			delete(c.replacing, db)
+			c.mu.Unlock()
+			return c.Ctx.Err()
+		case <-t.C:
+		}
+	}
 }
 
 func (c *Controller) load(run *restoreRun, tools dump.Tools, conn dump.Conn, db, path string, size int64) error {
