@@ -61,6 +61,7 @@ needs a new row and a reason.
 | AD-16 | Service management via `kardianos/service`; tray via `fyne.io/systray` | Windows Service / launchd / systemd behind one interface; pure-Go tray on Windows |
 | AD-17 | Replication monitoring, PITR, self-heal, notifications are Phase 3 | Keep the MVP to discover, pair, back up, verify, retain, restore |
 | AD-18 | **Amended** 2026-10-14 ([D-055](./decisions.md)): the only Internet use is `sevjala update`, run by hand: it downloads the newest GitHub release for the PC, checks it against the release's `checksums.txt`, and swaps the installed binary. The agent never contacts the Internet; `update --from FILE` covers offline PCs | Copying a new exe to every PC by hand is the main chore of keeping a fleet current; an operator-run download keeps the service LAN-only |
+| AD-19 | Accepted 2026-10-17 ([D-064](./decisions.md)): a restore reads its backup file twice, once to check size and sha256 and once to load it; a node copy or an exported file is first copied into `staging/<id>.restore.part` while hashing, and that copy is loaded. The exception to AD-11 is restore only. | A damaged file must never be partly loaded into a database before the damage is known; one extra read (about 1-2 s per 120 MB) is the price |
 
 ## Components
 
