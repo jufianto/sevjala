@@ -237,3 +237,40 @@ type RetentionPlan struct {
 	Unstaged []string          `json:"unstaged"`
 	Expired  []string          `json:"expired"`
 }
+
+const (
+	RestoreRunning = "running"
+	RestoreDone    = "done"
+	RestoreFailed  = "failed"
+)
+
+// RestoreRequest names a backup ("latest" or empty with DB means its newest)
+// or a File exported earlier; the target is Into (default: a new name) or,
+// with Replace, the backup's own database, which Confirm must repeat.
+type RestoreRequest struct {
+	Backup  string `json:"backup"`
+	DB      string `json:"db"`
+	Into    string `json:"into"`
+	Replace bool   `json:"replace"`
+	Confirm string `json:"confirm"`
+	File    string `json:"file"`
+}
+
+// Restore is the state of the running or last restore; Step says in words
+// what it is doing, Bytes counts that step's progress through Size.
+type Restore struct {
+	BackupID     string    `json:"backup_id"`
+	Database     string    `json:"database"`
+	Target       string    `json:"target"`
+	Replace      bool      `json:"replace"`
+	Source       string    `json:"source"`
+	State        string    `json:"state"`
+	Step         string    `json:"step"`
+	Bytes        int64     `json:"bytes"`
+	Size         int64     `json:"size"`
+	PreRestoreID string    `json:"pre_restore_id,omitempty"`
+	Tables       int       `json:"tables"`
+	Error        string    `json:"error,omitempty"`
+	StartedAt    time.Time `json:"started_at"`
+	FinishedAt   time.Time `json:"finished_at,omitzero"`
+}

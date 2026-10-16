@@ -65,6 +65,9 @@ func (c *Controller) retentionInput(ctx context.Context) (retention.Input, map[s
 	for id := range c.jobs {
 		busy[id] = true
 	}
+	if id := c.restoringID(); id != "" {
+		busy[id] = true
+	}
 	c.mu.Unlock()
 	ps, err := c.Store.Policies(ctx)
 	if err != nil {

@@ -52,6 +52,8 @@ type Controller struct {
 	pollMu         sync.Mutex
 	nodes          map[string]*nodeState
 
+	restore *restoreRun // the running or last restore, guarded by mu
+
 	reconcileMu sync.Mutex
 	unknownSeen map[[2]string]bool // backup, agent: unknown backups already logged
 }

@@ -107,6 +107,9 @@ func dumper(mode, db string) int {
 func load(mode, db string) int {
 	n, _ := io.Copy(io.Discard, os.Stdin)
 	logLine(fmt.Sprintf("LOAD %s %d", db, n))
+	if mode == Hang {
+		time.Sleep(time.Hour)
+	}
 	if mode == LoadFails {
 		fmt.Fprintln(os.Stderr, "ERROR 1062 (23000) at line 3: Duplicate entry '1' for key 'PRIMARY'")
 		return 1

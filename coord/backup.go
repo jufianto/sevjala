@@ -149,17 +149,12 @@ func (c *Controller) runBackup(j *job, created time.Time, tags []string, cfg con
 }
 
 func (c *Controller) dump(j *job, created time.Time, tags []string, cfg config.Config) (inventory.Manifest, error) {
-	db := cfg.Controller.Database
-	pw, err := config.Secret(c.DataDir, db.PasswordRef)
-	if err != nil {
-		return inventory.Manifest{}, fmt.Errorf("database password: %w", err)
-	}
-	tools, err := c.FindTools(db.Dumper)
+	tools, conn, err := c.mysql(cfg)
 	if err != nil {
 		return inventory.Manifest{}, err
 	}
 	return dump.Run(c.Ctx, dump.Options{ID: j.id, Database: j.db, StagingDir: c.Staging, SourceAgent: c.Self.AgentID,
-		Created: created, Tags: tags, Tools: tools, Conn: dump.Conn{Host: db.Host, Port: db.Port, User: db.User, Password: pw},
+		Created: created, Tags: tags, Tools: tools, Conn: conn,
 		Progress: func(n int64) { j.bytes.Store(n) }})
 }
 

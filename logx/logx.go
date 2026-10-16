@@ -50,6 +50,11 @@ const (
 	EventBackfillQueued     = "backfill_queued"
 	EventStagingPruned      = "staging_pruned"
 	EventUnknownBackup      = "unknown_backup"
+	EventRestoreStarted     = "restore_started"
+	EventRestoreSourceFail  = "restore_source_failed"
+	EventCopyCorrupt        = "copy_corrupt"
+	EventRestoreSucceeded   = "restore_succeeded"
+	EventRestoreFailed      = "restore_failed"
 )
 
 func Event(name string) slog.Attr { return slog.String("event", name) }
