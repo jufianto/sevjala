@@ -3,6 +3,7 @@ module github.com/jufianto/sevjala
 go 1.27.0
 
 require (
+	fyne.io/systray v1.12.2
 	github.com/BurntSushi/toml v1.6.0
 	github.com/Microsoft/go-winio v0.6.3
 	github.com/kardianos/service v1.3.0
