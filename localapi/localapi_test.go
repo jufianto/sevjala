@@ -51,6 +51,7 @@ type fakeBackend struct {
 	sawCaller, gotAdmin               bool
 	gotAccount                        string
 	gotLimit                          int
+	gotConfirm                        string
 }
 
 func (f *fakeBackend) Status() Status { return f.status }
@@ -83,9 +84,9 @@ func (f *fakeBackend) Pair(_ context.Context, agent, code, fp string) (Agent, er
 	return Agent{AgentID: agent}, f.err
 }
 
-func (f *fakeBackend) RemoveAgent(_ context.Context, agent string, force bool) (Agent, error) {
+func (f *fakeBackend) RemoveAgent(_ context.Context, agent string, force bool, confirm string) (Agent, error) {
 	f.mu.Lock()
-	f.gotForce = force
+	f.gotForce, f.gotConfirm = force, confirm
 	f.mu.Unlock()
 	return Agent{AgentID: agent}, f.err
 }
@@ -192,12 +193,12 @@ func TestRoutesRoundTrip(t *testing.T) {
 	if p, err := c.Ping(ctx, "BACKUP PC/1"); err != nil || p.Agent.AgentID != "BACKUP PC/1" || p.RTTMs != 3 {
 		t.Errorf("Ping: %+v %v", p, err)
 	}
-	if a, err := c.RemoveAgent(ctx, "BACKUP PC/1", true); err != nil || a.AgentID != "BACKUP PC/1" {
+	if a, err := c.RemoveAgent(ctx, "BACKUP PC/1", true, "BACKUP PC/1 & co"); err != nil || a.AgentID != "BACKUP PC/1" {
 		t.Errorf("RemoveAgent: %+v %v", a, err)
 	}
 	f.mu.Lock()
-	if !f.gotForce {
-		t.Error("force did not reach the backend")
+	if !f.gotForce || f.gotConfirm != "BACKUP PC/1 & co" {
+		t.Errorf("force %v, confirm %q", f.gotForce, f.gotConfirm)
 	}
 	f.mu.Unlock()
 }

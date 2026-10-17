@@ -118,7 +118,7 @@ func TestRemoveAgent(t *testing.T) {
 	if _, err := ctrl.SetPolicy(ctx, "daily", localapi.PolicyChange{To: []string{"PC-1"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ctrl.RemoveAgent(ctx, "PC-1", true); !is409(err, "policy daily sends only to PC-1") {
+	if _, err := ctrl.RemoveAgent(ctx, "PC-1", true, "PC-1"); !is409(err, "policy daily sends only to PC-1") {
 		t.Errorf("sole destination of a policy: %v", err)
 	}
 	if _, err := ctrl.SetPolicy(ctx, "daily", localapi.PolicyChange{To: []string{"PC-1", "PC-2"}}); err != nil {
@@ -128,11 +128,11 @@ func TestRemoveAgent(t *testing.T) {
 	if err := ctrl.Store.MarkCopy(ctx, id, pc2.id.AgentID, store.CopyDeleted, "test", tick0); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ctrl.RemoveAgent(ctx, "PC-1", false); !is409(err, "1 backup has its only copy on PC-1") || !is409(err, "--force") {
+	if _, err := ctrl.RemoveAgent(ctx, "PC-1", false, ""); !is409(err, "1 backup has its only copy on PC-1") || !is409(err, "--force") {
 		t.Errorf("only copy: %v", err)
 	}
 
-	a, err := ctrl.RemoveAgent(ctx, "PC-1", true)
+	a, err := ctrl.RemoveAgent(ctx, "PC-1", true, "PC-1")
 	if err != nil || a.Hostname != "PC-1" {
 		t.Fatalf("remove: %+v, %v", a, err)
 	}
@@ -155,7 +155,7 @@ func TestRemoveAgent(t *testing.T) {
 	if len(stored(t, pc1)) == 0 {
 		t.Error("the node's files must stay")
 	}
-	if _, err := ctrl.RemoveAgent(ctx, "PC-1", true); err == nil {
+	if _, err := ctrl.RemoveAgent(ctx, "PC-1", true, "PC-1"); err == nil {
 		t.Error("removing twice succeeded")
 	}
 }

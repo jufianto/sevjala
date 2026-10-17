@@ -242,7 +242,7 @@ only to that PC, and, without --force, while some backup exists only there.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			a, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) (localapi.Agent, error) {
-				return cl.RemoveAgent(ctx, args[0], force)
+				return cl.RemoveAgent(ctx, args[0], force, "")
 			})
 			if err != nil {
 				return err

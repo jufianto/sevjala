@@ -86,7 +86,7 @@ func TestAdminOnlyActions(t *testing.T) {
 		{"backup now", func(ctx context.Context) error { return second(svc.BackupNow(ctx, "nosuch", nil)) }, false},
 		{"backup now, manual", func(ctx context.Context) error { return second(svc.BackupNow(ctx, "nosuch", []string{"manual"})) }, false},
 		{"backup now --tag daily", func(ctx context.Context) error { return second(svc.BackupNow(ctx, "nosuch", []string{"daily"})) }, true},
-		{"remove a backup PC", func(ctx context.Context) error { return second(svc.RemoveAgent(ctx, "PC-404", false)) }, true},
+		{"remove a backup PC", func(ctx context.Context) error { return second(svc.RemoveAgent(ctx, "PC-404", false, "")) }, true},
 		{"export (read a backup)", func(ctx context.Context) error {
 			_, rc, err := svc.OpenHeld(ctx, "BK-20261014-002000-30D3")
 			if rc != nil {

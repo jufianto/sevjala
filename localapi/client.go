@@ -61,11 +61,18 @@ func (c *Client) Pair(ctx context.Context, agent, code, fp string) (Agent, error
 	return a, c.do(ctx, http.MethodPost, "/pair", map[string]string{"agent": agent, "code": code, "fp": fp}, &a)
 }
 
-func (c *Client) RemoveAgent(ctx context.Context, agent string, force bool) (Agent, error) {
+func (c *Client) RemoveAgent(ctx context.Context, agent string, force bool, confirm string) (Agent, error) {
 	var a Agent
-	path := "/agents/" + url.PathEscape(agent)
+	q := url.Values{}
 	if force {
-		path += "?force=true"
+		q.Set("force", "true")
+	}
+	if confirm != "" {
+		q.Set("confirm", confirm)
+	}
+	path := "/agents/" + url.PathEscape(agent)
+	if len(q) > 0 {
+		path += "?" + q.Encode()
 	}
 	return a, c.do(ctx, http.MethodDelete, path, nil, &a)
 }

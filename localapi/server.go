@@ -60,7 +60,8 @@ func NewHandler(b Backend) http.Handler {
 		reply(w, p, err)
 	})
 	mux.HandleFunc("DELETE /agents/{agent}", func(w http.ResponseWriter, r *http.Request) {
-		a, err := b.RemoveAgent(r.Context(), r.PathValue("agent"), r.URL.Query().Get("force") == "true")
+		q := r.URL.Query()
+		a, err := b.RemoveAgent(r.Context(), r.PathValue("agent"), q.Get("force") == "true", q.Get("confirm"))
 		reply(w, a, err)
 	})
 	mux.HandleFunc("POST /db/detect", func(w http.ResponseWriter, r *http.Request) {

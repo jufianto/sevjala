@@ -3,12 +3,14 @@ package coord
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"maps"
 	"net"
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -187,7 +189,7 @@ func (c *Controller) Pair(ctx context.Context, agent, code, fp string) (localapi
 // RemoveAgent forgets a paired node. It refuses while a policy sends only to
 // that node, and, unless forced, while a backup's only copy is there: the
 // files stay on the node but this controller stops tracking them.
-func (c *Controller) RemoveAgent(ctx context.Context, agent string, force bool) (localapi.Agent, error) {
+func (c *Controller) RemoveAgent(ctx context.Context, agent string, force bool, confirm string) (localapi.Agent, error) {
 	c.reconcileMu.Lock()
 	defer c.reconcileMu.Unlock()
 	as, err := c.Store.Agents(ctx)
@@ -209,18 +211,31 @@ func (c *Controller) RemoveAgent(ctx context.Context, agent string, force bool) 
 				p.Name, a.Hostname, p.Name)
 		}
 	}
+	bs, err := c.Store.Backups(ctx, false)
+	if err != nil {
+		return localapi.Agent{}, err
+	}
+	if dbs := lastCopies(bs, a.AgentID, c.inStaging, c.config().Controller.Database.Databases); len(dbs) > 0 {
+		return localapi.Agent{}, localapi.Errorf(http.StatusConflict,
+			"%s holds the only verified copy of %s; Sevjala keeps tracking it until another backup PC holds one too: run 'sevjala backup now' and wait for the copy",
+			a.Hostname, strings.Join(dbs, ", "))
+	}
 	only, err := c.Store.OnlyCopies(ctx, a.AgentID)
 	if err != nil {
 		return localapi.Agent{}, err
 	}
+	backups := "backups have their"
+	if len(only) == 1 {
+		backups = "backup has its"
+	}
 	if len(only) > 0 && !force {
-		backups := "backups have their"
-		if len(only) == 1 {
-			backups = "backup has its"
-		}
 		return localapi.Agent{}, localapi.Errorf(http.StatusConflict,
 			"%d %s only copy on %s; they stay on that PC, but this controller would stop tracking them. Remove anyway with: sevjala agents remove %s --force",
 			len(only), backups, a.Hostname, agent)
+	}
+	if len(only) > 0 && confirm != a.Hostname {
+		return localapi.Agent{}, localapi.ConfirmRequired(
+			fmt.Sprintf("%d %s only copy on %s; this controller stops tracking them (they stay on that PC)", len(only), backups, a.Hostname), a.Hostname, len(only), []string{a.Hostname})
 	}
 	if err := c.Store.RemoveAgent(ctx, a.AgentID); err != nil {
 		return localapi.Agent{}, err
@@ -292,4 +307,29 @@ func toAPI(a store.Agent) localapi.Agent {
 	return localapi.Agent{AgentID: a.AgentID, Hostname: a.Hostname, Addr: net.JoinHostPort(a.LastIP, strconv.Itoa(a.Port)),
 		Role: a.Role, Version: a.Version, FP: a.FP, PairedAt: a.PairedAt, LastSeen: a.LastSeen, State: a.State,
 		FreeBytes: a.FreeBytes}
+}
+
+// lastCopies lists the configured databases whose only verified backup copies
+// are on agent: no other PC and not the controller's own copy holds one.
+func lastCopies(bs []store.Backup, agent string, staged func(string) bool, dbs []string) []string {
+	var out []string
+	for _, db := range dbs {
+		held, elsewhere := false, false
+		for _, b := range bs {
+			if b.Database != db || b.State == store.BackupExpired {
+				continue
+			}
+			elsewhere = elsewhere || staged(b.BackupID)
+			for _, cp := range b.Copies {
+				if cp.State == store.CopyVerified {
+					held = held || cp.AgentID == agent
+					elsewhere = elsewhere || cp.AgentID != agent
+				}
+			}
+		}
+		if held && !elsewhere {
+			out = append(out, db)
+		}
+	}
+	return out
 }
