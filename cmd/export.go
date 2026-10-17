@@ -191,19 +191,35 @@ func writeExport(m inventory.Manifest, body io.Reader, dir string, force bool) (
 	return data, nil
 }
 
-func renderHeld(w io.Writer, held []inventory.Manifest) {
+func renderHeld(w io.Writer, held []inventory.Manifest, sources []inventory.Source) {
 	if len(held) == 0 {
 		fmt.Fprintln(w, "this PC holds no backups yet")
 		return
 	}
+	from := map[string]string{}
+	for _, s := range sources {
+		from[s.AgentID] = sourceName(s)
+		if !s.Current {
+			from[s.AgentID] += " (former)"
+		}
+	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "BACKUP\tDATABASE\tCREATED\tSIZE\tTAGS")
+	fmt.Fprintln(tw, "BACKUP\tDATABASE\tFROM\tCREATED\tSIZE\tTAGS")
 	for _, m := range held {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", m.BackupID, m.Database, m.CreatedAt.Local().Format("2006-01-02 15:04"),
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", m.BackupID, m.Database, from[m.SourceAgent], m.CreatedAt.Local().Format("2006-01-02 15:04"),
 			inventory.HumanBytes(m.Size), strings.Join(m.Tags, ","))
 	}
 	tw.Flush()
 	fmt.Fprintln(w, "\ncopy one out: sevjala backups export <BACKUP> --to <FOLDER>")
+}
+
+// sourceName is a controller's PC name, or the start of its agent id before
+// its first named backup.
+func sourceName(s inventory.Source) string {
+	if s.Hostname != "" {
+		return s.Hostname
+	}
+	return shortID(s.AgentID)
 }
 
 // exportFolder makes a database name safe as a folder name on every OS.

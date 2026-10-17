@@ -85,6 +85,10 @@ func TestBackupNowReachesThreeNodes(t *testing.T) {
 		if len(inv.Backups) != 1 || inv.Backups[0].SHA256 != b.SHA256 || inv.Backups[0].State != inventory.StateVerified {
 			t.Errorf("node store %+v", inv)
 		}
+		// The node can tell which controller each backup came from, by name.
+		if ms, _ := inventory.List(n.inv.Dir()); len(ms) != 1 || ms[0].SourceAgent != ctrl.Self.AgentID || ms[0].SourceHost != "SERVER-01" {
+			t.Errorf("node manifests %+v", ms)
+		}
 	}
 	for _, ext := range []string{inventory.DataExt, inventory.ManifestExt} {
 		if _, err := os.Stat(filepath.Join(ctrl.Staging, b.BackupID+ext)); err != nil {

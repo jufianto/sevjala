@@ -1,6 +1,7 @@
 <script>
   import { post } from './lib/live.svelte.js'
   import { when, until, upFor, bytes, plural } from './lib/format.js'
+  import { sourceName, controllerName } from './lib/sources.js'
 
   let { status, now } = $props()
   const h = $derived(status.health ?? {})
@@ -77,12 +78,27 @@
     <article class="card">
       <div class="label">This backup PC holds</div>
       <h3>{plural(status.store?.backups ?? 0, 'backup', 'backups')}</h3>
+      {#each status.store?.sources ?? [] as s}
+        <p>
+          {s.backups} from <strong>{sourceName(s)}</strong>{#if !s.current}
+            <span class="muted"> · a controller this PC is no longer paired with; kept, nothing deletes them</span>{/if}
+        </p>
+      {/each}
       <p class="muted">{status.store?.path}</p>
       {#each status.store?.problems ?? [] as p}<p class="warn">{p}</p>{/each}
     </article>
     <article class="card">
       <div class="label">The controller</div>
-      <h3>{h.controller_contact_at ? `checked in ${when(h.controller_contact_at, now)}` : 'has not checked in yet'}</h3>
+      {#if status.controller}
+        <h3>{controllerName(status)}</h3>
+        <p>
+          Paired {when(status.controller.paired_at, now)} · {h.controller_contact_at
+            ? `checked in ${when(h.controller_contact_at, now)}`
+            : 'has not checked in yet'}
+        </p>
+      {:else}
+        <h3>Not paired yet</h3>
+      {/if}
       <p class="muted">The controller sends the backups here and checks on this PC every 15 seconds.</p>
     </article>
   </section>

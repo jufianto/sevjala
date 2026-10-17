@@ -99,15 +99,23 @@ func TestWriteExport(t *testing.T) {
 
 func TestRenderHeld(t *testing.T) {
 	var b bytes.Buffer
-	renderHeld(&b, nil)
+	renderHeld(&b, nil, nil)
 	if b.String() != "this PC holds no backups yet\n" {
 		t.Errorf("empty: %q", b.String())
 	}
 	b.Reset()
-	renderHeld(&b, []inventory.Manifest{heldBackup("BK-20261014-002000-30D3", "shop",
-		time.Date(2026, 10, 14, 0, 20, 0, 0, time.Local), make([]byte, 2048))})
-	want := "BACKUP                   DATABASE  CREATED           SIZE     TAGS\n" +
-		"BK-20261014-002000-30D3  shop      2026-10-14 00:20  2.0 KiB  daily\n" +
+	old := heldBackup("BK-20261001-002000-0001", "shop", time.Date(2026, 10, 1, 0, 20, 0, 0, time.Local), make([]byte, 1024))
+	old.SourceAgent = "0d1d0000-2222-4222-8222-222222222222"
+	unnamed := heldBackup("BK-20261002-002000-0002", "hr", time.Date(2026, 10, 2, 0, 20, 0, 0, time.Local), make([]byte, 1024))
+	unnamed.SourceAgent = "5e5e0000-3333-4333-8333-333333333333"
+	renderHeld(&b, []inventory.Manifest{old, unnamed, heldBackup("BK-20261014-002000-30D3", "shop",
+		time.Date(2026, 10, 14, 0, 20, 0, 0, time.Local), make([]byte, 2048))},
+		[]inventory.Source{{AgentID: "c960acf5", Hostname: "SERVER-01", Backups: 1, Current: true},
+			{AgentID: old.SourceAgent, Hostname: "OLD-PC", Backups: 1}, {AgentID: unnamed.SourceAgent, Backups: 1}})
+	want := "BACKUP                   DATABASE  FROM               CREATED           SIZE     TAGS\n" +
+		"BK-20261001-002000-0001  shop      OLD-PC (former)    2026-10-01 00:20  1.0 KiB  daily\n" +
+		"BK-20261002-002000-0002  hr        5e5e0000 (former)  2026-10-02 00:20  1.0 KiB  daily\n" +
+		"BK-20261014-002000-30D3  shop      SERVER-01          2026-10-14 00:20  2.0 KiB  daily\n" +
 		"\ncopy one out: sevjala backups export <BACKUP> --to <FOLDER>\n"
 	if b.String() != want {
 		t.Errorf("got\n%s\nwant\n%s", b.String(), want)

@@ -20,6 +20,16 @@ type Status struct {
 	FP       string     `json:"fp"`
 	Store    *StoreInfo `json:"store,omitempty"`
 	Health   *Health    `json:"health,omitempty"`
+	// Controller is, on a node, the controller it is paired with.
+	Controller *Peer `json:"controller,omitempty"`
+}
+
+// Peer names a paired controller; Hostname comes from the backups it sent and
+// is empty until the first one arrives.
+type Peer struct {
+	AgentID  string    `json:"agent_id"`
+	Hostname string    `json:"hostname,omitempty"`
+	PairedAt time.Time `json:"paired_at"`
 }
 
 const (
@@ -227,6 +237,8 @@ type StoreInfo struct {
 	FreeBytes int64    `json:"free_bytes"`
 	Backups   int      `json:"backups"`
 	Problems  []string `json:"problems"`
+	// Sources are the controllers the backups came from, the paired one first.
+	Sources []inventory.Source `json:"sources,omitempty"`
 }
 
 type backupJobs struct {

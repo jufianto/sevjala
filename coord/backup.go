@@ -164,7 +164,7 @@ func (c *Controller) dump(j *job, created time.Time, tags []string, cfg config.C
 	if err != nil {
 		return inventory.Manifest{}, err
 	}
-	return dump.Run(c.Ctx, dump.Options{ID: j.id, Database: j.db, StagingDir: c.Staging, SourceAgent: c.Self.AgentID,
+	return dump.Run(c.Ctx, dump.Options{ID: j.id, Database: j.db, StagingDir: c.Staging, SourceAgent: c.Self.AgentID, SourceHost: c.Host,
 		Created: created, Tags: tags, Tools: tools, Conn: conn,
 		Progress: func(n int64) { j.bytes.Store(n) }})
 }

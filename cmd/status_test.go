@@ -9,6 +9,7 @@ import (
 
 	"github.com/kardianos/service"
 
+	"github.com/jufianto/sevjala/inventory"
 	"github.com/jufianto/sevjala/localapi"
 )
 
@@ -96,8 +97,12 @@ func TestRenderOverview(t *testing.T) {
 			Agents: []localapi.AgentHealth{{Hostname: "PC-1", State: "online", LastSeen: oNow},
 				{Hostname: "PC-2", State: "offline", LastSeen: oNow.Add(-2*time.Hour - 15*time.Minute), Waiting: 1}},
 			FreeBytes: 50 << 30}}
+	paired := time.Date(2026, 10, 14, 9, 0, 0, 0, time.Local)
 	node := localapi.Status{Version: "0.4.0", Role: "node", Hostname: "PC-1", UptimeS: 3600,
-		Store: &localapi.StoreInfo{Backups: 34, FreeBytes: 120 << 30},
+		Controller: &localapi.Peer{AgentID: "c960acf5-1111-4111-8111-111111111111", Hostname: "SERVER-01", PairedAt: paired},
+		Store: &localapi.StoreInfo{Backups: 34, FreeBytes: 120 << 30, Sources: []inventory.Source{
+			{AgentID: "c960acf5-1111-4111-8111-111111111111", Hostname: "SERVER-01", Backups: 31, Current: true},
+			{AgentID: "0d1d0000-2222-4222-8222-222222222222", Hostname: "OLD-PC", Backups: 3}}},
 		Health: &localapi.Health{Level: localapi.HealthOK, Headline: "Holding 34 backups; the controller last checked in at 10:26 (just now)",
 			Items: []localapi.HealthItem{}, FreeBytes: 120 << 30, ControllerContactAt: oNow.Add(-time.Minute)}}
 	tests := []struct {
@@ -117,7 +122,18 @@ func TestRenderOverview(t *testing.T) {
 		{"node", overviewOf(node, nil, service.StatusRunning), "Sevjala backup PC on PC-1: OK\n" +
 			"  Holding 34 backups; the controller last checked in at 10:26 (just now)\n\n" +
 			"  service     running (test-platform), agent 0.4.0, up 1h 0m\n" +
-			"  holds       34 backups, 120.0 GiB free\n"},
+			"  controller  SERVER-01, paired 2026-10-14, checked in 10:26 (1 min ago)\n" +
+			"  holds       34 backups, 120.0 GiB free\n" +
+			"  also holds  3 backups from OLD-PC, a controller this PC is no longer paired with (kept; nothing deletes them)\n"},
+		// Until the first backup arrives the controller is known only by its id.
+		{"node newly paired", overviewOf(localapi.Status{Version: "0.4.0", Role: "node", Hostname: "PC-1", UptimeS: 3600,
+			Controller: &localapi.Peer{AgentID: "c960acf5-1111-4111-8111-111111111111", PairedAt: paired},
+			Store:      &localapi.StoreInfo{FreeBytes: 120 << 30},
+			Health:     &localapi.Health{Level: localapi.HealthOK, Headline: "Holding 0 backups", Items: []localapi.HealthItem{}}}, nil, service.StatusRunning),
+			"Sevjala backup PC on PC-1: OK\n  Holding 0 backups\n\n" +
+				"  service     running (test-platform), agent 0.4.0, up 1h 0m\n" +
+				"  controller  c960acf5 (its name shows with its first backup), paired 2026-10-14\n" +
+				"  holds       0 backups, 120.0 GiB free\n"},
 		{"not answering", overviewOf(localapi.Status{}, errors.New("refused"), service.StatusStopped), "Sevjala on HOST: PROBLEM\n" +
 			"  ! the Sevjala service is stopped; start it with: sevjala service start\n\n" +
 			"  service     stopped (test-platform)\n"},

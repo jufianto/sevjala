@@ -140,9 +140,26 @@ func renderOverview(w io.Writer, v statusView, host string, now time.Time) bool 
 		}
 		line("backup PCs", "%s", strings.Join(pcs, " · "))
 	}
+	if p := a.Controller; p != nil {
+		name := p.Hostname
+		if name == "" {
+			name = shortID(p.AgentID) + " (its name shows with its first backup)"
+		}
+		text := name + ", paired " + p.PairedAt.Local().Format("2006-01-02")
+		if !h.ControllerContactAt.IsZero() {
+			text += ", checked in " + localapi.When(h.ControllerContactAt, now)
+		}
+		line("controller", "%s", text)
+	}
 	switch {
 	case a.Store != nil:
 		line("holds", "%d backups, %s free", a.Store.Backups, inventory.HumanBytes(a.Store.FreeBytes))
+		for _, s := range a.Store.Sources {
+			if !s.Current {
+				line("also holds", "%s from %s, a controller this PC is no longer paired with (kept; nothing deletes them)",
+					plural(s.Backups, "backup"), sourceName(s))
+			}
+		}
 	case a.Role == config.RoleController:
 		line("disk", "%s free here", inventory.HumanBytes(h.FreeBytes))
 	}

@@ -173,6 +173,7 @@ headers against the manifest, and size and sha256 against its catalog while it w
   "database": "shop",
   "created_at": "2026-10-13T10:15:00+07:00",
   "source_agent": "c960acf5-…",
+  "source_host": "SERVER-01",
   "server_version": "10.4.32-MariaDB",
   "dump_flags": ["--routines", "--triggers", "--events", "--hex-blob", "--no-create-db",
                  "--default-character-set=utf8mb4", "--single-transaction"],
@@ -187,6 +188,8 @@ headers against the manifest, and size and sha256 against its catalog while it w
 | `v` | 1 |
 | `backup_id` | `^BK-\d{8}-\d{6}-[0-9A-F]{4}$`: local time of the dump, then 4 random uppercase hex; it is also the file name |
 | `created_at` | RFC 3339, whole seconds |
+| `source_agent` | agent_id of the controller that made it |
+| `source_host` | that controller's PC name, optional (since 0.3.0-alpha.4); a node names the controller after its newest backup that carries one |
 | `dump_flags` | content flags, then `--single-transaction` (all tables InnoDB) or `--lock-tables` |
 | `size`, `sha256` | of the `.sql.gz` file (gzip of the mysqldump output) |
 | `tags` | `manual` unless `backup now --tag`; `pre-restore` for the backup `--replace-production` makes first (M4) |
@@ -357,9 +360,10 @@ loaded.
 | `data_dir` | string | absolute data dir |
 | `agent_id` | string | since M1 |
 | `fp` | string | since M1 |
-| `store` | object | node only, since M2: `{"path","free_bytes","backups":N,"problems":[…]}` |
+| `store` | object | node only, since M2: `{"path","free_bytes","backups":N,"problems":[…]}`; `sources` since 0.3.0-alpha.4: `[{"agent_id","hostname","backups":N,"current":bool}]`, the controllers its backups came from, the paired one (`current`) first. A pairing replaces the controller and keeps the old one's backups, which nothing deletes |
 | `hostname` | string | since M5 |
 | `health` | object | since M5, `Health` below; omitted while the agent starts |
+| `controller` | object | node only, paired, since 0.3.0-alpha.4: `{"agent_id","hostname","paired_at"}`; `hostname` is empty until a backup from it carries one |
 
 `Health` (M5): `{"level":"ok|warning|problem","headline","items":[{"level","text"}],"databases":[DBHealth],"next_backup_at","next_policy","agents":[AgentHealth],"free_bytes","controller_contact_at"}`.
 `items` lists problems before warnings; with any item, `headline` and `level` are the first

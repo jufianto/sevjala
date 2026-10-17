@@ -398,6 +398,17 @@ func (s *Server) Paired() bool { return s.controllerFP() != "" }
 
 // ControllerContact is when the paired controller last called; zero until it
 // calls after this start.
+// Controller is the paired controller, or nil.
+func (s *Server) Controller() *identity.Peer {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.controller == nil {
+		return nil
+	}
+	p := *s.controller
+	return &p
+}
+
 func (s *Server) ControllerContact() time.Time {
 	s.mu.Lock()
 	defer s.mu.Unlock()

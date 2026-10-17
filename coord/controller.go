@@ -26,6 +26,7 @@ import (
 
 type Controller struct {
 	Self      *identity.Identity
+	Host      string // this PC's name, written into every backup it makes
 	Store     *store.Store
 	LAN       *lanapi.Client
 	Targets   func() ([]*net.UDPAddr, error)

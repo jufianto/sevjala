@@ -2,13 +2,19 @@ package svc
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jufianto/sevjala/config"
+	"github.com/jufianto/sevjala/identity"
+	"github.com/jufianto/sevjala/inventory"
 	"github.com/jufianto/sevjala/localapi"
 	"github.com/jufianto/sevjala/logx"
 	"github.com/jufianto/sevjala/store"
@@ -164,5 +170,53 @@ func TestControllerStartRemovesUnfinishedDumps(t *testing.T) {
 	bs, err := localapi.NewClient(localapi.Endpoint(dir)).Backups(context.Background(), false)
 	if err != nil || len(bs) != 0 {
 		t.Errorf("backups %+v, %v", bs, err)
+	}
+}
+
+// A node names the controller it is paired with, and the controllers its
+// backups came from, including one a later pairing replaced.
+func TestNodeAgentNamesItsControllers(t *testing.T) {
+	dir := shortDir(t)
+	paired := time.Date(2026, 10, 14, 9, 0, 0, 0, time.UTC)
+	if err := identity.SaveController(dir, identity.Peer{AgentID: "c960acf5", FP: strings.Repeat("ab", 32), PairedAt: paired}); err != nil {
+		t.Fatal(err)
+	}
+	storeDir := filepath.Join(dir, "store")
+	if err := os.MkdirAll(storeDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range []struct{ id, agent, host string }{
+		{"BK-20261001-010000-0001", "old00001", "OLD-PC"},
+		{"BK-20261015-010000-0002", "c960acf5", "SERVER-01"},
+	} {
+		data := []byte("-- " + b.id)
+		sum := sha256.Sum256(data)
+		m := inventory.Manifest{V: 1, BackupID: b.id, Database: "shop", CreatedAt: paired, SourceAgent: b.agent, SourceHost: b.host,
+			Size: int64(len(data)), SHA256: hex.EncodeToString(sum[:]), Tags: []string{"daily"}}
+		if err := os.WriteFile(filepath.Join(storeDir, b.id+inventory.DataExt), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := inventory.WriteManifest(filepath.Join(storeDir, b.id+inventory.ManifestExt), m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a := &Agent{DataDir: dir, Config: testConfig(config.RoleNode), Version: "test"}
+	if err := a.Start(nil); err != nil {
+		t.Fatal(err)
+	}
+	defer a.Stop(nil)
+	st, err := localapi.NewClient(localapi.Endpoint(dir)).Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := &localapi.Peer{AgentID: "c960acf5", Hostname: "SERVER-01", PairedAt: paired}
+	if st.Controller == nil || *st.Controller != *want {
+		t.Errorf("controller %+v", st.Controller)
+	}
+	if st.Store == nil || !reflect.DeepEqual(st.Store.Sources, []inventory.Source{
+		{AgentID: "c960acf5", Hostname: "SERVER-01", Backups: 1, Current: true},
+		{AgentID: "old00001", Hostname: "OLD-PC", Backups: 1},
+	}) {
+		t.Errorf("store %+v", st.Store)
 	}
 }

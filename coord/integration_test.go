@@ -113,7 +113,7 @@ func newController(t *testing.T, targets ...*discovery.Responder) *Controller {
 	ctx, cancel := context.WithCancel(context.Background())
 	cfg := config.Default(config.RoleController)
 	cfg.Controller.Database.Databases = []string{"shop"}
-	c := &Controller{Self: id, Store: st, LAN: lanapi.NewClient(id), Wait: 300 * time.Millisecond, Log: discard,
+	c := &Controller{Self: id, Host: "SERVER-01", Store: st, LAN: lanapi.NewClient(id), Wait: 300 * time.Millisecond, Log: discard,
 		Targets: func() ([]*net.UDPAddr, error) {
 			var out []*net.UDPAddr
 			for _, r := range targets {

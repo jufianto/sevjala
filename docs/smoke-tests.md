@@ -437,3 +437,20 @@ Still to do:
    browser the page says it is too old and names Chrome, Firefox or Edge.
 5. **Admin-only from the page:** nothing in M6 needs admin; an admin-only answer would say to use
    the command line, which asks for the rights.
+
+## Where a backup came from (D-086)
+
+Done on macOS (2026-10-17): a test node holding backups from before this change shows
+`controller  <id> (its name shows with its first backup)` and the id in the FROM column of
+`backups list`. The controller's name reaching each node's manifests is covered by
+`TestBackupNowReachesThreeNodes`; the node's `controller` and `sources` by
+`TestNodeAgentNamesItsControllers`.
+
+Still to do, after `sevjala update` on the controller and on the node:
+
+1. **Name arrives:** Back up now on the controller; on the node `sevjala status` shows
+   `controller  <controller PC name>, paired …, checked in …`, `backups list` shows that name in
+   FROM for every backup, and the node's dashboard names it on the "The controller" card.
+2. **Former controller:** pair the node with a second controller; the first one's backups stay,
+   `status` shows `also holds  N backups from <first controller>, a controller this PC is no
+   longer paired with`, and `backups list` marks them `(former)`.

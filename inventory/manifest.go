@@ -27,6 +27,7 @@ type Manifest struct {
 	Database      string    `json:"database"`
 	CreatedAt     time.Time `json:"created_at"`
 	SourceAgent   string    `json:"source_agent"`
+	SourceHost    string    `json:"source_host,omitempty"`
 	ServerVersion string    `json:"server_version"`
 	DumpFlags     []string  `json:"dump_flags"`
 	Size          int64     `json:"size"`

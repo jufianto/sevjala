@@ -28,6 +28,7 @@ type Options struct {
 	Database    string
 	StagingDir  string
 	SourceAgent string
+	SourceHost  string
 	Created     time.Time
 	Tags        []string
 	Tools       Tools
@@ -100,7 +101,7 @@ func dumpTo(ctx context.Context, f *os.File, o Options, flags []string) (invento
 		return inventory.Manifest{}, explain("mysqldump", o.Conn, o.Database, stderr.String(), err)
 	}
 	return inventory.Manifest{V: 1, BackupID: o.ID, Database: o.Database, CreatedAt: o.Created.Truncate(time.Second),
-		SourceAgent: o.SourceAgent, DumpFlags: flags, Size: cw.n, SHA256: hex.EncodeToString(h.Sum(nil)), Tags: o.Tags}, nil
+		SourceAgent: o.SourceAgent, SourceHost: o.SourceHost, DumpFlags: flags, Size: cw.n, SHA256: hex.EncodeToString(h.Sum(nil)), Tags: o.Tags}, nil
 }
 
 type counter struct {

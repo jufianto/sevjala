@@ -116,7 +116,7 @@ func (a *Agent) start() error {
 		ctx, cancel := context.WithCancel(context.Background())
 		a.cancel = cancel
 		port := a.Config.DiscoveryPort
-		ctrl := &coord.Controller{Self: id, Store: a.store, LAN: lanapi.NewClient(id),
+		ctrl := &coord.Controller{Self: id, Host: hostname, Store: a.store, LAN: lanapi.NewClient(id),
 			Targets: func() ([]*net.UDPAddr, error) { return discovery.BroadcastTargets(port) },
 			Wait:    discovery.DefaultWait, Log: a.log, DataDir: a.DataDir, Staging: staging, Config: a.Config,
 			Ctx: ctx, FindTools: dump.FindTools, PollEvery: PollEvery, ReconcileEvery: ReconcileEvery}
@@ -220,6 +220,19 @@ func (a *Agent) status() localapi.Status {
 			info.Problems = append(info.Problems, err.Error())
 		} else {
 			info.Backups, info.Problems = len(inv.Backups), append(info.Problems, inv.Problems...)
+		}
+		var current string
+		if lan := a.lanUp.Load(); lan != nil {
+			if p := lan.Controller(); p != nil {
+				current = p.AgentID
+				st.Controller = &localapi.Peer{AgentID: p.AgentID, PairedAt: p.PairedAt}
+			}
+		}
+		if ms, err := inventory.List(a.inv.Dir()); err == nil {
+			info.Sources = inventory.Sources(ms, current)
+			if st.Controller != nil && len(info.Sources) > 0 && info.Sources[0].Current {
+				st.Controller.Hostname = info.Sources[0].Hostname
+			}
 		}
 		if free, err := a.inv.FreeBytes(); err != nil {
 			info.Problems = append(info.Problems, err.Error())

@@ -190,7 +190,11 @@ On a backup PC: the backups this PC holds.`,
 				if err != nil {
 					return err
 				}
-				renderHeld(c.OutOrStdout(), held)
+				var sources []inventory.Source
+				if st.Store != nil {
+					sources = st.Store.Sources
+				}
+				renderHeld(c.OutOrStdout(), held, sources)
 				return nil
 			}
 			bs, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) ([]localapi.Backup, error) {
