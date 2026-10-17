@@ -109,6 +109,7 @@ type Agent struct {
 	State     string    `json:"state"`
 	FreeBytes int64     `json:"free_bytes"`
 	Problem   string    `json:"problem,omitempty"` // why the last poll warned or failed
+	Manager   bool      `json:"manager"`
 }
 
 type Ping struct {

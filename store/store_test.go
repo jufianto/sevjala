@@ -162,3 +162,35 @@ func TestRemoveAgent(t *testing.T) {
 		t.Errorf("second remove: %v", err)
 	}
 }
+
+func TestSetManager(t *testing.T) {
+	s, _ := open(t)
+	ctx := context.Background()
+	if err := s.UpsertAgent(ctx, agent("n1", "PC-1")); err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := s.Agent(ctx, "n1"); a.Manager {
+		t.Fatal("a new agent is a manager")
+	}
+	if err := s.SetManager(ctx, "n1", true); err != nil {
+		t.Fatal(err)
+	}
+	if as, _ := s.Agents(ctx); len(as) != 1 || !as[0].Manager {
+		t.Errorf("after on: %+v", as)
+	}
+	if err := s.UpsertAgent(ctx, agent("n1", "PC-1b")); err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := s.Agent(ctx, "n1"); !a.Manager || a.Hostname != "PC-1b" {
+		t.Errorf("an address update dropped the flag: %+v", a)
+	}
+	if err := s.SetManager(ctx, "n1", false); err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := s.Agent(ctx, "n1"); a.Manager {
+		t.Error("still a manager after off")
+	}
+	if err := s.SetManager(ctx, "nope", true); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown agent: %v", err)
+	}
+}

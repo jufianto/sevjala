@@ -73,6 +73,7 @@ var migrations = []string{
 		('frequent', '*/10 * * * *', 12), ('hourly', '0 * * * *', 24),
 		('daily', '0 1 * * *', 30), ('monthly', '0 1 1 * *', 12), ('manual', '', 10)`,
 	`INSERT OR IGNORE INTO policies (name, cron, keep) VALUES ('pre-restore', '', 5)`,
+	`ALTER TABLE agents ADD COLUMN manager INTEGER NOT NULL DEFAULT 0`,
 }
 
 type Agent struct {
@@ -87,6 +88,7 @@ type Agent struct {
 	LastSeen  time.Time
 	State     string
 	FreeBytes int64
+	Manager   bool // may run controller commands over manager links (AD-21)
 }
 
 type Store struct{ db *sql.DB }
@@ -149,7 +151,7 @@ func (s *Store) UpsertAgent(ctx context.Context, a Agent) error {
 }
 
 func (s *Store) Agents(ctx context.Context) ([]Agent, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+agentCols+` FROM agents ORDER BY hostname, agent_id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+agentCols+`, manager FROM agents ORDER BY hostname, agent_id`)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +168,7 @@ func (s *Store) Agents(ctx context.Context) ([]Agent, error) {
 }
 
 func (s *Store) Agent(ctx context.Context, id string) (Agent, error) {
-	a, err := scanAgent(s.db.QueryRowContext(ctx, `SELECT `+agentCols+` FROM agents WHERE agent_id = ?`, id))
+	a, err := scanAgent(s.db.QueryRowContext(ctx, `SELECT `+agentCols+`, manager FROM agents WHERE agent_id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Agent{}, fmt.Errorf("agent %s: %w", id, ErrNotFound)
 	}
@@ -193,7 +195,7 @@ func scanAgent(r scanner) (Agent, error) {
 	var a Agent
 	var paired, seen string
 	if err := r.Scan(&a.AgentID, &a.Hostname, &a.LastIP, &a.Port, &a.FP, &a.Role, &a.Version,
-		&paired, &seen, &a.State, &a.FreeBytes); err != nil {
+		&paired, &seen, &a.State, &a.FreeBytes, &a.Manager); err != nil {
 		return Agent{}, err
 	}
 	var err error
@@ -229,6 +231,10 @@ func (s *Store) RecordPoll(ctx context.Context, id, state, version string, freeB
 // SetAgentState changes only the state (offline, error); the last poll's data stays.
 func (s *Store) SetAgentState(ctx context.Context, id, state string) error {
 	return s.update(ctx, id, `UPDATE agents SET state = ? WHERE agent_id = ?`, state, id)
+}
+
+func (s *Store) SetManager(ctx context.Context, id string, on bool) error {
+	return s.update(ctx, id, `UPDATE agents SET manager = ? WHERE agent_id = ?`, on, id)
 }
 
 // OnlyCopies lists the live backups whose only verified copy is on agent id.
