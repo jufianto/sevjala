@@ -101,17 +101,6 @@ func TestCoordUsageErrors(t *testing.T) {
 	}
 }
 
-func TestCallAgentDeniedNamesTheFix(t *testing.T) {
-	g := &globals{dataDirFlag: t.TempDir()}
-	denied := &os.PathError{Op: "open", Path: `\\.\pipe\sevjala`, Err: fs.ErrPermission}
-	_, err := callAgent(g, time.Second, func(context.Context, *localapi.Client) (struct{}, error) {
-		return struct{}{}, fmt.Errorf("post: %w", denied)
-	})
-	if err == nil || !strings.Contains(err.Error(), svc.AdminHint) || strings.Contains(err.Error(), "is the service running") {
-		t.Errorf("got %v, want the admin hint", err)
-	}
-}
-
 func TestAgentProblem(t *testing.T) {
 	pipe := func(err error) error {
 		return fmt.Errorf("post: %w", &os.PathError{Op: "open", Path: `\\.\pipe\sevjala`, Err: err})

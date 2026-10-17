@@ -30,7 +30,7 @@ later to update to a newer sevjala.exe, pair another PC, or uninstall.`,
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			if !svc.IsAdmin() {
-				return elevate(g)
+				return &needsAdmin{why: "installing Sevjala needs administrator rights"}
 			}
 			self, err := os.Executable()
 			if err != nil {

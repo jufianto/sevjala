@@ -36,7 +36,7 @@ func checkNotInstalled(s serviceStatuser) error {
 
 func requireAdmin() error {
 	if !svc.IsAdmin() {
-		return failf("this needs administrator rights: %s", svc.AdminHint)
+		return &needsAdmin{why: "this needs administrator rights"}
 	}
 	return nil
 }

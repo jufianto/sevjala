@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"runtime"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
 
+	"github.com/jufianto/sevjala/config"
 	"github.com/jufianto/sevjala/inventory"
 	"github.com/jufianto/sevjala/localapi"
 	"github.com/jufianto/sevjala/pairing"
@@ -31,6 +33,13 @@ func callAgent[T any](g *globals, timeout time.Duration, f func(context.Context,
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	v, err := f(ctx, localapi.NewClient(ep))
+	var le *localapi.Error
+	switch {
+	case localapi.IsAdminRequired(err) && errors.As(err, &le):
+		return zero, &needsAdmin{why: le.Msg}
+	case errors.Is(err, fs.ErrPermission) && runtime.GOOS != "windows":
+		return zero, &needsAdmin{why: "this account is not in group " + config.SocketGroup + " yet (log out and back in after setup)"}
+	}
 	if err != nil {
 		var s serviceStatuser
 		if ss, serr := svc.New(dataDir, &svc.Agent{}); serr == nil {

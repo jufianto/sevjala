@@ -34,27 +34,6 @@ func installDir() string {
 	return filepath.Join(pf, "Sevjala")
 }
 
-// elevate starts setup again through the UAC prompt; the new window carries
-// on and this one exits.
-func elevate(g *globals) error {
-	exe, err := os.Executable()
-	if err != nil {
-		return fail(err)
-	}
-	args := "setup"
-	if g.dataDirFlag != "" {
-		args += ` --data-dir "` + g.dataDirFlag + `"`
-	}
-	verb, _ := windows.UTF16PtrFromString("runas")
-	file, _ := windows.UTF16PtrFromString(exe)
-	argp, _ := windows.UTF16PtrFromString(args)
-	if err := windows.ShellExecute(0, verb, file, argp, nil, windows.SW_SHOWNORMAL); err != nil {
-		return failf("administrator rights are needed to install (%w)", err)
-	}
-	os.Exit(0)
-	return nil
-}
-
 const envKey = `SYSTEM\CurrentControlSet\Control\Session Manager\Environment`
 
 // setPath adds dir to, or removes it from, the machine PATH and tells running
