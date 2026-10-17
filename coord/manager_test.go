@@ -85,3 +85,20 @@ func TestSetManagerNeedsAdmin(t *testing.T) {
 		t.Errorf("admin: %v", err)
 	}
 }
+
+func TestPollTellsTheNodeItIsAManager(t *testing.T) {
+	dumptest.Use(t, dumptest.OK)
+	ctrl := newController(t)
+	pc1 := startAgent(t, "node", "PC-1")
+	pairNode(t, ctrl, pc1)
+	ctx := context.Background()
+	for _, on := range []bool{true, false} {
+		if _, err := ctrl.SetManager(ctx, "PC-1", on); err != nil {
+			t.Fatal(err)
+		}
+		ctrl.PollAll(ctx)
+		if host, manager, known := pc1.lan.Manager(); host != ctrl.Host || manager != on || !known {
+			t.Errorf("after %v: %q %v %v", on, host, manager, known)
+		}
+	}
+}

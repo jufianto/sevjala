@@ -57,7 +57,8 @@ func (c *Controller) PollAll(ctx context.Context) (cameBack bool) {
 		wg.Go(func() {
 			at := time.Now()
 			pctx, cancel := context.WithTimeout(ctx, timeout)
-			st, err := c.LAN.Status(pctx, net.JoinHostPort(a.LastIP, strconv.Itoa(a.Port)), a.FP)
+			st, err := c.LAN.PollStatus(pctx, net.JoinHostPort(a.LastIP, strconv.Itoa(a.Port)), a.FP,
+				lanapi.Hello{Manager: a.Manager, Host: c.Host})
 			cancel()
 			mu.Lock()
 			results = append(results, result{a, st, err, at})

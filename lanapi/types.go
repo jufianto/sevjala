@@ -67,3 +67,18 @@ type DeleteResponse struct {
 	BackupID string `json:"backup_id"`
 	Deleted  bool   `json:"deleted"`
 }
+
+// Manager links (blueprint AD-21): every poll tells the node whether it is a
+// manager and the controller's name; POST /manage then switches a connection
+// the controller opened so that the node sends requests on it.
+const (
+	HeaderManager        = "X-Sevjala-Manager"
+	HeaderControllerHost = "X-Sevjala-Controller-Host"
+	ManageProtocol       = "sevjala-manage"
+)
+
+// Hello is what a poll tells the node about itself.
+type Hello struct {
+	Manager bool
+	Host    string // the controller's hostname
+}

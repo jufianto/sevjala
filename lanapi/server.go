@@ -37,8 +37,9 @@ type Options struct {
 	Version  string
 	Hostname string
 	Started  time.Time
-	Codes    *pairing.Codes   // nil on a controller
-	Store    *inventory.Store // nil on a controller
+	Codes    *pairing.Codes             // nil on a controller
+	Store    *inventory.Store           // nil on a controller
+	Links    interface{ Put(net.Conn) } // receives manager links; nil on a controller
 	Log      *slog.Logger
 }
 
@@ -50,6 +51,7 @@ type Server struct {
 	mu         sync.Mutex
 	controller *identity.Peer
 	contact    time.Time // last authenticated request from the controller, guarded by mu
+	hello      *Hello    // the latest poll's hello, guarded by mu; nil until one arrives
 }
 
 var errUnpaired = errors.New("certificate is not the paired controller")
@@ -146,6 +148,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /backups/{id}", s.pairedOnly(s.getBackup))
 	mux.HandleFunc("PUT /backups/{id}", s.pairedOnly(s.putBackup))
 	mux.HandleFunc("DELETE /backups/{id}", s.pairedOnly(s.deleteBackup))
+	mux.HandleFunc("POST /manage", s.pairedOnly(s.manage))
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")
 	})
@@ -210,7 +213,12 @@ func (s *Server) pairedOnly(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (s *Server) status(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) status(w http.ResponseWriter, r *http.Request) {
+	if v := r.Header.Get(HeaderManager); v != "" {
+		s.mu.Lock()
+		s.hello = &Hello{Manager: v == "1", Host: r.Header.Get(HeaderControllerHost)}
+		s.mu.Unlock()
+	}
 	st := Status{AgentID: s.opt.Identity.AgentID, Role: s.opt.Role, Version: s.opt.Version,
 		UptimeS: int64(time.Since(s.opt.Started).Seconds()), Health: "healthy", Backups: []BackupRef{}, Problems: []string{}}
 	if s.opt.Store != nil {
@@ -237,6 +245,50 @@ func (s *Server) status(w http.ResponseWriter, _ *http.Request) {
 		st.Health = "warning"
 	}
 	writeJSON(w, http.StatusOK, st)
+}
+
+// Manager is what the latest poll said: the controller's hostname and whether
+// this PC is its manager; known is false until a poll with a hello arrives.
+func (s *Server) Manager() (host string, manager, known bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.hello == nil {
+		return "", false, false
+	}
+	return s.hello.Host, s.hello.Manager, true
+}
+
+// manage turns the controller's connection into a manager link and hands it
+// to the pool; the node sends its requests on it from now on.
+func (s *Server) manage(w http.ResponseWriter, r *http.Request) {
+	if _, manager, _ := s.Manager(); s.opt.Links == nil || !manager {
+		writeError(w, http.StatusForbidden, "this PC is not a manager")
+		return
+	}
+	if !strings.EqualFold(r.Header.Get("Upgrade"), ManageProtocol) {
+		writeError(w, http.StatusBadRequest, "Upgrade: "+ManageProtocol+" required")
+		return
+	}
+	conn, brw, err := http.NewResponseController(w).Hijack()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	_, err = brw.WriteString("HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: " + ManageProtocol + "\r\n\r\n")
+	if err == nil {
+		err = brw.Flush()
+	}
+	if err == nil {
+		err = conn.SetDeadline(time.Time{})
+	}
+	if err != nil {
+		conn.Close()
+		return
+	}
+	if brw.Reader.Buffered() > 0 {
+		conn = &bufConn{Conn: conn, r: brw.Reader}
+	}
+	s.opt.Links.Put(conn)
 }
 
 // putBackup stores a pushed backup. The client sends Expect: 100-continue, so

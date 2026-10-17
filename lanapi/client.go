@@ -1,6 +1,7 @@
 package lanapi
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -10,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -144,24 +146,96 @@ func send(hc *http.Client, req *http.Request, addr string, out any) error {
 func roundTrip(hc *http.Client, req *http.Request, addr string) (*http.Response, error) {
 	resp, err := hc.Do(req)
 	if err != nil {
-		// The node's alert is not a typed error; this is the only signal.
-		if strings.Contains(err.Error(), "tls: bad certificate") {
-			return nil, fmt.Errorf("%s %w", addr, ErrRejected)
-		}
-		return nil, plain(addr, err)
+		return nil, netError(addr, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
-		var e struct {
-			Error string `json:"error"`
-		}
-		if json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(&e) != nil || e.Error == "" {
-			e.Error = resp.Status
-		}
-		return nil, &HTTPError{Code: resp.StatusCode, Msg: e.Error}
+		return nil, httpError(resp)
 	}
 	return resp, nil
 }
+
+func netError(addr string, err error) error {
+	// The node's alert is not a typed error; this is the only signal.
+	if strings.Contains(err.Error(), "tls: bad certificate") {
+		return fmt.Errorf("%s %w", addr, ErrRejected)
+	}
+	return plain(addr, err)
+}
+
+func httpError(resp *http.Response) *HTTPError {
+	var e struct {
+		Error string `json:"error"`
+	}
+	if json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(&e) != nil || e.Error == "" {
+		e.Error = resp.Status
+	}
+	return &HTTPError{Code: resp.StatusCode, Msg: e.Error}
+}
+
+// PollStatus is the controller's regular poll: Status plus the hello that
+// tells the node whether it is a manager.
+func (c *Client) PollStatus(ctx context.Context, addr, nodeFP string, h Hello) (Status, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+addr+"/status", nil)
+	if err != nil {
+		return Status{}, plain(addr, err)
+	}
+	manager := "0"
+	if h.Manager {
+		manager = "1"
+	}
+	req.Header.Set(HeaderManager, manager)
+	req.Header.Set(HeaderControllerHost, h.Host)
+	var st Status
+	return st, send(c.http(nodeFP, true, nil), req, addr, &st)
+}
+
+var ErrOldNode = errors.New("runs a Sevjala without manager links: update Sevjala on that PC")
+
+// Manage dials the node and switches the connection to a manager link: from
+// then on the node sends HTTP requests on it and this side answers.
+func (c *Client) Manage(ctx context.Context, addr, nodeFP string) (net.Conn, error) {
+	d := tls.Dialer{NetDialer: &net.Dialer{Timeout: c.Timeout, KeepAlive: 30 * time.Second},
+		Config: c.transport(nodeFP, true, nil).TLSClientConfig}
+	nc, err := d.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return nil, netError(addr, err)
+	}
+	_ = nc.SetDeadline(time.Now().Add(c.Timeout))
+	req, err := http.NewRequest(http.MethodPost, "https://"+addr+"/manage", nil)
+	if err != nil {
+		nc.Close()
+		return nil, plain(addr, err)
+	}
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", ManageProtocol)
+	br := bufio.NewReader(nc)
+	var resp *http.Response
+	if err = req.Write(nc); err == nil {
+		resp, err = http.ReadResponse(br, req)
+	}
+	if err != nil {
+		nc.Close()
+		return nil, netError(addr, err)
+	}
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		defer nc.Close()
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, fmt.Errorf("%s %w", addr, ErrOldNode)
+		}
+		return nil, httpError(resp)
+	}
+	_ = nc.SetDeadline(time.Time{})
+	return &bufConn{Conn: nc, r: br}, nil
+}
+
+// bufConn reads what the upgrade's reader already buffered before the socket.
+type bufConn struct {
+	net.Conn
+	r *bufio.Reader
+}
+
+func (b *bufConn) Read(p []byte) (int, error) { return b.r.Read(p) }
 
 var errStalled = errors.New("transfer stalled: no progress for too long")
 
