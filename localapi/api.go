@@ -154,6 +154,10 @@ type Error struct {
 	Code   int
 	Msg    string
 	Reason string // machine-readable, e.g. admin_required
+	// With Reason confirm_required: the word to type, and what the request deletes.
+	Word    string
+	Deletes int
+	Hosts   []string
 }
 
 func (e *Error) Error() string { return e.Msg }
@@ -274,6 +278,8 @@ type Policy struct {
 	To       []PolicyTarget `json:"to"`
 	Enabled  bool           `json:"enabled"`
 	NextRun  time.Time      `json:"next_run,omitzero"`
+	// Deletes is filled on a dry run: the copies the change would delete.
+	Deletes []RetentionAction `json:"deletes,omitempty"`
 }
 
 // PolicyChange adds (Name, Keep required) or changes a policy: nil fields keep
@@ -284,6 +290,10 @@ type PolicyChange struct {
 	Keep     *int     `json:"keep,omitempty"`
 	To       []string `json:"to"`
 	Enabled  *bool    `json:"enabled,omitempty"`
+	// Confirm repeats the policy name when the change deletes backups; DryRun
+	// saves nothing and answers what the change would delete.
+	Confirm string `json:"confirm,omitempty"`
+	DryRun  bool   `json:"dry_run,omitempty"`
 }
 
 type policyList struct {

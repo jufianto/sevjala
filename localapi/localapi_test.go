@@ -460,3 +460,16 @@ func TestLogsRoute(t *testing.T) {
 		t.Errorf("default limit %d", f.gotLimit)
 	}
 }
+
+func TestConfirmRequiredRoundTrip(t *testing.T) {
+	f := &fakeBackend{err: ConfirmRequired("this change deletes 3 backups on PC-1", "daily", 3, []string{"PC-1"})}
+	_, err := NewClient(startBackend(t, f)).SetPolicy(context.Background(), "daily", PolicyChange{})
+	e, ok := AsConfirm(err)
+	if !ok || e.Code != http.StatusConflict || e.Word != "daily" || e.Deletes != 3 || !slices.Equal(e.Hosts, []string{"PC-1"}) ||
+		e.Msg != "this change deletes 3 backups on PC-1" {
+		t.Errorf("err = %#v", err)
+	}
+	if _, ok := AsConfirm(Errorf(http.StatusConflict, "no")); ok {
+		t.Error("a plain 409 is not confirm_required")
+	}
+}

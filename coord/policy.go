@@ -45,8 +45,14 @@ func (c *Controller) AddPolicy(ctx context.Context, ch localapi.PolicyChange) (l
 	if err := c.applyPolicy(ctx, &p, ch); err != nil {
 		return localapi.Policy{}, err
 	}
+	if _, err := c.Store.Policy(ctx, p.Name); err == nil {
+		return localapi.Policy{}, policyExists(p.Name)
+	}
+	if done, v, err := c.checkDeletes(ctx, p, ch); done {
+		return v, err
+	}
 	if err := c.Store.InsertPolicy(ctx, p); errors.Is(err, store.ErrExists) {
-		return localapi.Policy{}, localapi.Errorf(http.StatusConflict, "policy %s already exists; change it with 'sevjala policy set'", p.Name)
+		return localapi.Policy{}, policyExists(p.Name)
 	} else if err != nil {
 		return localapi.Policy{}, err
 	}
@@ -60,6 +66,9 @@ func (c *Controller) SetPolicy(ctx context.Context, name string, ch localapi.Pol
 	}
 	if err := c.applyPolicy(ctx, &p, ch); err != nil {
 		return localapi.Policy{}, err
+	}
+	if done, v, err := c.checkDeletes(ctx, p, ch); done {
+		return v, err
 	}
 	if err := c.Store.UpdatePolicy(ctx, p); err != nil {
 		return localapi.Policy{}, err
@@ -166,4 +175,27 @@ func toPolicy(p store.Policy, hosts map[string]string, now time.Time) localapi.P
 		}
 	}
 	return out
+}
+
+func policyExists(name string) error {
+	return localapi.Errorf(http.StatusConflict, "policy %s already exists; change it with 'sevjala policy set'", name)
+}
+
+// checkDeletes answers a dry run with what p would delete, or refuses an
+// unconfirmed change that deletes; done means the caller returns v, err.
+func (c *Controller) checkDeletes(ctx context.Context, p store.Policy, ch localapi.PolicyChange) (done bool, v localapi.Policy, err error) {
+	dels, err := c.previewDeletes(ctx, p)
+	if err != nil {
+		return true, v, err
+	}
+	if ch.DryRun {
+		hosts, err := c.hostnames(ctx)
+		v = toPolicy(p, hosts, time.Now())
+		v.Deletes = dels
+		return true, v, err
+	}
+	if err := confirmDeletes(p.Name, ch.Confirm, dels); err != nil {
+		return true, v, err
+	}
+	return false, v, nil
 }

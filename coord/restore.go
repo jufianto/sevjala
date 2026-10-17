@@ -95,7 +95,7 @@ func (c *Controller) Restore(ctx context.Context, req localapi.RestoreRequest) (
 			"%q cannot be a database name here: use letters, digits, _, $ or - (not first), at most 64", target)
 	}
 	if req.Replace && !req.DryRun && req.Confirm != target {
-		return localapi.Restore{}, localapi.Errorf(http.StatusConflict, "not confirmed: type the database name, %s, to replace it", target)
+		return localapi.Restore{}, localapi.ConfirmRequired(fmt.Sprintf("not confirmed: type the database name, %s, to replace it", target), target, 0, nil)
 	}
 	_, _, exists, err := dump.Schema(ctx, tools, conn, target)
 	switch {

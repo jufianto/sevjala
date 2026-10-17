@@ -187,12 +187,15 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 func reply(w http.ResponseWriter, v any, err error) {
 	if err != nil {
 		code := http.StatusInternalServerError
-		body := map[string]string{"error": err.Error()}
+		body := map[string]any{"error": err.Error()}
 		var e *Error
 		if errors.As(err, &e) {
 			code = e.Code
 			if e.Reason != "" {
 				body["code"] = e.Reason
+			}
+			if e.Reason == reasonConfirmRequired {
+				body["word"], body["deletes"], body["hosts"] = e.Word, e.Deletes, e.Hosts
 			}
 		}
 		writeJSON(w, code, body)

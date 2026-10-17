@@ -198,13 +198,16 @@ func (c *Client) OpenHeld(ctx context.Context, id string) (io.ReadCloser, error)
 
 func replyError(resp *http.Response, method, path string) error {
 	var e struct {
-		Error string `json:"error"`
-		Code  string `json:"code"`
+		Error   string   `json:"error"`
+		Code    string   `json:"code"`
+		Word    string   `json:"word"`
+		Deletes int      `json:"deletes"`
+		Hosts   []string `json:"hosts"`
 	}
 	if json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(&e) != nil || e.Error == "" {
 		e.Error = fmt.Sprintf("%s %s: %s", method, path, resp.Status)
 	}
-	return &Error{Code: resp.StatusCode, Msg: e.Error, Reason: e.Code}
+	return &Error{Code: resp.StatusCode, Msg: e.Error, Reason: e.Code, Word: e.Word, Deletes: e.Deletes, Hosts: e.Hosts}
 }
 
 func (c *Client) Restore(ctx context.Context, req RestoreRequest) (Restore, error) {
