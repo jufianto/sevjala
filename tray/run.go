@@ -25,7 +25,7 @@ func Run(cl *localapi.Client, exe string, autostart func() bool) error {
 		return err
 	}
 	hideConsole()
-	t := &tray{cl: cl, watch: watchBinary(exe), auto: watchAutostart(autostart)}
+	t := &tray{cl: cl, exe: exe, watch: watchBinary(exe), auto: watchAutostart(autostart)}
 	systray.Run(t.ready, func() {})
 	release()
 	if t.restart {
@@ -36,14 +36,15 @@ func Run(cl *localapi.Client, exe string, autostart func() bool) error {
 
 type tray struct {
 	cl      *localapi.Client
+	exe     string
 	watch   binaryWatch
 	auto    autostartWatch
 	restart bool
 
-	lines                [MaxLines]*systray.MenuItem
-	backup, status, quit *systray.MenuItem
-	jobs                 []string // backups started here and still dumping
-	note                 string   // shown once, above the status lines
+	lines                      [MaxLines]*systray.MenuItem
+	backup, dash, status, quit *systray.MenuItem
+	jobs                       []string // backups started here and still dumping
+	note                       string   // shown once, above the status lines
 }
 
 func (t *tray) ready() {
@@ -56,6 +57,7 @@ func (t *tray) ready() {
 	}
 	systray.AddSeparator()
 	t.backup = systray.AddMenuItem("Back up now", "Back up every database now")
+	t.dash = systray.AddMenuItem("Open dashboard", "Show the dashboard in your browser")
 	t.status = systray.AddMenuItem("Open status", "Show 'sevjala status' in a window")
 	if !canOpenStatus() {
 		t.status.Hide()
@@ -77,6 +79,11 @@ func (t *tray) loop() {
 		case <-t.backup.ClickedCh:
 			t.backupNow()
 			t.refresh()
+		case <-t.dash.ClickedCh:
+			if err := spawn(t.exe, "ui"); err != nil {
+				t.note = "Cannot open the dashboard: " + err.Error()
+				t.refresh()
+			}
 		case <-t.status.ClickedCh:
 			if err := openStatus(); err != nil {
 				t.note = "Cannot open the status window: " + err.Error()

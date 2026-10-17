@@ -61,6 +61,7 @@ type DBHealth struct {
 }
 
 type AgentHealth struct {
+	AgentID  string    `json:"agent_id"`
 	Hostname string    `json:"hostname"`
 	State    string    `json:"state"`
 	LastSeen time.Time `json:"last_seen,omitzero"`

@@ -23,12 +23,16 @@ type Client struct {
 var callTimeout = 15 * time.Second
 
 func NewClient(endpoint string) *Client {
-	tr := &http.Transport{
+	return &Client{hc: &http.Client{Transport: NewTransport(endpoint), Timeout: callTimeout}}
+}
+
+// NewTransport carries HTTP to the agent at endpoint, whatever the URL says.
+func NewTransport(endpoint string) *http.Transport {
+	return &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return dial(ctx, endpoint)
 		},
 	}
-	return &Client{hc: &http.Client{Transport: tr, Timeout: callTimeout}}
 }
 
 func (c *Client) Status(ctx context.Context) (Status, error) {

@@ -153,7 +153,7 @@ func TestControllerHealthSummary(t *testing.T) {
 	if h.NextPolicy != "frequent" || !h.NextBackupAt.Equal(time.Date(2026, 10, 17, 10, 30, 0, 0, time.Local)) {
 		t.Errorf("next %s at %v", h.NextPolicy, h.NextBackupAt)
 	}
-	if len(h.Agents) != 2 || h.Agents[1].Hostname != "PC-2" || h.Agents[1].Waiting != 1 || h.Agents[1].State != store.AgentOffline {
+	if len(h.Agents) != 2 || h.Agents[1].Hostname != "PC-2" || h.Agents[1].AgentID != "n2" || h.Agents[1].Waiting != 1 || h.Agents[1].State != store.AgentOffline {
 		t.Errorf("agents %+v", h.Agents)
 	}
 	if h.FreeBytes != 50<<30 {

@@ -5,13 +5,17 @@ VERSION ?= $(if $(TAG),$(patsubst v%,%,$(TAG))+$(BUILD),dev)
 LDFLAGS := -s -w -X github.com/jufianto/sevjala/cmd.version=$(VERSION)
 RACE := $(if $(filter windows,$(shell go env GOOS)),,-race)
 
-.PHONY: build build-all build-win7 test test-integration lint release
+.PHONY: build build-all build-win7 test test-integration lint release ui
 
-build:
+ui:
+	cd ui && npm ci --no-fund --no-audit && npm run build
+
+build: ui
 	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o sevjala .
 
 test:
 	go test $(RACE) ./...
+	cd ui && npm test
 
 test-integration:
 	sh scripts/test-integration.sh

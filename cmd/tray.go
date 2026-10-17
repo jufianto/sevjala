@@ -16,7 +16,7 @@ func newTrayCmd(g *globals) *cobra.Command {
 		Short: "Show the status icon: green, yellow or red (starts at login)",
 		Long: `Shows Sevjala's status as an icon next to the clock: green when the data is protected,
 yellow when something needs a look, red for a problem, grey when the service does not
-answer. Its menu shows the status lines, "Back up now" and "Open status". Setup starts
+answer. Its menu shows the status lines, "Back up now", "Open dashboard" and "Open status". Setup starts
 it at every login; it needs no administrator rights.`,
 		Example: `  sevjala tray`,
 		Args:    cobra.NoArgs,

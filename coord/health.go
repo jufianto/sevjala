@@ -165,7 +165,7 @@ func controllerHealth(in healthInput) localapi.Health {
 		}
 	}
 	for _, a := range in.agents {
-		h.Agents = append(h.Agents, localapi.AgentHealth{Hostname: a.Hostname, State: a.State, LastSeen: a.LastSeen, Waiting: waiting[a.AgentID]})
+		h.Agents = append(h.Agents, localapi.AgentHealth{AgentID: a.AgentID, Hostname: a.Hostname, State: a.State, LastSeen: a.LastSeen, Waiting: waiting[a.AgentID]})
 		switch a.State {
 		case store.AgentOffline, store.AgentError:
 			text := a.Hostname + " has not answered yet"

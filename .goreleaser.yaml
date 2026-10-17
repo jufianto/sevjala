@@ -4,6 +4,7 @@ project_name: sevjala
 before:
   hooks:
     - scripts/fetch-go-win7.sh
+    - sh -c "cd ui && npm ci --no-fund --no-audit && npm run build"
     - go tool go-winres make --arch amd64,386 --product-version {{ .Version }} --file-version {{ .Major }}.{{ .Minor }}.{{ .Patch }}.0
 
 builds:

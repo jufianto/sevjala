@@ -20,7 +20,8 @@ coverage.*
 
 # Frontend (Phase 2)
 ui/node_modules/
-ui/dist/
+ui/dist/*
+!ui/dist/.gitkeep
 
 # Agent scratch
 .superpowers/

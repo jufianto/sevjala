@@ -1,0 +1,207 @@
+<script>
+  import { layout } from './lib/layout.js'
+  import { when, clock, bytes, plural } from './lib/format.js'
+
+  let { status, agents, now } = $props()
+  const nodes = $derived(agents.filter((a) => a.role !== 'controller'))
+  const l = $derived(layout(nodes.length))
+  const waiting = $derived(Object.fromEntries((status.health?.agents ?? []).map((a) => [a.agent_id, a.waiting])))
+  const dbs = $derived((status.health?.databases ?? []).map((d) => d.name).join(', '))
+  const tone = { online: 'green', warning: 'yellow', offline: 'red', error: 'red' }
+
+  let picked = $state('')
+  const sel = $derived(nodes.find((a) => a.agent_id === picked))
+  const toggle = (id) => (picked = picked === id ? '' : id)
+
+  function lineLabel(a) {
+    const n = waiting[a.agent_id] ?? 0
+    if (n) return plural(n, 'copy waiting', 'copies waiting')
+    return a.state === 'online' ? 'up to date' : a.state
+  }
+</script>
+
+<section class="card">
+  <h2>The controller and its backup PCs</h2>
+  <p class="muted">
+    Backups go from the controller down to each backup PC. A line is green when that PC answers, yellow when it
+    warns, red when it does not answer. Click a PC for its details.
+  </p>
+
+  <svg viewBox="0 0 {l.width} {l.height}" role="img" aria-label="Diagram of the controller and its backup PCs">
+    {#each nodes as a, i}
+      {@const p = l.nodes[i]}
+      <line
+        x1={l.controller.x}
+        y1={l.controller.y + l.box.h / 2}
+        x2={p.x}
+        y2={p.y - l.box.h / 2}
+        class="link {tone[a.state] ?? 'grey'}"
+        class:dashed={a.state === 'offline' || a.state === 'error'}
+      />
+      <text
+        x={(l.controller.x + p.x) / 2}
+        y={(l.controller.y + l.box.h / 2 + p.y - l.box.h / 2) / 2}
+        class="linelabel {tone[a.state] ?? 'grey'}"
+        text-anchor="middle">{lineLabel(a)}</text
+      >
+    {/each}
+
+    <g class="box controller" transform="translate({l.controller.x - l.box.w / 2 - 20} {l.controller.y - l.box.h / 2})">
+      <rect width={l.box.w + 40} height={l.box.h} rx="12" />
+      <text x={(l.box.w + 40) / 2} y="30" text-anchor="middle" class="name">{status.hostname}</text>
+      <text x={(l.box.w + 40) / 2} y="52" text-anchor="middle" class="sub">controller · MySQL</text>
+      <text x={(l.box.w + 40) / 2} y="72" text-anchor="middle" class="sub">{dbs || 'no database chosen'}</text>
+    </g>
+
+    {#each nodes as a, i}
+      {@const p = l.nodes[i]}
+      <g
+        class="box node {tone[a.state] ?? 'grey'}"
+        class:picked={picked === a.agent_id}
+        transform="translate({p.x - l.box.w / 2} {p.y - l.box.h / 2})"
+        role="button"
+        tabindex="0"
+        aria-label="{a.hostname}, {a.state}"
+        onclick={() => toggle(a.agent_id)}
+        onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), toggle(a.agent_id))}
+      >
+        <rect width={l.box.w} height={l.box.h} rx="12" />
+        <circle cx="18" cy="22" r="6" class="dot" />
+        <text x="32" y="27" class="name">{a.hostname}</text>
+        <text x="16" y="52" class="sub">{a.state}{a.state !== 'online' && a.last_seen ? ` · since ${clock(new Date(a.last_seen), now)}` : ''}</text>
+        <text x="16" y="72" class="sub">{bytes(a.free_bytes ?? 0)} free</text>
+      </g>
+    {/each}
+
+    {#if !nodes.length}
+      <g transform="translate({l.width / 2 - 210} 200)">
+        <rect width="420" height="70" rx="12" class="empty" />
+        <text x="210" y="31" text-anchor="middle" class="name">No backup PC yet</text>
+        <text x="210" y="53" text-anchor="middle" class="sub">run: sevjala discover, then sevjala pair</text>
+      </g>
+    {/if}
+  </svg>
+</section>
+
+{#if sel}
+  <section class="card details">
+    <h3>{sel.hostname}</h3>
+    <dl>
+      <dt>State</dt><dd>{sel.state}{sel.problem ? `: ${sel.problem}` : ''}</dd>
+      <dt>Last answered</dt><dd>{when(sel.last_seen, now)}</dd>
+      <dt>Copies waiting</dt><dd>{waiting[sel.agent_id] ?? 0}</dd>
+      <dt>Disk free</dt><dd>{bytes(sel.free_bytes ?? 0)}</dd>
+      <dt>Address</dt><dd>{sel.addr}</dd>
+      <dt>Sevjala</dt><dd>{sel.version}</dd>
+      <dt>Paired</dt><dd>{when(sel.paired_at, now)}</dd>
+      <dt>Agent id</dt><dd><code>{sel.agent_id}</code></dd>
+    </dl>
+  </section>
+{/if}
+
+<style>
+  h2 {
+    font-size: 18px;
+  }
+  svg {
+    width: 100%;
+    height: auto;
+    margin-top: 8px;
+  }
+  .link {
+    stroke-width: 3;
+  }
+  .dashed {
+    stroke-dasharray: 8 7;
+  }
+  .linelabel {
+    font-size: 13px;
+    font-weight: 600;
+    paint-order: stroke;
+    stroke: var(--card);
+    stroke-width: 6px;
+  }
+  .box rect {
+    fill: var(--card);
+    stroke: var(--line);
+    stroke-width: 2;
+  }
+  .controller rect {
+    fill: var(--grey-bg);
+    stroke: var(--text);
+  }
+  .node {
+    cursor: pointer;
+    outline: none;
+  }
+  .node rect {
+    stroke: var(--c);
+  }
+  .node.picked rect,
+  .node:focus-visible rect {
+    stroke-width: 4;
+  }
+  .dot {
+    fill: var(--c);
+  }
+  .name {
+    font-size: 16px;
+    font-weight: 600;
+    fill: var(--text);
+  }
+  .sub {
+    font-size: 13px;
+    fill: var(--muted);
+  }
+  .empty {
+    fill: none;
+    stroke: var(--muted);
+    stroke-dasharray: 6 6;
+  }
+  .green {
+    --c: var(--green);
+    stroke: var(--green);
+    fill: var(--green);
+  }
+  .yellow {
+    --c: var(--yellow);
+    stroke: var(--yellow);
+    fill: var(--yellow);
+  }
+  .red {
+    --c: var(--red);
+    stroke: var(--red);
+    fill: var(--red);
+  }
+  .grey {
+    --c: var(--grey);
+    stroke: var(--grey);
+    fill: var(--grey);
+  }
+  /* boxes and labels take only the colour variable, not a filled shape */
+  .box.green,
+  .box.yellow,
+  .box.red,
+  .box.grey {
+    stroke: none;
+    fill: none;
+  }
+  .linelabel.green,
+  .linelabel.yellow,
+  .linelabel.red,
+  .linelabel.grey {
+    stroke: var(--card);
+  }
+  dl {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 6px 18px;
+    margin: 10px 0 0;
+  }
+  dt {
+    color: var(--muted);
+  }
+  dd {
+    margin: 0;
+  }
+</style>
