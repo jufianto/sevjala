@@ -1,12 +1,14 @@
 package svc
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -24,6 +26,7 @@ import (
 	"github.com/jufianto/sevjala/lanapi"
 	"github.com/jufianto/sevjala/localapi"
 	"github.com/jufianto/sevjala/logx"
+	"github.com/jufianto/sevjala/manage"
 	"github.com/jufianto/sevjala/pairing"
 	"github.com/jufianto/sevjala/store"
 	"github.com/jufianto/sevjala/transfer"
@@ -50,6 +53,9 @@ type Agent struct {
 	cancel  context.CancelFunc
 	runDone chan struct{}
 	ctrl    *coord.Controller
+	links   *manage.Pool // manager links from the controller (AD-21); never filled on a controller
+
+	pollEvery time.Duration // 0: PollEvery; tests poll faster
 }
 
 // The controller's unattended loops (blueprint: /status every 15 s,
@@ -57,6 +63,7 @@ type Agent struct {
 const (
 	PollEvery      = 15 * time.Second
 	ReconcileEvery = 5 * time.Minute
+	relayWait      = 20 * time.Second // a manager's request waits this long for a link
 )
 
 // Start must not block: kardianos/service calls it on the service thread.
@@ -119,16 +126,33 @@ func (a *Agent) start() error {
 		ctrl := &coord.Controller{Self: id, Host: hostname, Store: a.store, LAN: lanapi.NewClient(id),
 			Targets: func() ([]*net.UDPAddr, error) { return discovery.BroadcastTargets(port) },
 			Wait:    discovery.DefaultWait, Log: a.log, DataDir: a.DataDir, Staging: staging, Config: a.Config,
-			Ctx: ctx, FindTools: dump.FindTools, PollEvery: PollEvery, ReconcileEvery: ReconcileEvery}
+			Ctx: ctx, FindTools: dump.FindTools, PollEvery: cmp.Or(a.pollEvery, PollEvery), ReconcileEvery: ReconcileEvery}
 		a.pool = transfer.NewPool(ctrl.Push, ctrl.Settle, transfer.DefaultDelays)
 		ctrl.Pool = a.pool
 		backend.Controller, a.ctrl = ctrl, ctrl
 	}
-	if a.api, err = localapi.Start(localapi.Endpoint(a.DataDir), localapi.NewHandler(backend), a.log); err != nil {
+	handler := localapi.NewHandler(backend)
+	a.links = manage.NewPool()
+	lanOpt := lanapi.Options{Addr: a.Config.Listen, DataDir: a.DataDir, Identity: id, Role: a.Config.Role,
+		Version: a.Version, Hostname: hostname, Started: a.started, Codes: codes, Store: a.inv, Log: a.log}
+	if ctrl := a.ctrl; ctrl != nil {
+		ctrl.Keeper = manage.NewKeeper(ctrl.DialManager, handler, ctrl.StillManager, a.log, hostname)
+		ctrl.OnManagersChanged = func() {
+			go func() {
+				ctrl.PollAll(ctrl.Ctx)
+				ctrl.SyncManagers(ctrl.Ctx)
+			}()
+		}
+	} else {
+		lanOpt.Links = a.links
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/controller/", manage.Relay(a.links, a.relayState, relayWait))
+	mux.Handle("/", handler)
+	if a.api, err = localapi.Start(localapi.Endpoint(a.DataDir), mux, a.log); err != nil {
 		return err
 	}
-	if a.lan, err = lanapi.Start(lanapi.Options{Addr: a.Config.Listen, DataDir: a.DataDir, Identity: id, Role: a.Config.Role,
-		Version: a.Version, Hostname: hostname, Started: a.started, Codes: codes, Store: a.inv, Log: a.log}); err != nil {
+	if a.lan, err = lanapi.Start(lanOpt); err != nil {
 		return err
 	}
 	a.lanUp.Store(a.lan)
@@ -162,6 +186,9 @@ func (a *Agent) shutdown() error {
 		a.runDone = nil
 	}
 	if a.ctrl != nil {
+		if a.ctrl.Keeper != nil {
+			a.ctrl.Keeper.Close()
+		}
 		// A cancelled restore drops its half-made database and logs why before the store closes.
 		if !a.ctrl.WaitRestore(20 * time.Second) {
 			a.log.Warn("restore still running at shutdown")
@@ -179,6 +206,10 @@ func (a *Agent) shutdown() error {
 	if a.lan != nil {
 		errs = append(errs, a.lan.Shutdown(ctx))
 		a.lan = nil
+	}
+	if a.links != nil {
+		a.links.Close()
+		a.links = nil
 	}
 	if a.api != nil {
 		errs = append(errs, a.api.Shutdown(ctx))
@@ -225,12 +256,14 @@ func (a *Agent) status() localapi.Status {
 		if lan := a.lanUp.Load(); lan != nil {
 			if p := lan.Controller(); p != nil {
 				current = p.AgentID
-				st.Controller = &localapi.Peer{AgentID: p.AgentID, PairedAt: p.PairedAt}
+				host, manager, _ := lan.Manager()
+				st.Controller = &localapi.Peer{AgentID: p.AgentID, Hostname: host, PairedAt: p.PairedAt, Manager: manager,
+					Links: a.links.Idle(), LastContact: lan.ControllerContact()}
 			}
 		}
 		if ms, err := inventory.List(a.inv.Dir()); err == nil {
 			info.Sources = inventory.Sources(ms, current)
-			if st.Controller != nil && len(info.Sources) > 0 && info.Sources[0].Current {
+			if st.Controller != nil && st.Controller.Hostname == "" && len(info.Sources) > 0 && info.Sources[0].Current {
 				st.Controller.Hostname = info.Sources[0].Hostname
 			}
 		}
@@ -255,6 +288,15 @@ func (a *Agent) status() localapi.Status {
 		}
 		h := coord.NodeHealth(st.Store, a.Config.Node.Store.MinFreeBytes, paired, a.started, contact)
 		st.Health = &h
+	}
+	return st
+}
+
+func (a *Agent) relayState() manage.RelayState {
+	st := manage.RelayState{Role: a.Config.Role, Self: a.host}
+	if lan := a.lanUp.Load(); lan != nil {
+		st.Paired, st.LastContact = lan.Paired(), lan.ControllerContact()
+		st.Host, st.Manager, st.Known = lan.Manager()
 	}
 	return st
 }

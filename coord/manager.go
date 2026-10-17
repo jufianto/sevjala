@@ -2,12 +2,16 @@ package coord
 
 import (
 	"context"
+	"net"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jufianto/sevjala/config"
 	"github.com/jufianto/sevjala/localapi"
 	"github.com/jufianto/sevjala/logx"
+	"github.com/jufianto/sevjala/manage"
 	"github.com/jufianto/sevjala/store"
 )
 
@@ -47,4 +51,42 @@ func (s *Service) SetManager(ctx context.Context, agent string, on bool) (locala
 		return localapi.Agent{}, localapi.AdminRequired(ctx, "making a backup PC a manager")
 	}
 	return s.Controller.SetManager(ctx, agent, on)
+}
+
+// SyncManagers keeps manager links to every manager the last poll found
+// online, and drops the others' (blueprint AD-21).
+func (c *Controller) SyncManagers(ctx context.Context) {
+	if c.Keeper == nil {
+		return
+	}
+	as, err := c.Store.Agents(ctx)
+	if err != nil {
+		c.Log.Error("manager links: read agents", "err", err)
+		return
+	}
+	polls := c.pollSnapshot()
+	var ms []manage.Manager
+	for _, a := range as {
+		if s := polls[a.AgentID].state; a.Manager && (s == store.AgentOnline || s == store.AgentWarning) {
+			ms = append(ms, manage.Manager{AgentID: a.AgentID, Hostname: a.Hostname})
+		}
+	}
+	c.Keeper.Sync(ms)
+}
+
+// DialManager opens one manager link to agentID.
+func (c *Controller) DialManager(ctx context.Context, agentID string) (net.Conn, error) {
+	a, err := c.Store.Agent(ctx, agentID)
+	if err != nil {
+		return nil, err
+	}
+	return c.LAN.Manage(ctx, net.JoinHostPort(a.LastIP, strconv.Itoa(a.Port)), a.FP)
+}
+
+// StillManager is checked on every request a manager link carries.
+func (c *Controller) StillManager(agentID string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	a, err := c.Store.Agent(ctx, agentID)
+	return err == nil && a.Manager
 }

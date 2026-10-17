@@ -35,6 +35,7 @@ func (c *Controller) pollRound(ctx context.Context) {
 	if c.PollAll(ctx) {
 		c.reconcile(ctx)
 	}
+	c.SyncManagers(ctx)
 }
 
 func (c *Controller) reconcile(ctx context.Context) {

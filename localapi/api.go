@@ -25,12 +25,17 @@ type Status struct {
 	Controller *Peer `json:"controller,omitempty"`
 }
 
-// Peer names a paired controller; Hostname comes from the backups it sent and
-// is empty until the first one arrives.
+// Peer names a paired controller; Hostname comes from its polls or the backups
+// it sent, and is empty until either arrives.
 type Peer struct {
 	AgentID  string    `json:"agent_id"`
 	Hostname string    `json:"hostname,omitempty"`
 	PairedAt time.Time `json:"paired_at"`
+	// Manager: the controller's polls say this PC may run its commands (AD-21);
+	// Links is how many manager links wait idle.
+	Manager     bool      `json:"manager"`
+	Links       int       `json:"links"`
+	LastContact time.Time `json:"last_contact,omitzero"`
 }
 
 const (

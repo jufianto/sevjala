@@ -21,6 +21,7 @@ import (
 	"github.com/jufianto/sevjala/lanapi"
 	"github.com/jufianto/sevjala/localapi"
 	"github.com/jufianto/sevjala/logx"
+	"github.com/jufianto/sevjala/manage"
 	"github.com/jufianto/sevjala/pairing"
 	"github.com/jufianto/sevjala/store"
 	"github.com/jufianto/sevjala/transfer"
@@ -43,6 +44,7 @@ type Controller struct {
 	// OnManagersChanged runs after a PC becomes or stops being a manager, or a
 	// manager is removed, so its links follow at once.
 	OnManagersChanged func()
+	Keeper            *manage.Keeper // nil: no manager links
 
 	mu       sync.Mutex
 	seen     map[string]localapi.Discovered // from discover and agents add; pair needs the fp seen here
@@ -254,6 +256,9 @@ func (c *Controller) RemoveAgent(ctx context.Context, agent string, force bool, 
 	c.mu.Unlock()
 	c.Log.InfoContext(ctx, "agent removed", logx.Event(logx.EventAgentRemoved), "agent_id", a.AgentID, "hostname", a.Hostname,
 		"only_copies", len(only))
+	if a.Manager && c.OnManagersChanged != nil {
+		c.OnManagersChanged()
+	}
 	return toAPI(a), nil
 }
 
