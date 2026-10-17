@@ -42,6 +42,13 @@ const (
 type State struct {
 	Status localapi.Status  `json:"status"`
 	Agents []localapi.Agent `json:"agents,omitempty"`
+	Via    string           `json:"via,omitempty"` // this PC, when the dashboard is the controller's through its manager link
+}
+
+// Options open the controller's dashboard from a manager (AD-21): Prefix is
+// the relay route and Via this PC's name.
+type Options struct {
+	Prefix, Via string
 }
 
 type Server struct {
@@ -53,6 +60,7 @@ type Server struct {
 	link   string
 	cookie string // named per port: browsers keep cookies per host, not per port
 	cl     *localapi.Client
+	via    string
 	proxy  *httputil.ReverseProxy
 
 	mu        sync.Mutex
@@ -64,7 +72,7 @@ type Server struct {
 
 // New prepares a dashboard on ln for the agent at endpoint. Its one-time link
 // is URL().
-func New(endpoint string, assets fs.FS, ln net.Listener) (*Server, error) {
+func New(endpoint string, assets fs.FS, ln net.Listener, opts Options) (*Server, error) {
 	token, err := random()
 	if err != nil {
 		return nil, err
@@ -74,15 +82,17 @@ func New(endpoint string, assets fs.FS, ln net.Listener) (*Server, error) {
 		return nil, err
 	}
 	s := &Server{Poll: 2 * time.Second, assets: assets, ln: ln, host: ln.Addr().String(),
-		cl: localapi.NewClient(endpoint), token: token, session: session}
+		cl: localapi.NewClientPrefix(endpoint, opts.Prefix), via: opts.Via, token: token, session: session}
 	s.link = s.Base() + "/?token=" + token
 	_, port, _ := net.SplitHostPort(s.host)
 	s.cookie = "sevjala_session_" + port
 	s.proxy = &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {
 			r.Out.URL.Scheme, r.Out.URL.Host, r.Out.Host = "http", "sevjala", "sevjala"
-			r.Out.URL.Path = strings.TrimPrefix(r.In.URL.Path, "/api")
-			r.Out.URL.RawPath = strings.TrimPrefix(r.In.URL.RawPath, "/api")
+			r.Out.URL.Path = opts.Prefix + strings.TrimPrefix(r.In.URL.Path, "/api")
+			if r.In.URL.RawPath != "" {
+				r.Out.URL.RawPath = opts.Prefix + strings.TrimPrefix(r.In.URL.RawPath, "/api")
+			}
 			r.Out.Header.Del("Cookie")
 			r.Out.Header.Del(changeHeader)
 		},
@@ -273,14 +283,18 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 
 // state is the next event for the page, or nil when the agent answered only in part.
 func (s *Server) state(ctx context.Context) []byte {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	wait := 5 * time.Second
+	if s.via != "" {
+		wait = localapi.RelayTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, wait)
 	defer cancel()
 	st, err := s.cl.Status(ctx)
 	if err != nil {
 		b, _ := json.Marshal(map[string]string{"error": down(err)})
 		return fmt.Appendf(nil, "event: down\ndata: %s\n\n", b)
 	}
-	v := State{Status: st}
+	v := State{Status: st, Via: s.via}
 	if st.Role == config.RoleController {
 		// No list is better than an empty one: the next poll tries again.
 		if v.Agents, err = s.cl.Agents(ctx); err != nil {

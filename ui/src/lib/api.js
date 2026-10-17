@@ -16,6 +16,12 @@ export function errorFrom(status, body) {
   return new Error(body.error || `HTTP ${status}`)
 }
 
+// adminWhere is where an administrator-only step is run: on the controller
+// itself when this page reached it through a manager (via).
+export function adminWhere(via, host) {
+  return via ? `from an administrator prompt on ${host} itself` : 'from an administrator prompt'
+}
+
 export async function api(method, path, body) {
   const opts = { method, headers: {} }
   if (method !== 'GET') opts.headers['X-Sevjala-UI'] = '1'

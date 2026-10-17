@@ -28,6 +28,7 @@ type Menu struct {
 	Tooltip   string
 	Lines     []string // greyed-out information, the verdict first
 	BackupNow bool     // a controller offers "Back up now"
+	Manage    bool     // a manager offers "Open controller dashboard" (AD-21)
 }
 
 // ErrAlreadyRunning: this user already has a tray; Run shows no second icon.
@@ -42,7 +43,7 @@ func Build(st *localapi.Status, err error, now time.Time) Menu {
 		}
 		return finish(Menu{Color: Grey, Lines: []string{line}})
 	}
-	m := Menu{BackupNow: st.Role == "controller"}
+	m := Menu{BackupNow: st.Role == "controller", Manage: st.Controller != nil && st.Controller.Manager}
 	h := st.Health
 	if h == nil {
 		m.Color, m.Lines = Yellow, []string{"The agent is older than this tray; run: sevjala update"}

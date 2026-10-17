@@ -1,5 +1,6 @@
 <script>
-  import { api, get } from './lib/api.js'
+  import { api, get, adminWhere } from './lib/api.js'
+  import { live } from './lib/live.svelte.js'
   import { plural } from './lib/format.js'
 
   let cfg = $state(null)
@@ -103,7 +104,7 @@
         Dump tool
         <input value={cfg.dumper || 'found automatically'} readonly />
       </label>
-      <p class="muted">Changing the dump tool needs an administrator: run <code>sevjala db set --dumper &lt;path&gt;</code> from an administrator prompt.</p>
+      <p class="muted">Changing the dump tool needs an administrator: run <code>sevjala db set --dumper &lt;path&gt;</code> {adminWhere(live.via, live.status?.hostname)}.</p>
 
       <div class="toolbar"><button class="primary" disabled={busy || needsPassword}>{busy ? 'Testing…' : 'Save'}</button></div>
     </form>

@@ -175,6 +175,11 @@
       <dt>Address</dt><dd>{sel.addr}</dd>
       <dt>Sevjala</dt><dd>{sel.version}</dd>
       <dt>Paired</dt><dd>{when(sel.paired_at, now)}</dd>
+      <dt>Manager</dt>
+      <dd>
+        {sel.manager ? 'yes' : 'no'} · an administrator changes it on {status.hostname} with
+        <code>sevjala agents manager {sel.hostname || sel.agent_id.slice(0, 8)} {sel.manager ? 'off' : 'on'}</code>
+      </dd>
       <dt>Agent id</dt><dd><code>{sel.agent_id}</code></dd>
     </dl>
     <div class="toolbar">

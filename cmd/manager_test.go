@@ -20,7 +20,7 @@ func TestControllerFlagOnlyWithControllerCommands(t *testing.T) {
 		var out, errOut bytes.Buffer
 		code := run(append(args, "--data-dir", t.TempDir()), &out, &errOut)
 		if code != 2 || !strings.Contains(errOut.String(),
-			"--controller works with: status, discover, pair, agents, ping, db, backup, backups, restore, policy, retention") {
+			"--controller works with: status, discover, pair, agents, ping, db, backup, backups, restore, policy, retention, ui") {
 			t.Errorf("%v: exit %d, stderr %q", args, code, errOut.String())
 		}
 	}

@@ -1,5 +1,6 @@
 <script>
-  import { api, get, every, ConfirmNeeded } from './lib/api.js'
+  import { api, get, every, ConfirmNeeded, adminWhere } from './lib/api.js'
+  import { live } from './lib/live.svelte.js'
   import { when, bytes, plural } from './lib/format.js'
   import Confirm from './Confirm.svelte'
 
@@ -105,7 +106,7 @@
   {/if}
   {#if err}<p class="msg bad">{err}</p>{/if}
 
-  <p class="muted file">Restoring from a file needs an administrator: run <code>sevjala restore --file &lt;path&gt;</code> from an administrator prompt.</p>
+  <p class="muted file">Restoring from a file needs an administrator: run <code>sevjala restore --file &lt;path&gt;</code> {adminWhere(live.via, live.status?.hostname)}.</p>
 </section>
 
 {#if run}

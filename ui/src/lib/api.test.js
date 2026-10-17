@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { errorFrom, ConfirmNeeded, fetchFile } from './api.js'
+import { errorFrom, ConfirmNeeded, fetchFile, adminWhere } from './api.js'
 
 test('confirm_required becomes ConfirmNeeded with the word and what it deletes', () => {
   const e = errorFrom(409, { error: 'this change deletes 2 backups on PC-1', code: 'confirm_required', word: 'daily', deletes: 2, hosts: ['PC-1'] })
@@ -32,4 +32,14 @@ test("fetchFile hands back the body only when the agent answers OK", async (t) =
   assert.equal(await (await fetchFile('/held/BK-1')).text(), 'gzip bytes')
   await assert.rejects(fetchFile('/held/BK-2'), { message: 'BK-2 is damaged on this PC' })
   await assert.rejects(fetchFile('/held/BK-3'), { message: 'HTTP 502' })
+})
+
+test('controller_admin_required is shown as the controller words it', () => {
+  const e = errorFrom(403, { error: 'restoring from a file needs administrator rights on SERVER-01 itself', code: 'controller_admin_required' })
+  assert.equal(e.message, 'restoring from a file needs administrator rights on SERVER-01 itself')
+})
+
+test('admin hints name the controller when the page came through a manager', () => {
+  assert.equal(adminWhere('', 'SERVER-01'), 'from an administrator prompt')
+  assert.equal(adminWhere('BACKUP-PC-1', 'SERVER-01'), 'from an administrator prompt on SERVER-01 itself')
 })

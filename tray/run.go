@@ -44,10 +44,10 @@ type tray struct {
 	auto    autostartWatch
 	restart bool
 
-	lines                      [MaxLines]*systray.MenuItem
-	backup, dash, status, quit *systray.MenuItem
-	jobs                       []string // backups started here and still dumping
-	note                       string   // shown once, above the status lines
+	lines                            [MaxLines]*systray.MenuItem
+	backup, dash, ctrl, status, quit *systray.MenuItem
+	jobs                             []string // backups started here and still dumping
+	note                             string   // shown once, above the status lines
 }
 
 func (t *tray) ready() {
@@ -61,6 +61,8 @@ func (t *tray) ready() {
 	systray.AddSeparator()
 	t.backup = systray.AddMenuItem("Back up now", "Back up every database now")
 	t.dash = systray.AddMenuItem("Open dashboard", "Show the dashboard in your browser")
+	t.ctrl = systray.AddMenuItem("Open controller dashboard", "Show the controller's dashboard; this PC is its manager")
+	t.ctrl.Hide()
 	t.status = systray.AddMenuItem("Open status", "Show 'sevjala status' in a window")
 	if !canOpenStatus() {
 		t.status.Hide()
@@ -85,6 +87,11 @@ func (t *tray) loop() {
 		case <-t.dash.ClickedCh:
 			if err := spawn(t.exe, "ui"); err != nil {
 				t.note = "Cannot open the dashboard: " + err.Error()
+				t.refresh()
+			}
+		case <-t.ctrl.ClickedCh:
+			if err := spawn(t.exe, "ui", "--controller"); err != nil {
+				t.note = "Cannot open the controller's dashboard: " + err.Error()
 				t.refresh()
 			}
 		case <-t.status.ClickedCh:
@@ -119,6 +126,11 @@ func (t *tray) refresh() {
 		m = Build(&st, nil, time.Now())
 	}
 	busy := t.backingUp(ctx)
+	if m.Manage {
+		t.ctrl.Show()
+	} else {
+		t.ctrl.Hide()
+	}
 	systray.SetIcon(icon(m.Color))
 	systray.SetTooltip(m.Tooltip)
 	lines := m.Lines

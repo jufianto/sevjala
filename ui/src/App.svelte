@@ -57,10 +57,16 @@
 </header>
 
 <main>
+  {#if live.via && st}
+    <div class="via card">{st.hostname} · controller — opened from {live.via}</div>
+  {/if}
   {#if live.lost}
     <div class="lost card">
       This page lost its connection to <code>sevjala ui</code>. It stops by itself a minute after its tab is
-      closed; open the dashboard again with <code>sevjala ui</code> (or the tray's “Open dashboard”).
+      closed; open the dashboard again with
+      {#if live.via}<code>sevjala ui --controller</code> (or the tray's “Open controller dashboard”).{:else}<code
+          >sevjala ui</code
+        > (or the tray's “Open dashboard”).{/if}
     </div>
   {/if}
 
@@ -150,5 +156,9 @@
   .lost {
     border-color: var(--yellow);
     background: var(--yellow-bg);
+  }
+  .via {
+    font-weight: 600;
+    border-color: var(--accent);
   }
 </style>

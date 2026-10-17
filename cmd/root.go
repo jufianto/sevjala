@@ -61,8 +61,8 @@ func (g *globals) client(endpoint string) *localapi.Client {
 	return localapi.NewClient(endpoint)
 }
 
-// remoteCommands run on the controller's local API and so work with --controller.
-var remoteCommands = []string{"status", "discover", "pair", "agents", "ping", "db", "backup", "backups", "restore", "policy", "retention"}
+// remoteCommands run on the controller's local API (ui: its dashboard) and so work with --controller.
+var remoteCommands = []string{"status", "discover", "pair", "agents", "ping", "db", "backup", "backups", "restore", "policy", "retention", "ui"}
 
 func checkControllerFlag(c *cobra.Command, g *globals) error {
 	if !g.controller {

@@ -92,11 +92,16 @@ func startAgent(t *testing.T, h http.Handler) string {
 // client that keeps cookies but does not follow redirects.
 func start(t *testing.T, endpoint string, files fstest.MapFS, idle time.Duration) (*Server, *http.Client, <-chan error) {
 	t.Helper()
+	return startWith(t, endpoint, files, idle, Options{})
+}
+
+func startWith(t *testing.T, endpoint string, files fstest.MapFS, idle time.Duration, opts Options) (*Server, *http.Client, <-chan error) {
+	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := New(endpoint, files, ln)
+	s, err := New(endpoint, files, ln, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -379,5 +384,28 @@ func TestTwoDashboardsKeepTheirOwnSessions(t *testing.T) {
 		if resp, _ := get(t, cl, s.Base()+"/api/status"); resp.StatusCode != http.StatusOK {
 			t.Errorf("%s: %d", s.Base(), resp.StatusCode)
 		}
+	}
+}
+
+func TestAControllerDashboardGoesThroughTheRelay(t *testing.T) {
+	f := &fakeAgent{status: localapi.Status{Role: "controller", Hostname: "SERVER-01", Health: &localapi.Health{Level: "ok", Headline: "Protected"}},
+		agents: []localapi.Agent{{Hostname: "BACKUP-PC-1", State: "online", Manager: true}}}
+	ep := startAgent(t, http.StripPrefix("/controller", f))
+	s, cl, _ := startWith(t, ep, assets, time.Minute, Options{Prefix: "/controller", Via: "BACKUP-PC-1"})
+	login(t, s, cl)
+	resp, body := get(t, cl, s.Base()+"/api/status")
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, "SERVER-01") {
+		t.Fatalf("api: %d %q", resp.StatusCode, body)
+	}
+	ev, err := cl.Get(s.Base() + "/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ev.Body.Close()
+	e := readEvent(t, bufio.NewReader(ev.Body))
+	var st State
+	if e.name != "state" || json.Unmarshal([]byte(e.data), &st) != nil || st.Via != "BACKUP-PC-1" ||
+		st.Status.Hostname != "SERVER-01" || len(st.Agents) != 1 {
+		t.Fatalf("event %+v", e)
 	}
 }

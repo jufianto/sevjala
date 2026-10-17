@@ -123,3 +123,20 @@ func TestQuitsWhenUninstalled(t *testing.T) {
 		t.Error("a tray started without autostart (a dev run) must not quit")
 	}
 }
+
+func TestOnlyAManagerOffersTheControllerDashboard(t *testing.T) {
+	health := &localapi.Health{Level: localapi.HealthOK, Headline: "Holding 3 backups"}
+	for _, tt := range []struct {
+		name string
+		st   *localapi.Status
+		want bool
+	}{
+		{"manager", &localapi.Status{Role: "node", Health: health, Controller: &localapi.Peer{Hostname: "SERVER-01", Manager: true}}, true},
+		{"node", &localapi.Status{Role: "node", Health: health, Controller: &localapi.Peer{Hostname: "SERVER-01"}}, false},
+		{"unpaired", &localapi.Status{Role: "node", Health: health}, false},
+	} {
+		if m := Build(tt.st, nil, now); m.Manage != tt.want {
+			t.Errorf("%s: Manage %v", tt.name, m.Manage)
+		}
+	}
+}

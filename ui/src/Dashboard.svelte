@@ -1,5 +1,6 @@
 <script>
   import { api } from './lib/api.js'
+  import { live } from './lib/live.svelte.js'
   import { when, until, upFor, bytes, plural } from './lib/format.js'
   import { sourceName, controllerName } from './lib/sources.js'
 
@@ -100,12 +101,18 @@
         <h3>Not paired yet</h3>
       {/if}
       <p class="muted">The controller sends the backups here and checks on this PC every 15 seconds.</p>
+      {#if status.controller?.manager}
+        <p>
+          This PC can manage {controllerName(status)}: open its dashboard with <code>sevjala ui --controller</code> or the tray
+          menu.
+        </p>
+      {/if}
     </article>
   </section>
 {/if}
 
 <section class="card this-pc">
-  <div><span class="label">This PC</span> {status.hostname}</div>
+  <div><span class="label">{live.via ? 'Controller' : 'This PC'}</span> {status.hostname}</div>
   <div><span class="label">Disk free</span> {bytes(h.free_bytes ?? 0)}</div>
   <div><span class="label">Sevjala</span> {status.version}, up {upFor(status.uptime_s ?? 0)}</div>
   <div><span class="label">Data</span> <code>{status.data_dir}</code></div>
