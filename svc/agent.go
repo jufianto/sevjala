@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync/atomic"
 	"time"
 
 	"github.com/kardianos/service"
@@ -41,6 +42,8 @@ type Agent struct {
 	store   *store.Store
 	api     *localapi.Server
 	lan     *lanapi.Server
+	lanUp   atomic.Pointer[lanapi.Server] // for status, which the local API may serve before lan starts
+	host    string
 	disco   *discovery.Responder
 	inv     *inventory.Store
 	pool    *transfer.Pool
@@ -85,6 +88,7 @@ func (a *Agent) start() error {
 		a.log.Info("identity created", logx.Event(logx.EventIdentityCreated), "agent_id", id.AgentID, "fp", id.FP)
 	}
 	hostname, _ := os.Hostname()
+	a.host = hostname
 	backend := &coord.Service{StatusFunc: a.status}
 	var codes *pairing.Codes
 	switch a.Config.Role {
@@ -127,6 +131,7 @@ func (a *Agent) start() error {
 		Version: a.Version, Hostname: hostname, Started: a.started, Codes: codes, Store: a.inv, Log: a.log}); err != nil {
 		return err
 	}
+	a.lanUp.Store(a.lan)
 	if ctrl := backend.Controller; ctrl != nil {
 		if err := ctrl.Resume(context.Background()); err != nil {
 			return err
@@ -200,13 +205,14 @@ func (a *Agent) Stop(service.Service) error {
 
 func (a *Agent) status() localapi.Status {
 	st := localapi.Status{
-		Version: a.Version,
-		Role:    a.Config.Role,
-		PID:     os.Getpid(),
-		UptimeS: int64(time.Since(a.started).Seconds()),
-		DataDir: a.DataDir,
-		AgentID: a.id.AgentID,
-		FP:      a.id.FP,
+		Version:  a.Version,
+		Role:     a.Config.Role,
+		PID:      os.Getpid(),
+		UptimeS:  int64(time.Since(a.started).Seconds()),
+		DataDir:  a.DataDir,
+		AgentID:  a.id.AgentID,
+		FP:       a.id.FP,
+		Hostname: a.host,
 	}
 	if a.inv != nil {
 		info := &localapi.StoreInfo{Path: a.inv.Dir(), Problems: []string{}}
@@ -221,6 +227,21 @@ func (a *Agent) status() localapi.Status {
 			info.FreeBytes = free
 		}
 		st.Store = info
+	}
+	switch {
+	case a.ctrl != nil:
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		h := a.ctrl.Health(ctx)
+		st.Health = &h
+	case st.Store != nil:
+		var paired bool
+		var contact time.Time
+		if lan := a.lanUp.Load(); lan != nil {
+			paired, contact = lan.Paired(), lan.ControllerContact()
+		}
+		h := coord.NodeHealth(st.Store, a.Config.Node.Store.MinFreeBytes, paired, a.started, contact)
+		st.Health = &h
 	}
 	return st
 }

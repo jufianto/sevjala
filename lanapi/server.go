@@ -49,6 +49,7 @@ type Server struct {
 
 	mu         sync.Mutex
 	controller *identity.Peer
+	contact    time.Time // last authenticated request from the controller, guarded by mu
 }
 
 var errUnpaired = errors.New("certificate is not the paired controller")
@@ -202,6 +203,9 @@ func (s *Server) pairedOnly(h http.HandlerFunc) http.HandlerFunc {
 			writeError(w, http.StatusForbidden, "not paired with this controller")
 			return
 		}
+		s.mu.Lock()
+		s.contact = time.Now()
+		s.mu.Unlock()
 		h(w, r)
 	}
 }
@@ -388,4 +392,14 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 
 func writeError(w http.ResponseWriter, code int, msg string) {
 	writeJSON(w, code, map[string]string{"error": msg})
+}
+
+func (s *Server) Paired() bool { return s.controllerFP() != "" }
+
+// ControllerContact is when the paired controller last called; zero until it
+// calls after this start.
+func (s *Server) ControllerContact() time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.contact
 }

@@ -10,14 +10,61 @@ import (
 )
 
 type Status struct {
-	Version string     `json:"version"`
-	Role    string     `json:"role"`
-	PID     int        `json:"pid"`
-	UptimeS int64      `json:"uptime_s"`
-	DataDir string     `json:"data_dir"`
-	AgentID string     `json:"agent_id"`
-	FP      string     `json:"fp"`
-	Store   *StoreInfo `json:"store,omitempty"`
+	Version  string     `json:"version"`
+	Role     string     `json:"role"`
+	Hostname string     `json:"hostname"`
+	PID      int        `json:"pid"`
+	UptimeS  int64      `json:"uptime_s"`
+	DataDir  string     `json:"data_dir"`
+	AgentID  string     `json:"agent_id"`
+	FP       string     `json:"fp"`
+	Store    *StoreInfo `json:"store,omitempty"`
+	Health   *Health    `json:"health,omitempty"`
+}
+
+const (
+	HealthOK      = "ok"
+	HealthWarning = "warning"
+	HealthProblem = "problem"
+)
+
+// Health is the one verdict the CLI, the tray and the UI show: Level is the
+// worst item's, Headline one line for a tooltip. Databases, NextBackupAt and
+// Agents describe a controller; ControllerContactAt a node.
+type Health struct {
+	Level               string        `json:"level"`
+	Headline            string        `json:"headline"`
+	Items               []HealthItem  `json:"items"`
+	Databases           []DBHealth    `json:"databases,omitempty"`
+	NextBackupAt        time.Time     `json:"next_backup_at,omitzero"`
+	NextPolicy          string        `json:"next_policy,omitempty"`
+	Agents              []AgentHealth `json:"agents,omitempty"`
+	FreeBytes           int64         `json:"free_bytes"`
+	ControllerContactAt time.Time     `json:"controller_contact_at,omitzero"`
+}
+
+type HealthItem struct {
+	Level string `json:"level"`
+	Text  string `json:"text"`
+}
+
+// DBHealth: LastGood is the newest backup with a verified copy on a backup PC.
+type DBHealth struct {
+	Name         string    `json:"name"`
+	LastGood     string    `json:"last_good,omitempty"`
+	LastGoodAt   time.Time `json:"last_good_at,omitzero"`
+	Size         int64     `json:"size"`
+	Copies       int       `json:"copies"`
+	Planned      int       `json:"planned"`
+	LastFailedAt time.Time `json:"last_failed_at,omitzero"`
+	LastError    string    `json:"last_error,omitempty"`
+}
+
+type AgentHealth struct {
+	Hostname string    `json:"hostname"`
+	State    string    `json:"state"`
+	LastSeen time.Time `json:"last_seen,omitzero"`
+	Waiting  int       `json:"waiting"`
 }
 
 type Code struct {

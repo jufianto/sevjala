@@ -114,6 +114,13 @@ func TestControllerAgentOpensStore(t *testing.T) {
 	if _, err := c.Code(context.Background()); err == nil || !strings.Contains(err.Error(), "this agent is a controller") {
 		t.Errorf("code on a controller: %v", err)
 	}
+	st, err := c.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h := st.Health; h == nil || h.Level != localapi.HealthProblem || !strings.HasPrefix(h.Headline, "Not protected") {
+		t.Errorf("health %+v", h)
+	}
 }
 
 func TestNodeAgentServesItsStore(t *testing.T) {
@@ -129,6 +136,12 @@ func TestNodeAgentServesItsStore(t *testing.T) {
 	}
 	if st.Store == nil || st.Store.Path != filepath.Join(dir, "store") || st.Store.FreeBytes <= 0 {
 		t.Errorf("store %+v", st.Store)
+	}
+	if h := st.Health; h == nil || h.Level != localapi.HealthWarning || !strings.HasPrefix(h.Headline, "Not paired") || h.FreeBytes != st.Store.FreeBytes {
+		t.Errorf("health %+v", h)
+	}
+	if host, _ := os.Hostname(); st.Hostname != host {
+		t.Errorf("hostname %q", st.Hostname)
 	}
 }
 

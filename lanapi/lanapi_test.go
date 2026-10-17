@@ -581,3 +581,28 @@ func TestPinMismatchIsTyped(t *testing.T) {
 		t.Errorf("err = %v", err)
 	}
 }
+
+func TestControllerContactIsRecorded(t *testing.T) {
+	n := startNode(t)
+	if n.srv.Paired() || !n.srv.ControllerContact().IsZero() {
+		t.Fatalf("before pairing: paired %v, contact %v", n.srv.Paired(), n.srv.ControllerContact())
+	}
+	c := controller(t)
+	pair(t, c, n)
+	if !n.srv.Paired() {
+		t.Error("not paired after pairing")
+	}
+	before := time.Now()
+	if _, err := c.Status(context.Background(), n.srv.Addr(), n.id.FP); err != nil {
+		t.Fatal(err)
+	}
+	if got := n.srv.ControllerContact(); got.Before(before) {
+		t.Errorf("contact %v, want after %v", got, before)
+	}
+	if _, err := controller(t).Identity(context.Background(), n.srv.Addr()); err != nil {
+		t.Fatal(err)
+	}
+	if got := n.srv.ControllerContact(); got.After(time.Now()) {
+		t.Errorf("contact %v", got)
+	}
+}
