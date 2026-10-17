@@ -466,10 +466,12 @@ ran on the real PC (the status query asked for start and stop before the fix, an
 `C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Sevjala.lnk` with target `sevjala.exe`,
 arguments `tray --show`, the exe's icon and a minimised window; the exe carries the new icon.
 
-Still to do on the Windows desktop, as a normal (non-elevated) user:
-
-1. `sevjala status` in an ordinary Command Prompt shows `service  running`, not "Access is denied".
-2. Search "Sevjala" in the Start menu: the entry shows the new icon; clicking it starts the tray
-   (the new icon with a green, yellow, red or grey dot). Clicking it again opens the dashboard.
-3. "Quit tray", then the Start menu entry: the tray comes back.
-4. The dashboard's tab and header show the new icon, with the verdict as a dot in the header.
+Done on the Windows desktop by the owner (2026-10-17, build `0.3.0-alpha.3+5`), as a normal user:
+`sevjala status` in an ordinary Command Prompt shows `service  running`; the Start menu entry
+(found by searching "Sevjala", with the new icon) starts the tray after "Quit tray" and opens the
+dashboard when the tray runs; after signing out and in the tray starts by itself; the dashboard's
+tab and header show the new icon. Two bugs found on the way and fixed: cobra's "open cmd.exe"
+splash stopped anything Explorer started (the Start menu entry and the Run key at login), and
+"Open status" opened a window that closed at once (Go's exec gave the child NUL as stdin and
+stdout; `TestNewConsoleIsTheChildsConsole` reproduced it on the PC). After `sevjala update` the
+running tray restarted itself on the new exe, and "Open status" kept its window open.
