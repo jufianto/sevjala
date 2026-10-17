@@ -446,11 +446,14 @@ Done on macOS (2026-10-17): a test node holding backups from before this change 
 `TestBackupNowReachesThreeNodes`; the node's `controller` and `sources` by
 `TestNodeAgentNamesItsControllers`.
 
+Done on the real PCs (2026-10-17, build `0.3.0-alpha.3+1` on the Windows controller and the Mac node):
+before a new backup the Mac showed the controller by its id; after Back up now on Windows the
+new backup arrived verified and `status` showed `controller  <Windows PC name>, paired …, checked in
+…`, with that name in FROM for all 22 backups, the older ones included.
+
 Still to do, after `sevjala update` on the controller and on the node:
 
-1. **Name arrives:** Back up now on the controller; on the node `sevjala status` shows
-   `controller  <controller PC name>, paired …, checked in …`, `backups list` shows that name in
-   FROM for every backup, and the node's dashboard names it on the "The controller" card.
+1. **Dashboard:** the node's dashboard names the controller on the "The controller" card.
 2. **Former controller:** pair the node with a second controller; the first one's backups stay,
    `status` shows `also holds  N backups from <first controller>, a controller this PC is no
    longer paired with`, and `backups list` marks them `(former)`.
