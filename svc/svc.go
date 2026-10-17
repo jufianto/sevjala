@@ -26,5 +26,9 @@ func New(dataDir string, i service.Interface) (service.Service, error) {
 	if runtime.GOOS == "linux" {
 		cfg.Dependencies = []string{"After=network-online.target", "Wants=network-online.target"}
 	}
-	return service.New(i, cfg)
+	s, err := service.New(i, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return withUserStatus(s), nil
 }
