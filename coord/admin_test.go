@@ -47,6 +47,15 @@ func TestAdminOnlyActions(t *testing.T) {
 		{"db set --dumper", func(ctx context.Context) error {
 			return second(svc.SetDatabase(ctx, localapi.DBSettings{Dumper: ptr("/bin/sh")}))
 		}, true},
+		{"db set host", func(ctx context.Context) error {
+			return second(svc.SetDatabase(ctx, localapi.DBSettings{Host: ptr("192.168.1.99"), Password: ptr("theirs")}))
+		}, true},
+		{"db set port", func(ctx context.Context) error {
+			return second(svc.SetDatabase(ctx, localapi.DBSettings{Port: ptr(3307)}))
+		}, true},
+		{"db set user with its password", func(ctx context.Context) error {
+			return second(svc.SetDatabase(ctx, localapi.DBSettings{User: ptr("backup"), Password: ptr("pw")}))
+		}, false},
 		{"db set databases", func(ctx context.Context) error {
 			return second(svc.SetDatabase(ctx, localapi.DBSettings{Databases: []string{"shop"}}))
 		}, false},

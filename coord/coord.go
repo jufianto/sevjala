@@ -115,6 +115,11 @@ func (s *Service) SetDatabase(ctx context.Context, set localapi.DBSettings) (loc
 	if set.Dumper != nil && !localapi.CallerIsAdmin(ctx) {
 		return localapi.Detection{}, localapi.AdminRequired("choosing the dump program (--dumper)")
 	}
+	// The agent runs the mysql client as SYSTEM/root against whatever server is named.
+	cur := s.Controller.config().Controller.Database
+	if ((set.Host != nil && *set.Host != cur.Host) || (set.Port != nil && *set.Port != cur.Port)) && !localapi.CallerIsAdmin(ctx) {
+		return localapi.Detection{}, localapi.AdminRequired("pointing Sevjala at another database server (--host, --port)")
+	}
 	return s.Controller.SetDatabase(ctx, set)
 }
 

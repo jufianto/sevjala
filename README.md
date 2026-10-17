@@ -88,7 +88,7 @@ Every command explains itself with examples: `sevjala <command> --help`.
 | Schedules & cleanup | `policy list/add/set/remove`, `retention run [--dry-run]` |
 
 Most commands need no administrator rights. The few that do (setup, service, update, pair,
-`code`, `db set --dumper`, `restore --file`, policy changes that delete backups) ask for them
+`code`, `db set --dumper/--host/--port`, `restore --file`, policy changes that delete backups) ask for them
 themselves: UAC on Windows, `sudo` on macOS/Linux.
 
 Build: `make build` (host), `make build-all` (every asset incl. Windows 7), `make test`,

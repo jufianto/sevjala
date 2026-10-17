@@ -95,7 +95,7 @@ func controllerHealth(in healthInput) localapi.Health {
 	if len(in.agents) == 0 {
 		problem("Not protected: no backup PC is paired; backups exist only on this PC")
 	}
-	limit, scheduled := overdueLimit(in.policies, in.now)
+	_, scheduled := overdueAt(in.policies, in.now)
 	var largest int64
 	var oldestGood *localapi.DBHealth
 	for _, db := range in.databases {
@@ -123,7 +123,7 @@ func controllerHealth(in healthInput) localapi.Health {
 		switch {
 		case good == nil && len(in.agents) > 0:
 			problem("No backup of %s has reached a backup PC yet", db)
-		case good != nil && scheduled && in.now.Sub(good.CreatedAt) > limit:
+		case good != nil && overdue(in.policies, good.CreatedAt, in.now):
 			problem("No backup of %s has reached a backup PC since %s", db, localapi.When(good.CreatedAt, in.now))
 		}
 		if good != nil {
@@ -215,10 +215,11 @@ func controllerHealth(in healthInput) localapi.Health {
 	return finish(h, headline)
 }
 
-// overdueLimit is twice the shortest gap between runs of an enabled schedule,
-// at least an hour; scheduled is false when no schedule ever fires.
-func overdueLimit(ps []store.Policy, now time.Time) (time.Duration, bool) {
-	var shortest time.Duration
+// overdueAt is when a backup made at last is overdue: once two runs of an
+// enabled schedule have passed since it, and at least an hour. It is false
+// when no schedule ever fires.
+func overdueAt(ps []store.Policy, last time.Time) (time.Time, bool) {
+	var at time.Time
 	for _, p := range ps {
 		if !p.Enabled || p.Cron == "" {
 			continue
@@ -227,13 +228,24 @@ func overdueLimit(ps []store.Policy, now time.Time) (time.Duration, bool) {
 		if err != nil {
 			continue
 		}
-		a, ok1 := s.Next(now)
+		a, ok1 := s.Next(last)
 		b, ok2 := s.Next(a)
-		if ok1 && ok2 && (shortest == 0 || b.Sub(a) < shortest) {
-			shortest = b.Sub(a)
+		if !ok1 || !ok2 {
+			continue
+		}
+		if b.Before(last.Add(minOverdue)) {
+			b = last.Add(minOverdue)
+		}
+		if at.IsZero() || b.Before(at) {
+			at = b
 		}
 	}
-	return max(minOverdue, 2*shortest), shortest > 0
+	return at, !at.IsZero()
+}
+
+func overdue(ps []store.Policy, last, now time.Time) bool {
+	at, ok := overdueAt(ps, last)
+	return ok && now.After(at)
 }
 
 type nodeInput struct {

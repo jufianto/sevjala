@@ -200,3 +200,19 @@ func TestCopyFileMovesALockedOldAside(t *testing.T) {
 		t.Errorf("the locked .old was not moved aside: %v", err)
 	}
 }
+
+// A tray may already run the new exe when its service fails to start; Windows
+// refuses to replace a running file but lets it be renamed. A non-empty folder
+// stands in for that file here.
+func TestRestoreExeMovesARunningNewExeAside(t *testing.T) {
+	dir := t.TempDir()
+	dst := filepath.Join(dir, "sevjala")
+	os.WriteFile(dst+".old", []byte("v1"), 0o755)
+	os.MkdirAll(filepath.Join(dst, "busy"), 0o755)
+	if err := restoreExe(dst); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(dst); string(got) != "v1" {
+		t.Errorf("restored %q", got)
+	}
+}

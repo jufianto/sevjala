@@ -262,7 +262,7 @@ the command elevated (UAC, `sudo`). Admin-only:
 | Request | Admin-only when |
 |---|---|
 | `POST /pair`, `POST /code` | always |
-| `PUT /db` | `dumper` is set |
+| `PUT /db` | `dumper` is set, or `host` or `port` differs from the saved one |
 | `POST /policies` | backups that are not expired already carry that tag (the new `keep` may delete them) |
 | `PATCH /policies/{name}` | `keep` goes down, or `to` drops a destination (incl. every node → a list) |
 | `POST /restore` | `file` is set (the agent reads any path the caller names) |
@@ -371,7 +371,7 @@ The verdict reads only the store and memory, never MySQL; the tray asks every 15
 
 | Level | Controller | Node |
 |---|---|---|
-| problem | no backup PC paired; a configured database without a verified copy (with a PC paired), or the newest one older than twice the shortest enabled schedule (at least 1 h); the last dump of a database failed; a replace left a database partly loaded; staging free under max(1 GiB, 2 × the newest backup of the largest database) | store free under `min_free_bytes` |
+| problem | no backup PC paired; a configured database without a verified copy (with a PC paired), or two runs of an enabled schedule passed since its newest one (and at least 1 h); the last dump of a database failed; a replace left a database partly loaded; staging free under max(1 GiB, 2 × the newest backup of the largest database) | store free under `min_free_bytes` |
 | warning | a node offline or in error (with the copies waiting for it) or warning; the newest backup still partial after 30 min on an answering node; a damaged copy the controller cannot replace (not in staging); no enabled schedule; no database configured | not paired; paired but no controller request for 15 min; each store problem |
 
 ## Controller store (since M1)

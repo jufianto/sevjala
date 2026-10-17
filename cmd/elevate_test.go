@@ -36,8 +36,8 @@ func TestAdminOnlyCommandRunsAgainElevated(t *testing.T) {
 	if code := run(args, &out, &errOut); code != 7 {
 		t.Errorf("exit %d, want the elevated run's 7; stderr %q", code, errOut.String())
 	}
-	if !slices.Equal(*got, args) {
-		t.Errorf("elevated args %q, want %q", *got, args)
+	if want := append([]string{elevatedMarker}, args...); !slices.Equal(*got, want) {
+		t.Errorf("elevated args %q, want %q", *got, want)
 	}
 	if !strings.Contains(errOut.String(), "needs administrator rights") || !strings.Contains(errOut.String(), elevationHow) {
 		t.Errorf("stderr %q", errOut.String())
@@ -86,7 +86,7 @@ func TestSetupAsksForAdminItself(t *testing.T) {
 	got := fakeElevation(t, 0, nil)
 	args := []string{"setup", "--data-dir", t.TempDir()}
 	var out, errOut bytes.Buffer
-	if code := run(args, &out, &errOut); code != 0 || !slices.Equal(*got, args) {
+	if code := run(args, &out, &errOut); code != 0 || !slices.Equal(*got, append([]string{elevatedMarker}, args...)) {
 		t.Errorf("exit %d, elevated %q, stderr %q", code, *got, errOut.String())
 	}
 }
@@ -104,5 +104,32 @@ func TestAfterElevationRunsOnlyOnSuccess(t *testing.T) {
 		if ran != tt.want {
 			t.Errorf("exit %d, err %v: after ran %v", tt.code, tt.err, ran)
 		}
+	}
+}
+
+// With UAC off, "runas" starts a standard user's command unelevated; it must
+// stop instead of asking again forever.
+func TestElevatedRunWithoutAdminStops(t *testing.T) {
+	got := fakeElevation(t, 0, nil)
+	var out, errOut bytes.Buffer
+	code := run([]string{elevatedMarker, "service", "start", "--data-dir", t.TempDir()}, &out, &errOut)
+	if code != 1 || *got != nil {
+		t.Errorf("exit %d, elevated again with %q", code, *got)
+	}
+	if !strings.Contains(errOut.String(), "could not get administrator rights") {
+		t.Errorf("stderr %q", errOut.String())
+	}
+}
+
+// sudo and UAC drop the environment, so the data dir it names travels as a flag.
+func TestElevatedRunKeepsTheDataDirFromTheEnvironment(t *testing.T) {
+	got := fakeElevation(t, 0, nil)
+	dir := t.TempDir()
+	t.Setenv("SEVJALA_DATA_DIR", dir)
+	var out, errOut bytes.Buffer
+	run([]string{"service", "start"}, &out, &errOut)
+	want := []string{elevatedMarker, "--data-dir=" + dir, "service", "start"}
+	if !slices.Equal(*got, want) {
+		t.Errorf("elevated args %q, want %q", *got, want)
 	}
 }

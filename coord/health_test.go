@@ -200,3 +200,33 @@ func TestNodeHealth(t *testing.T) {
 		})
 	}
 }
+
+// Overdue is judged from the last good backup along its own schedule, so an
+// uneven schedule (weekdays only, twice a day) is not red in its quiet hours.
+func TestOverdueFollowsTheSchedule(t *testing.T) {
+	at := func(day, hour int) time.Time { return time.Date(2026, 10, day, hour, 0, 0, 0, time.Local) }
+	tests := []struct {
+		name      string
+		cron      string
+		last, now time.Time
+		overdue   bool
+	}{
+		{"weekdays, Friday's backup on Sunday", "0 8 * * 1-5", at(16, 8), at(18, 9), false},
+		{"weekdays, Friday's backup on Tuesday noon", "0 8 * * 1-5", at(16, 8), at(20, 12), true},
+		{"twice a day, overnight", "0 12,17 * * *", at(16, 17), at(17, 4), false},
+		{"twice a day, two runs missed", "0 12,17 * * *", at(16, 17), at(17, 18), true},
+		{"every 10 min, within the hour", "*/10 * * * *", at(17, 9), at(17, 9).Add(50 * time.Minute), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := hGood()
+			in.now = tt.now
+			in.policies = []store.Policy{{Name: "p", Cron: tt.cron, Keep: 10, Enabled: true}}
+			in.backups[0].CreatedAt = tt.last
+			h := controllerHealth(in)
+			if got := hasItem(h, "No backup of shop has reached a backup PC since"); got != tt.overdue {
+				t.Errorf("overdue %v, want %v: %+v", got, tt.overdue, h.Items)
+			}
+		})
+	}
+}

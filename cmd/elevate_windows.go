@@ -52,6 +52,9 @@ func elevated(args []string) (int, error) {
 	info.verb, _ = windows.UTF16PtrFromString("runas")
 	info.file, _ = windows.UTF16PtrFromString(exe)
 	info.parameters, _ = windows.UTF16PtrFromString(strings.Join(quoted, " "))
+	if wd, err := os.Getwd(); err == nil {
+		info.directory, _ = windows.UTF16PtrFromString(wd)
+	}
 	if ok, _, err := procShellExecuteEx.Call(uintptr(unsafe.Pointer(&info))); ok == 0 {
 		if errors.Is(err, windows.ERROR_CANCELLED) {
 			return 1, errElevationRefused

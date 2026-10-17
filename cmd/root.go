@@ -62,6 +62,8 @@ do ask for them. New here? Start with: sevjala setup`,
 	}
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.PersistentFlags().StringVar(&g.dataDirFlag, "data-dir", "", "`FOLDER` holding Sevjala's data (default: $SEVJALA_DATA_DIR, else the OS default)")
+	root.PersistentFlags().Bool(elevatedMarker[2:], false, "")
+	_ = root.PersistentFlags().MarkHidden(elevatedMarker[2:])
 	root.AddCommand(newAgentCmd(g))
 	for _, grp := range []struct {
 		id, title string

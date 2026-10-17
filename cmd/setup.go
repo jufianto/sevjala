@@ -276,7 +276,7 @@ func (s *setupFlow) uninstall() error {
 	if err := s.onPath(false, s.dir); err != nil {
 		fmt.Fprintf(s.out, "could not remove %s from PATH: %v\n", s.dir, err)
 	}
-	exes := []string{s.target, s.target + ".old"}
+	exes := []string{s.target, s.target + ".old", s.target + ".failed"}
 	aside, _ := filepath.Glob(s.target + ".old-*")
 	exes = append(exes, aside...)
 	if s.fromInstall {
@@ -407,7 +407,15 @@ func copyFile(src, dst string) error {
 	return nil
 }
 
-func restoreExe(path string) error { return os.Rename(path+".old", path) }
+// restoreExe puts the previous exe back. The failed one is renamed aside first:
+// a tray may already run it, and Windows renames a running file but does not
+// replace it.
+func restoreExe(path string) error {
+	failed := path + ".failed"
+	_ = os.Remove(failed)
+	_ = os.Rename(path, failed)
+	return os.Rename(path+".old", path)
+}
 
 // removeWhenFree retries for a while: a tray running from the file closes
 // within 15 s of 'service uninstall' removing its start at login.
