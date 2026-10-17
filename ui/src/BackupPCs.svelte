@@ -1,6 +1,8 @@
 <script>
   import { layout } from './lib/layout.js'
   import { when, clock, bytes, plural, fit } from './lib/format.js'
+  import { api, ConfirmNeeded } from './lib/api.js'
+  import Confirm from './Confirm.svelte'
 
   let { status, agents, now } = $props()
   const nodes = $derived(agents.filter((a) => a.role !== 'controller'))
@@ -12,6 +14,80 @@
   let picked = $state('')
   const sel = $derived(nodes.find((a) => a.agent_id === picked))
   const toggle = (id) => (picked = picked === id ? '' : id)
+
+  let msg = $state('')
+  let bad = $state(false)
+  let forceable = $state(false)
+  let need = $state(null)
+  let found = $state(null)
+  let addr = $state('')
+  let pairing = $state(null) // { agent, hostname, code, fp }
+  let busy = $state(false)
+
+  function say(text, isBad = false) {
+    msg = text
+    bad = isBad
+  }
+
+  async function act(f) {
+    busy = true
+    try {
+      await f()
+    } catch (e) {
+      if (e instanceof ConfirmNeeded) need = e
+      else say(e.message, true)
+    } finally {
+      busy = false
+    }
+  }
+
+  const check = (a) =>
+    act(async () => {
+      const p = await api('POST', `/agents/${encodeURIComponent(a.agent_id)}/ping`)
+      say(`${a.hostname} answered in ${p.rtt_ms} ms; its health: ${p.health}.`)
+    })
+
+  // remove asks without force first; the agent says when force (and then the
+  // PC's name) is needed.
+  function remove(a, force = false, confirm = '') {
+    need = null
+    forceable = false
+    const q = new URLSearchParams()
+    if (force) q.set('force', 'true')
+    if (confirm) q.set('confirm', confirm)
+    const qs = q.toString()
+    return act(async () => {
+      try {
+        await api('DELETE', `/agents/${encodeURIComponent(a.agent_id)}${qs ? '?' + qs : ''}`)
+        picked = ''
+        say(`Removed ${a.hostname}; its backup files stay on that PC.`)
+      } catch (e) {
+        forceable = !force && !(e instanceof ConfirmNeeded) && e.message.includes('--force')
+        throw e
+      }
+    })
+  }
+
+  const discover = () =>
+    act(async () => {
+      found = (await api('POST', '/discover')).agents.filter((d) => d.role !== 'controller')
+      if (found.length) say('')
+      else say('No other Sevjala PC answered on this network. Is Sevjala installed and running there?', true)
+    })
+
+  const addByAddress = () =>
+    act(async () => {
+      found = [await api('POST', '/agents', { addr: addr.trim() })]
+      say('')
+    })
+
+  const pair = () =>
+    act(async () => {
+      const a = await api('POST', '/pair', { agent: pairing.agent, code: pairing.code.trim(), fp: pairing.fp.trim() })
+      say(`Paired with ${a.hostname}. Backups go to it from the next run.`)
+      pairing = null
+      found = null
+    })
 
   function lineLabel(a) {
     const n = waiting[a.agent_id] ?? 0
@@ -78,7 +154,7 @@
       <g transform="translate({l.width / 2 - 210} 200)">
         <rect width="420" height="70" rx="12" class="empty" />
         <text x="210" y="31" text-anchor="middle" class="name">No backup PC yet</text>
-        <text x="210" y="53" text-anchor="middle" class="sub">run: sevjala discover, then sevjala pair</text>
+        <text x="210" y="53" text-anchor="middle" class="sub">use “Add a backup PC” below</text>
       </g>
     {/if}
   </svg>
@@ -97,10 +173,69 @@
       <dt>Paired</dt><dd>{when(sel.paired_at, now)}</dd>
       <dt>Agent id</dt><dd><code>{sel.agent_id}</code></dd>
     </dl>
+    <div class="toolbar">
+      <button class="plain" onclick={() => check(sel)} disabled={busy}>Check</button>
+      <button class="plain" onclick={() => remove(sel)} disabled={busy}>Remove…</button>
+      {#if forceable}<button class="danger" onclick={() => remove(sel, true)} disabled={busy}>Remove anyway</button>{/if}
+    </div>
   </section>
 {/if}
 
+{#if msg}<p class="msg" class:bad class:ok={!bad}>{msg}</p>{/if}
+
+<section class="card">
+  <h2>Add a backup PC</h2>
+  <p class="muted">Install Sevjala on the PC as a backup PC first. On that PC run <code>sevjala code</code>: it shows a pairing code and a fingerprint to type here.</p>
+  <div class="toolbar">
+    <button class="primary" onclick={discover} disabled={busy}>Find PCs on this network</button>
+    <form class="toolbar" onsubmit={(e) => (e.preventDefault(), addByAddress())}>
+      <input bind:value={addr} placeholder="192.168.1.21" aria-label="Address of the backup PC" />
+      <button class="plain" disabled={busy || !addr.trim()}>Add by address</button>
+    </form>
+  </div>
+  {#if found?.length}
+    <table class="list">
+      <thead><tr><th>PC</th><th>Address</th><th>Sevjala</th><th></th></tr></thead>
+      <tbody>
+        {#each found as d (d.agent_id)}
+          <tr>
+            <td>{d.hostname}</td><td>{d.addr}</td><td>{d.version}</td>
+            <td>
+              {#if d.paired}paired{:else}
+                <button class="plain" onclick={() => (pairing = { agent: d.agent_id, hostname: d.hostname, code: '', fp: '' })}>Pair…</button>
+              {/if}
+            </td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  {/if}
+  {#if pairing}
+    <form class="pairform" onsubmit={(e) => (e.preventDefault(), pair())}>
+      <h3>Pair with {pairing.hostname}</h3>
+      <label>Pairing code <input bind:value={pairing.code} inputmode="numeric" autocomplete="off" required /></label>
+      <label>Fingerprint (the first characters are enough) <input bind:value={pairing.fp} autocomplete="off" required /></label>
+      <div class="toolbar">
+        <button class="plain" type="button" onclick={() => (pairing = null)}>Cancel</button>
+        <button class="primary" disabled={busy}>Pair</button>
+      </div>
+    </form>
+  {/if}
+</section>
+
+{#if need}<Confirm {need} onconfirm={(w) => remove(sel, true, w)} oncancel={() => (need = null)} />{/if}
+
 <style>
+  .pairform {
+    display: grid;
+    gap: 8px;
+    max-width: 420px;
+    margin-top: 12px;
+  }
+  .pairform label {
+    display: grid;
+    gap: 4px;
+  }
   h2 {
     font-size: 18px;
   }

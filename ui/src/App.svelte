@@ -6,6 +6,7 @@
   import BackupPCs from './BackupPCs.svelte'
   import Backups from './Backups.svelte'
   import Restore from './Restore.svelte'
+  import Schedules from './Schedules.svelte'
   import { parse } from './lib/route.js'
 
   const nav = [
@@ -13,6 +14,7 @@
     ['backups', 'Backups'],
     ['restore', 'Restore'],
     ['pcs', 'Backup PCs'],
+    ['schedules', 'Schedules'],
   ]
 
   let route = $state(parse(location.hash))
@@ -65,6 +67,8 @@
       <Backups status={st} agents={live.agents} now={live.now} />
     {:else if controller && route.page === 'restore'}
       <Restore params={route.params} now={live.now} />
+    {:else if controller && route.page === 'schedules'}
+      <Schedules agents={live.agents} now={live.now} />
     {:else if controller && route.page === 'pcs'}
       <BackupPCs status={st} agents={live.agents} now={live.now} />
     {:else}
