@@ -62,7 +62,7 @@ system keyring, never in a file.`,
 		Example: `  sevjala db set --db shop --no-password          (XAMPP default: root without password)
   sevjala db set --db shop,crm --password         (asks for the password, not shown)
   sevjala db set --user backup --password
-  sevjala db set --host 127.0.0.1 --port 3307`,
+  sevjala db set --host 127.0.0.1 --port 3307 --password   (a new host, port or user needs the password again)`,
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			s, err := f.settings(c.Flags(), c.InOrStdin(), promptPassword(c.ErrOrStderr()))

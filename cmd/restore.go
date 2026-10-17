@@ -20,6 +20,7 @@ import (
 func newRestoreCmd(g *globals) *cobra.Command {
 	var req localapi.RestoreRequest
 	var status bool
+	var confirm string
 	c := &cobra.Command{
 		Use:   "restore <backup|latest>",
 		Short: "Restore a backup into a new database, or replace the live one (controller)",
@@ -73,7 +74,10 @@ Ctrl-C stops watching; the restore carries on. 'sevjala restore --status' shows 
 				if err != nil {
 					return err
 				}
-				typed := confirmReplace(c.InOrStdin(), c.OutOrStdout(), plan)
+				typed := confirm
+				if typed == "" {
+					typed = confirmReplace(c.InOrStdin(), c.OutOrStdout(), plan)
+				}
 				if typed != plan.Target {
 					fmt.Fprintln(c.OutOrStdout(), "Cancelled: nothing was changed.")
 					return errSilent1
@@ -95,6 +99,7 @@ Ctrl-C stops watching; the restore carries on. 'sevjala restore --status' shows 
 	c.Flags().BoolVar(&req.Replace, "replace-production", false, "replace the live database, after backing it up and a typed confirmation")
 	c.Flags().StringVar(&req.File, "file", "", "restore the exported file at `PATH` (a .sql.gz with its .json beside it)")
 	c.Flags().BoolVar(&status, "status", false, "show the running or last restore")
+	c.Flags().StringVar(&confirm, "confirm", "", "with --replace-production, the database `NAME` again, instead of typing it at the prompt")
 	c.MarkFlagsMutuallyExclusive("into", "replace-production")
 	return c
 }

@@ -232,6 +232,7 @@ what is wrong when it is not online.`,
 		},
 	})
 	var force bool
+	var confirm string
 	remove := &cobra.Command{
 		Use:   "remove <agent> [--force]",
 		Short: "Stop backing up to a backup PC; its files stay on that PC (controller)",
@@ -241,8 +242,10 @@ only to that PC, and, without --force, while some backup exists only there.`,
   sevjala agents remove BACKUP-PC-1 --force`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
-			a, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) (localapi.Agent, error) {
-				return cl.RemoveAgent(ctx, args[0], force, "")
+			a, err := withConfirm(c.InOrStdin(), c.OutOrStdout(), confirm, func(confirm string) (localapi.Agent, error) {
+				return callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) (localapi.Agent, error) {
+					return cl.RemoveAgent(ctx, args[0], force, confirm)
+				})
 			})
 			if err != nil {
 				return err
@@ -254,6 +257,7 @@ only to that PC, and, without --force, while some backup exists only there.`,
 		},
 	}
 	remove.Flags().BoolVar(&force, "force", false, "remove even if some backups have their only copy on that PC")
+	remove.Flags().StringVar(&confirm, "confirm", "", "with --force, the PC's `NAME` again, instead of typing it at the prompt")
 	c.AddCommand(remove)
 	return c
 }

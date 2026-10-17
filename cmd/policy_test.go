@@ -28,6 +28,10 @@ func TestPolicyFlags(t *testing.T) {
 	if err != nil || ch.Keep != nil || ch.Schedule != nil || ch.To != nil || ch.Enabled == nil || *ch.Enabled {
 		t.Errorf("set %+v, %v", ch, err)
 	}
+	ch, err = parsePolicy(t, false, []string{"--keep", "1", "--confirm", "daily"})
+	if err != nil || ch.Confirm != "daily" {
+		t.Errorf("set --confirm %+v, %v", ch, err)
+	}
 	ch, err = parsePolicy(t, false, []string{"--schedule", "", "--to", "all"})
 	if err != nil || *ch.Schedule != "" || len(ch.To) != 1 || ch.To[0] != "all" {
 		t.Errorf("set %+v, %v", ch, err)

@@ -185,15 +185,17 @@ func TestExportAll(t *testing.T) {
 	}
 }
 
-func TestExportAsksForAdminFirst(t *testing.T) {
+func TestExportNeedsNoAdmin(t *testing.T) {
 	got := fakeElevation(t, 0, nil)
 	args := []string{"backups", "export", "latest", "--to", t.TempDir(), "--data-dir", t.TempDir()}
 	var out, errOut bytes.Buffer
-	if code := run(args, &out, &errOut); code != 0 || len(*got) == 0 {
-		t.Errorf("exit %d, elevated %q, stderr %q", code, *got, errOut.String())
+	run(args, &out, &errOut)
+	if len(*got) != 0 || strings.Contains(errOut.String(), "administrator") {
+		t.Errorf("elevated %q, stderr %q", *got, errOut.String())
 	}
-	if !strings.Contains(errOut.String(), "exporting a backup needs administrator rights") {
-		t.Errorf("stderr %q", errOut.String())
+	c := newRootCmd()
+	if ex, _, _ := c.Find([]string{"backups", "export"}); strings.Contains(ex.Long, "administrator") {
+		t.Errorf("help still asks for administrator rights: %s", ex.Long)
 	}
 }
 

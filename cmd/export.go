@@ -21,7 +21,6 @@ import (
 
 	"github.com/jufianto/sevjala/inventory"
 	"github.com/jufianto/sevjala/localapi"
-	"github.com/jufianto/sevjala/svc"
 )
 
 func newBackupsExportCmd(g *globals) *cobra.Command {
@@ -38,16 +37,13 @@ belongs to you, not to the service. Sevjala's own copy stays where it is.
 Works on a backup PC (what 'sevjala backups list' shows there) and on the controller
 (only the newest backups, which it keeps in staging). An existing file is never replaced
 unless you add --force; with all, backups already there are skipped, so running it again
-copies only the new ones. It asks for administrator rights: the copy carries the whole database.`,
+copies only the new ones.`,
 		Example: `  sevjala backups export latest --to ~/Desktop
   sevjala backups export latest --db shop --to D:\restore
   sevjala backups export all --to D:\backups              (every backup of every database)
   sevjala backups export BK-20261014-002000-30D3          (into the current folder)`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
-			if !svc.IsAdmin() {
-				return &needsAdmin{why: "exporting a backup needs administrator rights"}
-			}
 			held, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) ([]inventory.Manifest, error) {
 				return cl.Held(ctx)
 			})

@@ -72,6 +72,7 @@ type policyFlags struct {
 	keep            int
 	to              []string
 	enable, disable bool
+	confirm         string
 }
 
 // policyEditCmd builds 'policy add' or 'policy set' and returns the flags it
@@ -103,12 +104,15 @@ sevjala backup now --tag <name>. How to write a schedule: 'sevjala policy --help
 		if err != nil {
 			return err
 		}
-		p, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) (localapi.Policy, error) {
-			if adding {
-				ch.Name = args[0]
-				return cl.AddPolicy(ctx, ch)
-			}
-			return cl.SetPolicy(ctx, args[0], ch)
+		p, err := withConfirm(c.InOrStdin(), c.OutOrStdout(), ch.Confirm, func(confirm string) (localapi.Policy, error) {
+			ch.Confirm = confirm
+			return callAgent(g, 30*time.Second, func(ctx context.Context, cl *localapi.Client) (localapi.Policy, error) {
+				if adding {
+					ch.Name = args[0]
+					return cl.AddPolicy(ctx, ch)
+				}
+				return cl.SetPolicy(ctx, args[0], ch)
+			})
 		})
 		if err != nil {
 			return err
@@ -120,6 +124,7 @@ sevjala backup now --tag <name>. How to write a schedule: 'sevjala policy --help
 	fl.StringVar(&f.schedule, "schedule", "", "when it runs: `CRON` is \"minute hour day month weekday\", e.g. \"30 2 * * *\" = every day at 02:30, or @hourly, @daily, @weekly, @monthly; \"\" = only by hand (backup now --tag)")
 	fl.IntVar(&f.keep, "keep", 0, "each backup PC keeps the newest `N` backups with this policy")
 	fl.StringSliceVar(&f.to, "to", nil, "which backup `PCs` get its backups: names or ids from 'sevjala agents', comma separated, or all")
+	fl.StringVar(&f.confirm, "confirm", "", "when the change deletes backups, the policy `NAME` again, instead of typing it at the prompt")
 	if !adding {
 		fl.BoolVar(&f.enable, "enable", false, "run on schedule again")
 		fl.BoolVar(&f.disable, "disable", false, "stop running on schedule (retention still keeps its backups)")
@@ -141,6 +146,7 @@ func (f *policyFlags) change(fs *pflag.FlagSet, adding bool) (localapi.PolicyCha
 	if fs.Changed("keep") {
 		ch.Keep = &f.keep
 	}
+	ch.Confirm = f.confirm
 	if fs.Changed("to") {
 		ch.To = append([]string{}, f.to...)
 	}
