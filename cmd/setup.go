@@ -260,7 +260,7 @@ func (s *setupFlow) update() error {
 	if err := s.run("", "service", "start"); err == nil {
 		// Installs from before M5 have no tray at login yet.
 		if err := s.autostart(s.target); err != nil {
-			fmt.Fprintf(s.out, "the tray icon could not be set to start at login: %v\n", err)
+			fmt.Fprintf(s.out, "the tray could not be set to start at login or added to the Start menu: %v\n", err)
 		}
 		return nil
 	}

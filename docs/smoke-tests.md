@@ -457,3 +457,19 @@ Still to do, after `sevjala update` on the controller and on the node:
 2. **Former controller:** pair the node with a second controller; the first one's backups stay,
    `status` shows `also holds  N backups from <first controller>, a controller this PC is no
    longer paired with`, and `backups list` marks them `(former)`.
+
+## Icon, Start menu entry and the service state for normal users (D-087, D-088)
+
+Done on the Windows controller (2026-10-17, build `0.3.0-alpha.3+3`): the Windows tests of `svc`
+ran on the real PC (the status query asked for start and stop before the fix, and passes now);
+`sevjala update` (run twice: the first update runs the old updater) created
+`C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Sevjala.lnk` with target `sevjala.exe`,
+arguments `tray --show`, the exe's icon and a minimised window; the exe carries the new icon.
+
+Still to do on the Windows desktop, as a normal (non-elevated) user:
+
+1. `sevjala status` in an ordinary Command Prompt shows `service  running`, not "Access is denied".
+2. Search "Sevjala" in the Start menu: the entry shows the new icon; clicking it starts the tray
+   (the new icon with a green, yellow, red or grey dot). Clicking it again opens the dashboard.
+3. "Quit tray", then the Start menu entry: the tray comes back.
+4. The dashboard's tab and header show the new icon, with the verdict as a dot in the header.

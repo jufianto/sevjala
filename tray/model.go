@@ -30,6 +30,9 @@ type Menu struct {
 	BackupNow bool     // a controller offers "Back up now"
 }
 
+// ErrAlreadyRunning: this user already has a tray; Run shows no second icon.
+var ErrAlreadyRunning = errors.New("the Sevjala tray is already running")
+
 // Build turns a status poll into the menu; err is the poll's failure.
 func Build(st *localapi.Status, err error, now time.Time) Menu {
 	if err != nil || st == nil {

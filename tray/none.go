@@ -15,3 +15,5 @@ func Run(*localapi.Client, string, func() bool) error {
 }
 
 func Start(string) error { return Run(nil, "", nil) }
+
+func Dashboard(string) error { return Run(nil, "", nil) }

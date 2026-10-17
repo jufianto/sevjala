@@ -21,8 +21,11 @@ const Available = true
 // replaces it, the tray starts the new one and ends.
 func Run(cl *localapi.Client, exe string, autostart func() bool) error {
 	release, first, err := singleInstance()
-	if err != nil || !first {
+	if err != nil {
 		return err
+	}
+	if !first {
+		return ErrAlreadyRunning
 	}
 	hideConsole()
 	t := &tray{cl: cl, exe: exe, watch: watchBinary(exe), auto: watchAutostart(autostart)}
@@ -175,6 +178,9 @@ func icon(c string) []byte {
 	}
 	return PNG(c)
 }
+
+// Dashboard opens exe's dashboard in the browser.
+func Dashboard(exe string) error { return spawn(exe, "ui") }
 
 // Start runs exe's tray on its own, as the calling user.
 func Start(exe string) error { return spawn(exe, "tray") }

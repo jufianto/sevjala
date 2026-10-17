@@ -22,9 +22,10 @@
 
 <header>
   <div class="brand">
-    <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true"
-      ><path d="M16 2 4 7v8c0 7.5 5.1 13.4 12 15 6.9-1.6 12-7.5 12-15V7z" style:fill="var(--{v.color})" /></svg
-    >
+    <div class="logo" aria-hidden="true">
+      <img src="/icon.png" width="32" height="32" alt="" />
+      <span class="dot" style:background="var(--{v.color})"></span>
+    </div>
     <div>
       <h1>Sevjala</h1>
       {#if st}<div class="muted small">{st.hostname} · {controller ? 'controller (the database PC)' : 'backup PC'}</div>{/if}
@@ -75,6 +76,23 @@
   }
   h1 {
     font-size: 18px;
+  }
+  .logo {
+    position: relative;
+    width: 32px;
+    height: 32px;
+  }
+  .logo img {
+    display: block;
+  }
+  .dot {
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid var(--card);
   }
   .small {
     font-size: 13px;

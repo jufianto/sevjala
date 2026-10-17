@@ -2,10 +2,13 @@ package tray
 
 import (
 	"bytes"
+	_ "embed"
 	"encoding/binary"
 	"image"
 	"image/color"
+	"image/draw"
 	"image/png"
+	"sync"
 )
 
 const iconSize = 32
@@ -17,22 +20,40 @@ var colors = map[string]color.NRGBA{
 	Grey:   {0x8a, 0x8a, 0x8a, 0xff},
 }
 
-// circle is a filled disc with a soft edge on a transparent square.
-func circle(name string) *image.NRGBA {
-	c := colors[name]
+//go:embed brand.png
+var brandPNG []byte
+
+// brandImage is the Sevjala icon at iconSize.
+var brandImage = sync.OnceValue(func() *image.NRGBA {
+	src, err := png.Decode(bytes.NewReader(brandPNG))
 	img := image.NewNRGBA(image.Rect(0, 0, iconSize, iconSize))
-	const r = iconSize/2 - 2
+	if err == nil {
+		draw.Draw(img, img.Bounds(), src, src.Bounds().Min, draw.Src)
+	}
+	return img
+})
+
+// The status dot sits in the bottom-right corner, ringed in white so it
+// stands out on the blue.
+const (
+	dotX, dotY = iconSize - 8, iconSize - 8
+	dotR       = 6.5
+	ringR      = 8.0
+)
+
+// badge is the Sevjala icon with the status colour as a dot.
+func badge(name string) *image.NRGBA {
+	img := image.NewNRGBA(image.Rect(0, 0, iconSize, iconSize))
+	copy(img.Pix, brandImage().Pix)
+	c := colors[name]
 	for y := range iconSize {
 		for x := range iconSize {
-			dx, dy := float64(x)+0.5-iconSize/2, float64(y)+0.5-iconSize/2
-			d2 := dx*dx + dy*dy
-			switch {
-			case d2 <= (r-1)*(r-1):
+			dx, dy := float64(x-dotX), float64(y-dotY)
+			switch d2 := dx*dx + dy*dy; {
+			case d2 <= dotR*dotR:
 				img.SetNRGBA(x, y, c)
-			case d2 <= r*r:
-				edge := c
-				edge.A = 0x80
-				img.SetNRGBA(x, y, edge)
+			case d2 <= ringR*ringR:
+				img.SetNRGBA(x, y, color.NRGBA{0xff, 0xff, 0xff, 0xff})
 			}
 		}
 	}
@@ -42,14 +63,14 @@ func circle(name string) *image.NRGBA {
 // PNG is the icon for macOS and Linux.
 func PNG(name string) []byte {
 	var b bytes.Buffer
-	_ = png.Encode(&b, circle(name))
+	_ = png.Encode(&b, badge(name))
 	return b.Bytes()
 }
 
 // ICO is the icon for Windows: one 32-bit bitmap entry, which every Windows
 // since XP loads (PNG inside ICO needs Vista's loader and is avoided).
 func ICO(name string) []byte {
-	img := circle(name)
+	img := badge(name)
 	const header, entry, info = 6, 16, 40
 	pixels := iconSize * iconSize * 4
 	mask := iconSize * 4 // 1 bit per pixel, rows padded to 4 bytes
