@@ -1,0 +1,32 @@
+// The dashboard talks only to /api, which sevjala ui relays to the agent;
+// every change carries the header the relay asks for.
+
+export class ConfirmNeeded extends Error {
+  constructor(body) {
+    super(body.error)
+    this.word = body.word
+    this.deletes = body.deletes ?? 0
+    this.hosts = body.hosts ?? []
+  }
+}
+
+export function errorFrom(status, body) {
+  if (body.code === 'confirm_required') return new ConfirmNeeded(body)
+  if (body.code === 'admin_required') return new Error(`${body.error}: run it from an administrator prompt`)
+  return new Error(body.error || `HTTP ${status}`)
+}
+
+export async function api(method, path, body) {
+  const opts = { method, headers: {} }
+  if (method !== 'GET') opts.headers['X-Sevjala-UI'] = '1'
+  if (body !== undefined) {
+    opts.headers['Content-Type'] = 'application/json'
+    opts.body = JSON.stringify(body)
+  }
+  const r = await fetch('/api' + path, opts)
+  const v = await r.json().catch(() => ({}))
+  if (!r.ok) throw errorFrom(r.status, v)
+  return v
+}
+
+export const get = (path) => api('GET', path)

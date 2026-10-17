@@ -4,10 +4,16 @@
   import Verdict from './Verdict.svelte'
   import Dashboard from './Dashboard.svelte'
   import BackupPCs from './BackupPCs.svelte'
+  import { parse } from './lib/route.js'
 
-  let route = $state(location.hash || '#/')
+  const nav = [
+    ['', 'Dashboard'],
+    ['pcs', 'Backup PCs'],
+  ]
+
+  let route = $state(parse(location.hash))
   $effect(() => {
-    const on = () => (route = location.hash || '#/')
+    const on = () => (route = parse(location.hash))
     addEventListener('hashchange', on)
     return () => removeEventListener('hashchange', on)
   })
@@ -33,8 +39,9 @@
   </div>
   {#if controller}
     <nav>
-      <a href="#/" class:on={route !== '#/pcs'}>Dashboard</a>
-      <a href="#/pcs" class:on={route === '#/pcs'}>Backup PCs</a>
+      {#each nav as [page, label]}
+        <a href="#/{page}" class:on={route.page === page}>{label}</a>
+      {/each}
     </nav>
   {/if}
 </header>
@@ -50,7 +57,7 @@
   <Verdict {v} />
 
   {#if st && !live.down}
-    {#if controller && route === '#/pcs'}
+    {#if controller && route.page === 'pcs'}
       <BackupPCs status={st} agents={live.agents} now={live.now} />
     {:else}
       <Dashboard status={st} now={live.now} />
@@ -99,6 +106,7 @@
   }
   nav {
     display: flex;
+    flex-wrap: wrap;
     gap: 4px;
   }
   nav a {

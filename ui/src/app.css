@@ -76,3 +76,81 @@ code {
   padding: 1px 5px;
   border-radius: 4px;
 }
+
+button.primary,
+button.plain,
+button.danger {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+button.primary {
+  border: 0;
+  background: var(--accent);
+  color: #fff;
+}
+button.plain {
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--text);
+}
+button.danger {
+  border: 0;
+  background: var(--red);
+  color: #fff;
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+input,
+select {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  max-width: 100%;
+}
+
+table.list {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+table.list th,
+table.list td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+table.list th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.scroll {
+  overflow-x: auto;
+}
+
+.msg {
+  margin: 8px 0 0;
+}
+.msg.bad {
+  color: var(--red);
+}
+.msg.ok {
+  color: var(--green);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  margin: 10px 0;
+}

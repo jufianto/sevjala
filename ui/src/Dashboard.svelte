@@ -1,5 +1,5 @@
 <script>
-  import { post } from './lib/live.svelte.js'
+  import { api } from './lib/api.js'
   import { when, until, upFor, bytes, plural } from './lib/format.js'
   import { sourceName, controllerName } from './lib/sources.js'
 
@@ -15,7 +15,7 @@
     busy = true
     result = ''
     try {
-      const v = await post('/backup/now')
+      const v = await api('POST', '/backup/now', {})
       const dbs = (v.backups ?? []).map((b) => b.database)
       result = dbs.length ? `Backing up ${dbs.join(', ')}; this page updates when it is done.` : 'Nothing to back up yet.'
       failed = false

@@ -22,14 +22,3 @@ export function connect() {
   setInterval(() => (live.now = new Date()), 15e3)
 }
 
-// post sends a change to the agent; the agent's own message comes back as the error.
-export async function post(path, body = {}) {
-  const r = await fetch('/api' + path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Sevjala-UI': '1' },
-    body: JSON.stringify(body),
-  })
-  const v = await r.json().catch(() => ({}))
-  if (!r.ok) throw new Error(v.code === 'admin_required' ? `${v.error}: run it from the command line, which asks for them` : v.error || r.statusText)
-  return v
-}
