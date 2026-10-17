@@ -32,6 +32,7 @@ type fakeAgent struct {
 	agents  []localapi.Agent
 	cookies []string
 	posts   int
+	broken  bool // /agents fails
 }
 
 func (f *fakeAgent) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -42,6 +43,9 @@ func (f *fakeAgent) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/status":
 		_ = json.NewEncoder(w).Encode(f.status)
+	case r.Method == http.MethodGet && r.URL.Path == "/agents" && f.broken:
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = io.WriteString(w, `{"error":"database is locked"}`)
 	case r.Method == http.MethodGet && r.URL.Path == "/agents":
 		_ = json.NewEncoder(w).Encode(map[string]any{"agents": f.agents})
 	case r.Method == http.MethodPost && r.URL.Path == "/backup/now":
@@ -119,16 +123,18 @@ func get(t *testing.T, cl *http.Client, url string) (*http.Response, string) {
 
 func login(t *testing.T, s *Server, cl *http.Client) {
 	t.Helper()
-	resp, _ := get(t, cl, s.URL())
-	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/" {
-		t.Fatalf("token: %d %q", resp.StatusCode, resp.Header.Get("Location"))
+	resp, body := get(t, cl, s.URL())
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, `content="0;url=/"`) {
+		t.Fatalf("token: %d %q", resp.StatusCode, body)
 	}
 }
 
 func TestTheLinkOpensASessionOnce(t *testing.T) {
 	s, cl, _ := start(t, startAgent(t, &fakeAgent{}), assets, time.Minute)
+	// A page that moves on to / rather than a redirect: a SameSite=Strict cookie is
+	// not sent along a redirect chain that started from the launch file.
 	resp, _ := get(t, cl, s.URL())
-	if resp.StatusCode != http.StatusSeeOther {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("token: %d", resp.StatusCode)
 	}
 	var c *http.Cookie
@@ -137,7 +143,8 @@ func TestTheLinkOpensASessionOnce(t *testing.T) {
 			c = k
 		}
 	}
-	if c == nil || !c.HttpOnly || c.SameSite != http.SameSiteStrictMode {
+	// It expires: browsers send every 127.0.0.1 cookie to every local server.
+	if c == nil || !c.HttpOnly || c.SameSite != http.SameSiteStrictMode || c.MaxAge <= 0 || c.MaxAge > 7*24*3600 {
 		t.Errorf("cookie %+v", c)
 	}
 	resp, body := get(t, cl, s.Base()+"/")
@@ -293,6 +300,34 @@ func TestEventsFollowTheAgent(t *testing.T) {
 	f.set(localapi.Status{Role: "controller", Health: &localapi.Health{Level: "problem", Headline: "Disk almost full"}})
 	if e = readEvent(t, r); !strings.Contains(e.data, "Disk almost full") {
 		t.Errorf("after a change %+v", e)
+	}
+}
+
+// A failed /agents call must not tell the page there are no backup PCs.
+func TestEventsKeepTheBackupPCsWhenTheirListFails(t *testing.T) {
+	f := &fakeAgent{status: localapi.Status{Role: "controller", Health: &localapi.Health{Level: "ok", Headline: "Protected"}},
+		agents: []localapi.Agent{{Hostname: "PC-1", State: "online"}}}
+	ep := startAgent(t, f)
+	s, cl, _ := start(t, ep, assets, time.Minute)
+	login(t, s, cl)
+	resp, err := cl.Get(s.Base() + "/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	r := bufio.NewReader(resp.Body)
+	readEvent(t, r)
+	f.mu.Lock()
+	f.broken = true
+	f.status.Health = &localapi.Health{Level: "warning", Headline: "PC-1 is offline"}
+	f.mu.Unlock()
+	time.Sleep(5 * s.Poll)
+	f.mu.Lock()
+	f.broken = false
+	f.mu.Unlock()
+	var st State
+	if e := readEvent(t, r); json.Unmarshal([]byte(e.data), &st) != nil || len(st.Agents) != 1 || st.Status.Health.Headline != "PC-1 is offline" {
+		t.Errorf("next event %+v", e)
 	}
 }
 

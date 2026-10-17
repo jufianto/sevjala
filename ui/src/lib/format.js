@@ -54,3 +54,6 @@ export function upFor(s) {
   if (h >= 1) return `${h}h ${Math.floor(s / 60) % 60}m`
   return `${Math.floor(s / 60)}m`
 }
+
+// fit shortens a name to n characters so it stays inside its box.
+export const fit = (s, n) => (s.length <= n ? s : s.slice(0, n - 1) + '…')

@@ -32,6 +32,7 @@ const (
 	// on another site cannot add it without a CORS preflight, which fails.
 	changeHeader = "X-Sevjala-UI"
 	pingEvery    = 15 * time.Second
+	sessionAge   = 7 * 24 * 3600
 	csp          = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
 		"frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 )
@@ -206,8 +207,12 @@ func (s *Server) open(w http.ResponseWriter, r *http.Request, token string) {
 		page(w, http.StatusForbidden, "This link was already used or is not valid. Open the dashboard again with: sevjala ui")
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: s.cookie, Value: s.session, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.SetCookie(w, &http.Cookie{Name: s.cookie, Value: s.session, Path: "/", MaxAge: sessionAge, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+	// A page rather than a redirect: the browser drops a Strict cookie along a
+	// redirect chain that began at the launch file.
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, `<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=/"><title>Sevjala</title>`+
+		`<p style="font:16px system-ui,sans-serif;margin:3em auto;max-width:36em">Opening the dashboard… <a href="/">continue</a></p>`)
 }
 
 func (s *Server) hasSession(r *http.Request) bool {
@@ -249,7 +254,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	for {
 		msg := s.state(r.Context())
 		switch {
-		case !bytes.Equal(msg, last):
+		case msg != nil && !bytes.Equal(msg, last):
 			_, _ = w.Write(msg)
 			last, sent = msg, time.Now()
 			fl.Flush()
@@ -266,6 +271,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// state is the next event for the page, or nil when the agent answered only in part.
 func (s *Server) state(ctx context.Context) []byte {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -276,7 +282,10 @@ func (s *Server) state(ctx context.Context) []byte {
 	}
 	v := State{Status: st}
 	if st.Role == config.RoleController {
-		v.Agents, _ = s.cl.Agents(ctx)
+		// No list is better than an empty one: the next poll tries again.
+		if v.Agents, err = s.cl.Agents(ctx); err != nil {
+			return nil
+		}
 	}
 	b, _ := json.Marshal(v)
 	return fmt.Appendf(nil, "event: state\ndata: %s\n\n", b)

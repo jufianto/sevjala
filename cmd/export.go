@@ -180,8 +180,12 @@ func writeExport(m inventory.Manifest, body io.Reader, dir string, force bool) (
 		return "", failf("the backup is at %s, but its manifest could not be written: %w", data, err)
 	}
 	if uid, gid, ok := sudoOwner(); ok {
-		for _, p := range []string{data, manifest, dir} {
-			_ = os.Chown(p, uid, gid)
+		mine := []string{data, manifest}
+		if created {
+			mine = append(mine, dir)
+		}
+		for _, p := range mine {
+			_ = lchown(p, uid, gid)
 		}
 	}
 	return data, nil
@@ -283,6 +287,8 @@ func exportAll(ctx context.Context, held []inventory.Manifest, db string, open f
 	fmt.Fprintln(w)
 	return nil
 }
+
+var lchown = os.Lchown
 
 // sudoOwner is the user who ran sudo: an export belongs to them, not to root.
 func sudoOwner() (uid, gid int, ok bool) {

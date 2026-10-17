@@ -39,3 +39,10 @@ test('upFor', () => {
   assert.equal(upFor(3 * 3600 + 120), '3h 2m')
   assert.equal(upFor(3 * 86400 + 7200), '3d 2h')
 })
+
+test('a long name is shortened to fit its box', async () => {
+  const { fit } = await import('./format.js')
+  assert.equal(fit('PC-1', 18), 'PC-1')
+  assert.equal(fit('ACCOUNTING-BACKUP-WORKSTATION-02', 18), 'ACCOUNTING-BACKUP…')
+  assert.equal(fit('ACCOUNTING-BACKUP-WORKSTATION-02', 18).length, 18)
+})

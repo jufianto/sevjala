@@ -419,7 +419,9 @@ and two backup PCs: the verdict, database card, next backup and backup PCs match
 status`; stopping one PC turned the page yellow and its line red and dashed within the controller's
 45 s, with "1 copy waiting" after Back up now; starting it again turned everything green without a
 reload; a backup PC's own dashboard; two dashboards in one browser; dark mode; a 390 px wide window;
-"lost its connection" after `sevjala ui` stopped.
+"lost its connection" after `sevjala ui` stopped. After the review fixes (D-083..D-085): starting from a page on another
+site, the forwarding page landed on the dashboard with its session; the line labels overlap no box;
+the stopped page went grey "Not connected".
 
 Still to do:
 
@@ -429,6 +431,9 @@ Still to do:
    Manager.
 2. **Back up now** in the dashboard starts a backup; the page updates by itself when it is done.
 3. **Mac node:** `sevjala ui` there shows what it holds and when the controller last checked in.
-4. **Windows 7:** the dashboard renders in Chrome 109 or Firefox 115.
+   The browser opens on a file `open.html` that moves on to the dashboard; `ps -ef | grep token` as
+   another account shows no token.
+4. **Windows 7:** the dashboard renders in Chrome 109 or Firefox 115. With Internet Explorer as the default
+   browser the page says it is too old and names Chrome, Firefox or Edge.
 5. **Admin-only from the page:** nothing in M6 needs admin; an admin-only answer would say to use
    the command line, which asks for the rights.

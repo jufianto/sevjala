@@ -23,3 +23,13 @@ test('without backup PCs there is room for the hint', () => {
   assert.equal(layout(0).nodes.length, 0)
   assert.ok(layout(0).height >= layout(1).height)
 })
+
+test('a line label sits between the controller and its own PC, below every row above it', () => {
+  const l = layout(2 * PER_ROW + 1)
+  const bottomOfFirstRow = l.nodes[0].y + l.box.h / 2
+  l.nodes.forEach((n, i) => {
+    const y = l.labels[i].y
+    assert.ok(y > l.controller.y + l.box.h / 2 && y < n.y - l.box.h / 2, `label ${i} at ${y}`)
+    if (i >= PER_ROW) assert.ok(y > bottomOfFirstRow, `label ${i} at ${y} is hidden by the first row`)
+  })
+})

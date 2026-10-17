@@ -16,5 +16,13 @@ export function layout(count) {
     const slot = W / inRow
     nodes.push({ x: slot * (i % PER_ROW) + slot / 2, y: firstRow + row * rowGap })
   }
-  return { width: W, height: firstRow + (rows - 1) * rowGap + box.h / 2 + 20, box, controller: { x: W / 2, y: top }, nodes }
+  // Each line's label sits just above its own PC, in the gap below the row
+  // before, where no box covers it.
+  const from = { x: W / 2, y: top + box.h / 2 }
+  const labels = nodes.map((n) => {
+    const to = n.y - box.h / 2
+    const y = to - 20
+    return { x: from.x + ((n.x - from.x) * (y - from.y)) / (to - from.y), y }
+  })
+  return { width: W, height: firstRow + (rows - 1) * rowGap + box.h / 2 + 20, box, controller: { x: W / 2, y: top }, nodes, labels }
 }

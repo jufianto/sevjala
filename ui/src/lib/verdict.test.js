@@ -23,3 +23,10 @@ test('before the first answer it waits', () => {
   assert.equal(verdict({}).color, 'grey')
   assert.equal(verdict({}).word, 'Connecting')
 })
+
+test('a page that lost sevjala ui does not keep its last verdict', () => {
+  const ok = { role: 'controller', health: { level: 'ok', headline: 'H', items: [] } }
+  const v = verdict({ status: ok, lost: true })
+  assert.equal(v.color, 'grey')
+  assert.equal(v.word, 'Not connected')
+})

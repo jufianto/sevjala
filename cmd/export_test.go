@@ -201,3 +201,36 @@ func TestSudoOwner(t *testing.T) {
 		t.Error("not under sudo")
 	}
 }
+
+// Under sudo, a folder that was already there keeps its owner: only what the
+// export made is handed over, and a link is never followed.
+func TestExportUnderSudoHandsOverOnlyWhatItMade(t *testing.T) {
+	old := lchown
+	t.Cleanup(func() { lchown = old })
+	var got []string
+	lchown = func(p string, _, _ int) error { got = append(got, filepath.Base(p)); return nil }
+	t.Setenv("SUDO_UID", "501")
+	t.Setenv("SUDO_GID", "20")
+	data := []byte("-- dump\n")
+	m := heldBackup("BK-20261014-002000-30D3", "shop", time.Date(2026, 10, 14, 0, 20, 0, 0, time.Local), data)
+
+	dir := t.TempDir()
+	if _, err := writeExport(m, bytes.NewReader(data), dir, false); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(got, "shop") {
+		t.Errorf("a new folder goes to the sudo user too: %v", got)
+	}
+
+	got = nil
+	dir = t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "shop"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writeExport(m, bytes.NewReader(data), dir, false); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || slices.Contains(got, "shop") {
+		t.Errorf("handed over %v, want only the data and its manifest", got)
+	}
+}

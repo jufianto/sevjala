@@ -3,8 +3,9 @@ const words = { green: 'Protected', yellow: 'Needs a look', red: 'Problem', grey
 
 // verdict is what the big card shows, worded and coloured as the tray does
 // (tray.Build). The headline is the first item, so items lists the rest.
-export function verdict({ status, down }) {
+export function verdict({ status, down, lost }) {
   const v = (color, headline, items = []) => ({ color, word: words[color], headline, items })
+  if (lost) return { ...v('grey', 'This page lost its connection to sevjala ui'), word: 'Not connected' }
   if (down) return v('grey', down)
   if (!status) return { ...v('grey', 'Asking the Sevjala service…'), word: 'Connecting' }
   const h = status.health

@@ -1,6 +1,6 @@
 <script>
   import { layout } from './lib/layout.js'
-  import { when, clock, bytes, plural } from './lib/format.js'
+  import { when, clock, bytes, plural, fit } from './lib/format.js'
 
   let { status, agents, now } = $props()
   const nodes = $derived(agents.filter((a) => a.role !== 'controller'))
@@ -39,8 +39,8 @@
         class:dashed={a.state === 'offline' || a.state === 'error'}
       />
       <text
-        x={(l.controller.x + p.x) / 2}
-        y={(l.controller.y + l.box.h / 2 + p.y - l.box.h / 2) / 2}
+        x={l.labels[i].x}
+        y={l.labels[i].y}
         class="linelabel {tone[a.state] ?? 'grey'}"
         text-anchor="middle">{lineLabel(a)}</text
       >
@@ -48,9 +48,9 @@
 
     <g class="box controller" transform="translate({l.controller.x - l.box.w / 2 - 20} {l.controller.y - l.box.h / 2})">
       <rect width={l.box.w + 40} height={l.box.h} rx="12" />
-      <text x={(l.box.w + 40) / 2} y="30" text-anchor="middle" class="name">{status.hostname}</text>
+      <text x={(l.box.w + 40) / 2} y="30" text-anchor="middle" class="name">{fit(status.hostname, 22)}</text>
       <text x={(l.box.w + 40) / 2} y="52" text-anchor="middle" class="sub">controller · MySQL</text>
-      <text x={(l.box.w + 40) / 2} y="72" text-anchor="middle" class="sub">{dbs || 'no database chosen'}</text>
+      <text x={(l.box.w + 40) / 2} y="72" text-anchor="middle" class="sub">{fit(dbs || 'no database chosen', 30)}</text>
     </g>
 
     {#each nodes as a, i}
@@ -65,9 +65,10 @@
         onclick={() => toggle(a.agent_id)}
         onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), toggle(a.agent_id))}
       >
+        <title>{a.hostname}</title>
         <rect width={l.box.w} height={l.box.h} rx="12" />
         <circle cx="18" cy="22" r="6" class="dot" />
-        <text x="32" y="27" class="name">{a.hostname}</text>
+        <text x="32" y="27" class="name">{fit(a.hostname, 15)}</text>
         <text x="16" y="52" class="sub">{a.state}{a.state !== 'online' && a.last_seen ? ` · since ${clock(new Date(a.last_seen), now)}` : ''}</text>
         <text x="16" y="72" class="sub">{bytes(a.free_bytes ?? 0)} free</text>
       </g>

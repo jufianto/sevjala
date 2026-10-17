@@ -378,10 +378,14 @@ The verdict reads only the store and memory, never MySQL; the tray asks every 15
 
 ## Dashboard (`sevjala ui`, since M6)
 
-`sevjala ui` listens on `127.0.0.1:<random port>` as the user who ran it and prints (and opens)
-`http://127.0.0.1:<port>/?token=<64 hex>`. The token works once: it sets the cookie
-`sevjala_session_<port>` (random, `HttpOnly`, `SameSite=Strict`, path `/`; named per port because
-browsers keep cookies per host) and redirects 303 to `/`; a used or wrong token is 403. The process
+`sevjala ui` listens on `127.0.0.1:<random port>` as the user who ran it and prints
+`http://127.0.0.1:<port>/?token=<64 hex>`. It opens that link on Windows directly; on macOS/Linux,
+where any account can read a command line, it opens a file `open.html` in a fresh temp folder
+(0700, file 0600, removed on exit) that forwards to the link. The token works once: it sets the
+cookie `sevjala_session_<port>` (random, `HttpOnly`, `SameSite=Strict`, path `/`, `Max-Age` 7 days;
+named per port because browsers keep cookies per host) and answers 200 with a page that forwards
+to `/` (a redirect would lose a Strict cookie on a chain that began at the file); a used or wrong
+token is 403. The process
 stops 60 s after its last `/events` client leaves (counted from start before the first).
 
 Every response carries `Content-Security-Policy: default-src 'self'; img-src 'self' data:;
@@ -394,7 +398,7 @@ without the cookie everything else is 401.
 |---|---|
 | `/`, `/assets/…` | the embedded Svelte build (`ui/dist`); a binary built without it answers `/` with 404 "built without the dashboard" |
 | `/api/<route>` | the local API route `<route>` (table above), as that user; `Cookie` and `X-Sevjala-UI` are removed. Anything but `GET`/`HEAD` needs `X-Sevjala-UI: 1` (403 otherwise). An agent that does not answer is 502 `{"error":"The Sevjala service is not running"}` |
-| `/events` | `text/event-stream`. Every 2 s the proxy asks `GET /status` (and `GET /agents` on a controller) and sends only changes: `event: state` with `{"status":Status,"agents":[Agent…]}`, or `event: down` with `{"error":"…"}`; a `: ping` comment after 15 s of silence |
+| `/events` | `text/event-stream`. Every 2 s the proxy asks `GET /status` (and `GET /agents` on a controller) and sends only changes (nothing while `/agents` fails, so the page keeps its list): `event: state` with `{"status":Status,"agents":[Agent…]}`, or `event: down` with `{"error":"…"}`; a `: ping` comment after 15 s of silence |
 
 ## Controller store (since M1)
 

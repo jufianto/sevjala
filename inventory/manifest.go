@@ -90,12 +90,15 @@ func WriteManifest(path string, m Manifest) error {
 // WriteFile goes through a synced temp file, a rename and a directory sync,
 // so a power cut leaves the old file or the complete new one.
 func WriteFile(path string, data []byte, mode os.FileMode) error {
-	tmp := path + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	f, err := os.CreateTemp(filepath.Dir(path), "*-"+filepath.Base(path)+".tmp")
 	if err != nil {
 		return err
 	}
-	_, err = f.Write(data)
+	tmp := f.Name()
+	err = f.Chmod(mode)
+	if err == nil {
+		_, err = f.Write(data)
+	}
 	if err == nil {
 		err = f.Sync()
 	}

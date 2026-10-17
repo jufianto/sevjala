@@ -337,3 +337,26 @@ func TestHumanBytes(t *testing.T) {
 		}
 	}
 }
+
+// Export writes manifests into folders other accounts may write in; a link
+// planted at the temp name must not redirect the write.
+func TestWriteFileDoesNotFollowALinkAtItsTempName(t *testing.T) {
+	dir := t.TempDir()
+	victim := filepath.Join(dir, "victim")
+	if err := os.WriteFile(victim, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "BK-1"+ManifestExt)
+	if err := os.Symlink(victim, path+".tmp"); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteFile(path, []byte("new"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(victim); string(got) != "keep" {
+		t.Errorf("the link's target was overwritten: %q", got)
+	}
+	if got, _ := os.ReadFile(path); string(got) != "new" {
+		t.Errorf("file %q", got)
+	}
+}
