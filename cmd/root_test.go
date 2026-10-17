@@ -138,3 +138,21 @@ func TestFlagsNameWhatToType(t *testing.T) {
 	}
 	walk(newRootCmd())
 }
+
+// Started from Explorer (the Start menu entry, the Run key at login) cobra
+// shows "you need to open cmd.exe" and quits; that must stay for a double-click
+// on sevjala.exe alone, never for a command.
+func TestMousetrapOnlyWithoutACommand(t *testing.T) {
+	old := cobra.MousetrapHelpText
+	t.Cleanup(func() { cobra.MousetrapHelpText = old })
+	cobra.MousetrapHelpText = "This is a command line tool."
+	var out, errOut bytes.Buffer
+	run([]string{}, &out, &errOut)
+	if cobra.MousetrapHelpText == "" {
+		t.Error("a double-click on sevjala.exe lost its hint")
+	}
+	run([]string{"tray", "--help"}, &out, &errOut)
+	if cobra.MousetrapHelpText != "" {
+		t.Error("a command started from Explorer would be stopped by the hint")
+	}
+}

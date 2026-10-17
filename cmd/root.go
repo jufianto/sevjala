@@ -100,6 +100,11 @@ func Execute() {
 }
 
 func run(args []string, out, errOut io.Writer) int {
+	// Cobra stops anything Explorer starts with "open cmd.exe", the Start menu
+	// entry and the tray's start at login included; only a bare double-click needs that.
+	if len(args) > 0 {
+		cobra.MousetrapHelpText = ""
+	}
 	root := newRootCmd()
 	root.SetArgs(args)
 	root.SetOut(out)
