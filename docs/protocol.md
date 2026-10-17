@@ -279,8 +279,9 @@ Destructive requests (M7) answer 409
 `{"error":"…","code":"confirm_required","word":"<word>","deletes":N,"hosts":["<hostname>"…]}`
 until they repeat the word in `confirm`: `POST /policies` and `PATCH /policies/{name}` when the
 change would delete backups (word: the policy name; `deletes` counts copies; PCs not polled
-count with the copies the store has verified there), `DELETE /agents/{agent}?force=true` while
-backups have their only copy there (word: its hostname), and `POST /restore` with `replace`
+count with the copies the store has verified there; two PCs with one hostname show as
+`<hostname> (<agent id prefix>)`; a clock behind a backup is previewed as if it had caught up),
+`DELETE /agents/{agent}?force=true` while backups have their only copy there (word: its hostname), and `POST /restore` with `replace`
 (word: the database, `deletes` 0). The CLI asks for the word and takes `--confirm WORD`.
 
 Errors are `{"error": "<message shown to the operator>"}`, with `"code"` when a client acts on it (`admin_required`, M5; `confirm_required`, M7); a route for the other role is 409
