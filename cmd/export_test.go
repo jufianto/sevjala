@@ -244,3 +244,14 @@ func TestExportUnderSudoHandsOverOnlyWhatItMade(t *testing.T) {
 		t.Errorf("handed over %v, want only the data and its manifest", got)
 	}
 }
+
+func TestExportChecksTheFolderBeforeAskingTheAgent(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "nope")
+	for _, which := range []string{"latest", "all"} {
+		var out, errOut bytes.Buffer
+		code := run([]string{"backups", "export", which, "--to", missing, "--data-dir", t.TempDir()}, &out, &errOut)
+		if code != 1 || !strings.Contains(errOut.String(), "folder "+missing+" does not exist") {
+			t.Errorf("%s: exit %d, stderr %q", which, code, errOut.String())
+		}
+	}
+}

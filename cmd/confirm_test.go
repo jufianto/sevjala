@@ -16,13 +16,14 @@ func TestWithConfirm(t *testing.T) {
 		answers            []error // what each call returns
 		calls              []string
 		err                error
+		errHas             string
 		out                string
 	}{
-		{"no confirmation needed", "", "", []error{nil}, []string{""}, nil, ""},
-		{"typed the word", "", "daily\n", []error{need, nil}, []string{"", "daily"}, nil, "Type daily to continue"},
-		{"typed something else", "", "dialy\n", []error{need}, []string{""}, errSilent1, "Cancelled: nothing was changed."},
-		{"given and still refused", "x", "", []error{need}, []string{"x"}, need, ""},
-		{"given and right", "daily", "", []error{nil}, []string{"daily"}, nil, ""},
+		{"no confirmation needed", "", "", []error{nil}, []string{""}, nil, "", ""},
+		{"typed the word", "", "daily\n", []error{need, nil}, []string{"", "daily"}, nil, "", "Type daily to continue"},
+		{"typed something else", "", "dialy\n", []error{need}, []string{""}, errSilent1, "", "Cancelled: nothing was changed."},
+		{"given and still refused", "x", "", []error{need}, []string{"x"}, need, `--confirm "x" is not the word: this change to policy daily deletes 2 backups on PC-1; to go ahead use --confirm daily`, ""},
+		{"given and right", "daily", "", []error{nil}, []string{"daily"}, nil, "", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -32,7 +33,7 @@ func TestWithConfirm(t *testing.T) {
 				calls = append(calls, confirm)
 				return 0, tt.answers[len(calls)-1]
 			})
-			if !errors.Is(err, tt.err) {
+			if !errors.Is(err, tt.err) || tt.errHas != "" && !strings.Contains(err.Error(), tt.errHas) {
 				t.Errorf("err %v, want %v", err, tt.err)
 			}
 			if strings.Join(calls, "|") != strings.Join(tt.calls, "|") {

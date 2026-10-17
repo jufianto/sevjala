@@ -44,6 +44,9 @@ copies only the new ones.`,
   sevjala backups export BK-20261014-002000-30D3          (into the current folder)`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
+			if err := checkFolder(to); err != nil {
+				return err
+			}
 			held, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) ([]inventory.Manifest, error) {
 				return cl.Held(ctx)
 			})
