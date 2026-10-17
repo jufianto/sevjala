@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jufianto/sevjala/inventory"
+	"github.com/jufianto/sevjala/logx"
 )
 
 const maxBody = 4 << 10
@@ -207,7 +208,10 @@ func Start(endpoint string, h http.Handler, log *slog.Logger) (*Server, error) {
 		log.Warn(warn)
 	}
 	s := &Server{srv: &http.Server{Handler: h, ReadHeaderTimeout: 5 * time.Second,
-		ConnContext: func(ctx context.Context, c net.Conn) context.Context { return WithAdmin(ctx, callerAdmin(c)) },
+		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
+			admin, account := caller(c)
+			return logx.WithBy(WithAdmin(ctx, admin), account)
+		},
 	}, ln: ln}
 	go func() {
 		if err := s.srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {

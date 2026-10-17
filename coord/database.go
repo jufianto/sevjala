@@ -108,7 +108,7 @@ func (c *Controller) SetDatabase(ctx context.Context, s localapi.DBSettings) (lo
 	for i := range d.Databases {
 		d.Databases[i].Configured = slices.Contains(db.Databases, d.Databases[i].Name)
 	}
-	c.Log.Info("database configured", logx.Event(logx.EventDBConfigured), "host", db.Host, "port", db.Port, "user", db.User,
+	c.Log.InfoContext(ctx, "database configured", logx.Event(logx.EventDBConfigured), "host", db.Host, "port", db.Port, "user", db.User,
 		"databases", db.Databases)
 	return d, nil
 }

@@ -28,3 +28,26 @@ func TestDefaultSDDL(t *testing.T) {
 		t.Errorf("%s: %v", defaultSDDL, err)
 	}
 }
+
+func testAccount(t *testing.T) string {
+	u, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	acct, dom, _, err := u.User.Sid.LookupAccount("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dom + `\` + acct
+}
+
+func TestUnknownSIDIsItsString(t *testing.T) {
+	const s = "S-1-5-21-1-2-3-99999"
+	sid, err := windows.StringToSid(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := sidName(sid); got != s {
+		t.Errorf("sidName = %q", got)
+	}
+}

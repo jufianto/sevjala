@@ -55,6 +55,7 @@ const (
 	EventCopyCorrupt        = "copy_corrupt"
 	EventRestoreSucceeded   = "restore_succeeded"
 	EventRestoreFailed      = "restore_failed"
+	EventBackupExported     = "backup_exported"
 )
 
 func Event(name string) slog.Attr { return slog.String("event", name) }
@@ -68,9 +69,9 @@ func Open(dir string, foreground bool) (*slog.Logger, io.Closer, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	var h slog.Handler = slog.NewJSONHandler(w, nil)
+	l := JSON(w)
 	if foreground {
-		h = slog.NewMultiHandler(h, slog.NewTextHandler(os.Stderr, nil))
+		l = slog.New(slog.NewMultiHandler(l.Handler(), slog.NewTextHandler(os.Stderr, nil)))
 	}
-	return slog.New(h), w, nil
+	return l, w, nil
 }

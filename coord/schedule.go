@@ -66,7 +66,7 @@ func (c *Controller) Tick(ctx context.Context, now time.Time) {
 		if busy || (!failed.IsZero() && now.Sub(failed) < failedRetry && !failed.After(now)) {
 			continue
 		}
-		jobs, err := c.start([]string{db}, tags, now, cfg)
+		jobs, err := c.start([]string{db}, tags, now, cfg, "")
 		if err != nil {
 			c.Log.Warn("schedule: backup not started", "database", db, "tags", tags, "err", err)
 			continue

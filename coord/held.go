@@ -5,10 +5,12 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net/http"
 
 	"github.com/jufianto/sevjala/inventory"
 	"github.com/jufianto/sevjala/localapi"
+	"github.com/jufianto/sevjala/logx"
 )
 
 // Held lists what this PC holds: a node's store, or the controller's staging.
@@ -27,9 +29,12 @@ func (s *Service) OpenHeld(ctx context.Context, id string) (inventory.Manifest, 
 	var rc io.ReadCloser
 	var err error
 	where := "this PC"
+	var log *slog.Logger
 	if s.Node != nil {
+		log = s.Node.Log
 		m, rc, err = s.Node.Store.Open(id)
 	} else {
+		log = s.Controller.Log
 		where = "this PC's staging (it keeps only the newest backups); export it on a backup PC that holds it"
 		m, rc, err = inventory.OpenBackup(s.Controller.Staging, id)
 	}
@@ -42,6 +47,9 @@ func (s *Service) OpenHeld(ctx context.Context, id string) (inventory.Manifest, 
 		return m, nil, localapi.Errorf(http.StatusConflict, "%s is being received or deleted right now; try again in a minute", id)
 	case errors.Is(err, inventory.ErrMismatch):
 		return m, nil, localapi.Errorf(http.StatusConflict, "%s is damaged on this PC (not the size its manifest says); export it from another PC", id)
+	}
+	if err == nil {
+		log.InfoContext(ctx, "backup exported", logx.Event(logx.EventBackupExported), "backup_id", id)
 	}
 	return m, rc, err
 }

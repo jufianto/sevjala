@@ -49,6 +49,7 @@ type fakeBackend struct {
 	gotPolicy                         PolicyChange
 	gotRestore                        RestoreRequest
 	sawCaller, gotAdmin               bool
+	gotAccount                        string
 }
 
 func (f *fakeBackend) Status() Status { return f.status }
@@ -59,7 +60,7 @@ func (f *fakeBackend) Code(context.Context) (Code, error) {
 
 func (f *fakeBackend) Discover(ctx context.Context) ([]Discovered, error) {
 	f.mu.Lock()
-	f.sawCaller, f.gotAdmin = hasCaller(ctx), CallerIsAdmin(ctx)
+	f.sawCaller, f.gotAdmin, f.gotAccount = hasCaller(ctx), CallerIsAdmin(ctx), CallerAccount(ctx)
 	f.mu.Unlock()
 	if f.err != nil {
 		return nil, f.err
@@ -411,6 +412,9 @@ func TestCallerIdentityReachesTheBackend(t *testing.T) {
 	defer f.mu.Unlock()
 	if !f.sawCaller || f.gotAdmin != testIsAdmin() {
 		t.Errorf("saw caller %v, admin %v, want admin %v", f.sawCaller, f.gotAdmin, testIsAdmin())
+	}
+	if want := testAccount(t); f.gotAccount != want {
+		t.Errorf("account = %q, want %q", f.gotAccount, want)
 	}
 }
 

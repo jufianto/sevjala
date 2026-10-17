@@ -146,7 +146,7 @@ func (c *Controller) apply(ctx context.Context, plan retention.Plan, agents map[
 		if err := c.Store.MarkCopy(ctx, d.BackupID, d.AgentID, store.CopyDeleted, d.Reason, now); err != nil {
 			c.Log.Error("reconcile: record delete", "backup_id", d.BackupID, "agent_id", d.AgentID, "err", err)
 		}
-		c.Log.Info("retention delete", logx.Event(logx.EventRetentionDelete), "backup_id", d.BackupID,
+		c.Log.InfoContext(ctx, "retention delete", logx.Event(logx.EventRetentionDelete), "backup_id", d.BackupID,
 			"agent_id", d.AgentID, "hostname", a.Hostname, "reason", d.Reason, "was_there", was)
 	}
 	for _, s := range plan.Sends {
@@ -158,7 +158,7 @@ func (c *Controller) apply(ctx context.Context, plan retention.Plan, agents map[
 			continue
 		}
 		c.Pool.Enqueue(transfer.Job{BackupID: s.BackupID, AgentID: s.AgentID})
-		c.Log.Info("backfill queued", logx.Event(logx.EventBackfillQueued), "backup_id", s.BackupID,
+		c.Log.InfoContext(ctx, "backfill queued", logx.Event(logx.EventBackfillQueued), "backup_id", s.BackupID,
 			"agent_id", s.AgentID, "reason", s.Reason)
 	}
 	for _, id := range plan.Unstage {
@@ -169,7 +169,7 @@ func (c *Controller) apply(ctx context.Context, plan retention.Plan, agents map[
 		if err := c.Store.Unstage(ctx, id); err != nil {
 			c.Log.Error("reconcile: record staging", "backup_id", id, "err", err)
 		}
-		c.Log.Info("staging pruned", logx.Event(logx.EventStagingPruned), "backup_id", id, "reason", "retention")
+		c.Log.InfoContext(ctx, "staging pruned", logx.Event(logx.EventStagingPruned), "backup_id", id, "reason", "retention")
 	}
 	c.pruneOrphans(ctx, known)
 	for _, id := range plan.Expire {

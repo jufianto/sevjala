@@ -25,7 +25,7 @@ func backupAt(t *testing.T, ctrl *Controller, at time.Time, want string, tags ..
 	if len(tags) == 0 {
 		tags = []string{"manual"}
 	}
-	jobs, err := ctrl.start([]string{"shop"}, tags, at, ctrl.config())
+	jobs, err := ctrl.start([]string{"shop"}, tags, at, ctrl.config(), "")
 	if err != nil {
 		t.Fatal(err)
 	}

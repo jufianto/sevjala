@@ -81,26 +81,34 @@ func ownedByAdmins(h windows.Handle) bool {
 	return err == nil && (owner.IsWellKnown(windows.WinBuiltinAdministratorsSid) || owner.IsWellKnown(windows.WinLocalSystemSid))
 }
 
-// callerAdmin: an elevated process or SYSTEM is the administrator. Any
-// failure to read the client's token makes it a normal caller.
-func callerAdmin(c net.Conn) bool {
+// caller: an elevated process or SYSTEM is the administrator. Any failure to
+// read the client's token makes it a normal caller.
+func caller(c net.Conn) (admin bool, account string) {
 	var pid uint32
 	if windows.GetNamedPipeClientProcessId(handle(c), &pid) != nil {
-		return false
+		return false, "unknown"
 	}
 	p, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
 	if err != nil {
-		return false
+		return false, "unknown"
 	}
 	defer func() { _ = windows.CloseHandle(p) }()
 	var t windows.Token
 	if windows.OpenProcessToken(p, windows.TOKEN_QUERY, &t) != nil {
-		return false
+		return false, "unknown"
 	}
 	defer t.Close()
-	if t.IsElevated() {
-		return true
-	}
 	u, err := t.GetTokenUser()
-	return err == nil && u.User.Sid.IsWellKnown(windows.WinLocalSystemSid)
+	if err != nil {
+		return t.IsElevated(), "unknown"
+	}
+	return t.IsElevated() || u.User.Sid.IsWellKnown(windows.WinLocalSystemSid), sidName(u.User.Sid)
+}
+
+// sidName is DOMAIN\user, or the SID itself when it cannot be looked up.
+func sidName(sid *windows.SID) string {
+	if acct, dom, _, err := sid.LookupAccount(""); err == nil {
+		return dom + `\` + acct
+	}
+	return sid.String()
 }

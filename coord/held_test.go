@@ -17,6 +17,7 @@ import (
 
 	"github.com/jufianto/sevjala/inventory"
 	"github.com/jufianto/sevjala/localapi"
+	"github.com/jufianto/sevjala/logx"
 )
 
 const heldID = "BK-20261014-002000-30D3"
@@ -45,15 +46,17 @@ func TestHeldOnBothRoles(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
+	var nodeLog, ctrlLog lockedBuffer
+	logs := map[string]*lockedBuffer{"node": &nodeLog, "controller": &ctrlLog}
 	for name, s := range map[string]*Service{
-		"node":       {Node: &Node{Store: inv}},
-		"controller": {Controller: &Controller{Staging: staging}},
+		"node":       {Node: &Node{Store: inv, Log: logx.JSON(&nodeLog)}},
+		"controller": {Controller: &Controller{Staging: staging, Log: logx.JSON(&ctrlLog)}},
 	} {
 		ms, err := s.Held(ctx)
 		if err != nil || len(ms) != 1 || ms[0].BackupID != heldID {
 			t.Errorf("%s: Held %+v, %v", name, ms, err)
 		}
-		_, rc, err := s.OpenHeld(asAdmin, heldID)
+		_, rc, err := s.OpenHeld(logx.WithBy(asAdmin, "tester"), heldID)
 		if err != nil {
 			t.Fatalf("%s: OpenHeld: %v", name, err)
 		}
@@ -61,6 +64,9 @@ func TestHeldOnBothRoles(t *testing.T) {
 		rc.Close()
 		if !bytes.Equal(got, data) {
 			t.Errorf("%s: read %q", name, got)
+		}
+		if r := logs[name].records(t); len(r) != 1 || r[0]["event"] != logx.EventBackupExported || r[0]["by"] != "tester" || r[0]["backup_id"] != heldID {
+			t.Errorf("%s: log %v", name, r)
 		}
 		for _, tt := range []struct {
 			id   string
@@ -84,7 +90,7 @@ func TestOpenHeldWhileDeletingIsBusy(t *testing.T) {
 	if err := inv.Receive(m, m.SHA256, m.Size, bytes.NewReader(data)); err != nil {
 		t.Fatal(err)
 	}
-	s := &Service{Node: &Node{Store: inv}}
+	s := &Service{Node: &Node{Store: inv, Log: discard}}
 	_, rc, err := s.OpenHeld(asAdmin, heldID)
 	if err != nil {
 		t.Fatal(err)

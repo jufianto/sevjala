@@ -62,12 +62,24 @@ func dial(ctx context.Context, endpoint string) (net.Conn, error) {
 	return d.DialContext(ctx, "unix", endpoint)
 }
 
-// callerAdmin: root, or the account running this agent (root for the service,
-// the developer for one started by hand), is the administrator; anyone else
-// who could open the socket (the sevjala group) is a normal caller.
-func callerAdmin(c net.Conn) bool {
+// caller: root, or the account running this agent (root for the service, the
+// developer for one started by hand), is the administrator; anyone else who
+// could open the socket (the sevjala group) is a normal caller.
+func caller(c net.Conn) (admin bool, account string) {
 	uid, ok := peerUID(c)
-	return ok && (uid == 0 || int(uid) == os.Geteuid())
+	if !ok {
+		return false, "unknown"
+	}
+	return uid == 0 || int(uid) == os.Geteuid(), uidName(uid)
+}
+
+// uidName is the user name, or the uid when the account has none.
+func uidName(uid uint32) string {
+	id := strconv.FormatUint(uint64(uid), 10)
+	if u, err := user.LookupId(id); err == nil {
+		return u.Username
+	}
+	return id
 }
 
 func control(c net.Conn, f func(fd int)) {

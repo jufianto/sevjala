@@ -38,6 +38,7 @@ var tagPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
 // backup is in the store.
 type job struct {
 	id, db string
+	by     string // the account that asked for it; empty when the schedule did
 	bytes  atomic.Int64
 	err    string // guarded by Controller.mu
 }
@@ -70,12 +71,12 @@ func (c *Controller) BackupNow(ctx context.Context, db string, tags []string) ([
 			return nil, localapi.Errorf(http.StatusBadRequest, "tag %q is not a policy (policies: %s)", t, strings.Join(names, ", "))
 		}
 	}
-	return c.start(dbs, tags, time.Now(), cfg)
+	return c.start(dbs, tags, time.Now(), cfg, logx.By(ctx))
 }
 
 // start registers one dump per database, all created at now, and runs them in
 // sequence on the agent's lifetime context.
-func (c *Controller) start(dbs, tags []string, now time.Time, cfg config.Config) ([]localapi.BackupJob, error) {
+func (c *Controller) start(dbs, tags []string, now time.Time, cfg config.Config, by string) ([]localapi.BackupJob, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, name := range dbs {
@@ -104,7 +105,7 @@ func (c *Controller) start(dbs, tags []string, now time.Time, cfg config.Config)
 		for c.jobs[id] != nil || c.staged(id) {
 			id = inventory.NewID(now)
 		}
-		j := &job{id: id, db: name}
+		j := &job{id: id, db: name, by: by}
 		c.jobs[id], c.running[name] = j, id
 		out[i], queued[i] = localapi.BackupJob{BackupID: id, Database: name}, j
 	}
@@ -130,7 +131,7 @@ func (c *Controller) runBackup(j *job, created time.Time, tags []string, cfg con
 		c.mu.Unlock()
 	}()
 	log := c.Log.With("backup_id", j.id, "database", j.db)
-	log.Info("backup started", logx.Event(logx.EventBackupStarted))
+	log.InfoContext(logx.WithBy(context.Background(), j.by), "backup started", logx.Event(logx.EventBackupStarted))
 	m, err := c.dump(j, created, tags, cfg)
 	var nodes []string
 	if err == nil {

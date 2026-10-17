@@ -81,7 +81,7 @@ func (c *Controller) RemovePolicy(ctx context.Context, name string) error {
 	if err := c.Store.DeletePolicy(ctx, name); err != nil {
 		return err
 	}
-	c.Log.Info("policy changed", logx.Event(logx.EventPolicyChanged), "name", name, "what", "removed")
+	c.Log.InfoContext(ctx, "policy changed", logx.Event(logx.EventPolicyChanged), "name", name, "what", "removed")
 	return nil
 }
 
@@ -145,7 +145,7 @@ func (c *Controller) destinations(ctx context.Context, refs []string) ([]string,
 }
 
 func (c *Controller) policyChanged(ctx context.Context, p store.Policy, what string) (localapi.Policy, error) {
-	c.Log.Info("policy changed", logx.Event(logx.EventPolicyChanged), "name", p.Name, "what", what,
+	c.Log.InfoContext(ctx, "policy changed", logx.Event(logx.EventPolicyChanged), "name", p.Name, "what", what,
 		"schedule", p.Cron, "keep", p.Keep, "to", p.Destinations, "enabled", p.Enabled)
 	hosts, err := c.hostnames(ctx)
 	return toPolicy(p, hosts, time.Now()), err

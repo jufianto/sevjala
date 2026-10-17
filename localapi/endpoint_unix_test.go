@@ -56,3 +56,17 @@ func TestStartErrorsOnBadEndpoint(t *testing.T) {
 
 // The test process is the agent: its own account is the agent's administrator.
 func testIsAdmin() bool { return true }
+
+func testAccount(t *testing.T) string {
+	u, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return u.Username
+}
+
+func TestUnknownUIDIsItsNumber(t *testing.T) {
+	if got := uidName(2147483000); got != "2147483000" {
+		t.Errorf("uidName = %q", got)
+	}
+}

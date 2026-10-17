@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
+
+	"github.com/jufianto/sevjala/logx"
 )
 
 type callerKey struct{}
@@ -19,6 +21,9 @@ func CallerIsAdmin(ctx context.Context) bool {
 	admin, _ := ctx.Value(callerKey{}).(bool)
 	return admin
 }
+
+// CallerAccount names the account a request came from, for the log.
+func CallerAccount(ctx context.Context) string { return logx.By(ctx) }
 
 func hasCaller(ctx context.Context) bool {
 	_, ok := ctx.Value(callerKey{}).(bool)

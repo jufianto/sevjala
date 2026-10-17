@@ -35,6 +35,7 @@ var errDamaged = errors.New("damaged: its size or sha256 does not match the back
 
 type restoreRun struct {
 	file string // an exported backup to read instead of a catalog copy
+	by   string // the account that asked for it
 	mu   sync.Mutex
 	view localapi.Restore
 }
@@ -111,7 +112,7 @@ func (c *Controller) Restore(ctx context.Context, req localapi.RestoreRequest) (
 		return view, nil
 	}
 	view.State, view.Step, view.StartedAt = localapi.RestoreRunning, "starting", time.Now()
-	run := &restoreRun{file: req.File, view: view}
+	run := &restoreRun{file: req.File, by: logx.By(ctx), view: view}
 	if err := c.claimRestore(run); err != nil {
 		return localapi.Restore{}, err
 	}
@@ -299,7 +300,7 @@ func (c *Controller) mysql(cfg config.Config) (dump.Tools, dump.Conn, error) {
 func (c *Controller) runRestore(run *restoreRun, b store.Backup, tools dump.Tools, conn dump.Conn, cfg config.Config) {
 	v := run.get()
 	log := c.Log.With("backup_id", b.BackupID, "database", b.Database, "target", v.Target)
-	log.Info("restore started", logx.Event(logx.EventRestoreStarted), "replace", v.Replace)
+	log.InfoContext(logx.WithBy(context.Background(), run.by), "restore started", logx.Event(logx.EventRestoreStarted), "replace", v.Replace)
 	err := c.restoreInto(run, b, tools, conn, cfg, log)
 	run.set(func(v *localapi.Restore) {
 		v.FinishedAt = time.Now()
@@ -370,7 +371,7 @@ func (c *Controller) replace(run *restoreRun, path string, size int64, charset, 
 	safety := c.incompleteReplace(db)
 	if safety == "" {
 		run.step("", "backing up "+db+" before replacing it", 0)
-		jobs, err := c.start([]string{db}, []string{preRestoreTag}, time.Now(), cfg)
+		jobs, err := c.start([]string{db}, []string{preRestoreTag}, time.Now(), cfg, run.by)
 		if err != nil {
 			return fmt.Errorf("the pre-restore backup did not start: %w; %s was not touched", err, db)
 		}

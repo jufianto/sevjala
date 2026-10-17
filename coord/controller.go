@@ -131,7 +131,7 @@ func (c *Controller) AddAgent(ctx context.Context, addr string) (localapi.Discov
 		return localapi.Discovered{}, err
 	}
 	c.remember(d)
-	c.Log.Info("agent added", logx.Event(logx.EventAgentAdded), "agent_id", d.AgentID, "addr", addr)
+	c.Log.InfoContext(ctx, "agent added", logx.Event(logx.EventAgentAdded), "agent_id", d.AgentID, "addr", addr)
 	return d, nil
 }
 
@@ -155,14 +155,14 @@ func (c *Controller) Pair(ctx context.Context, agent, code, fp string) (localapi
 		return localapi.Agent{}, localapi.Errorf(http.StatusConflict, "%s is a %s; only nodes can be paired", d.Hostname, d.Role)
 	}
 	if !pairing.MatchFP(d.FP, prefix) {
-		c.Log.Warn("pairing refused", logx.Event(logx.EventPairRejected), "agent_id", d.AgentID, "addr", d.Addr,
+		c.Log.WarnContext(ctx, "pairing refused", logx.Event(logx.EventPairRejected), "agent_id", d.AgentID, "addr", d.Addr,
 			"reason", "fingerprint mismatch")
 		return localapi.Agent{}, localapi.Errorf(http.StatusConflict,
 			"the agent found at %s has fingerprint %s, not the one shown by 'sevjala code'; do not pair: another device may be answering for it",
 			d.Addr, pairing.ShortFP(d.FP))
 	}
 	if _, err := c.LAN.Pair(ctx, d.Addr, d.FP, code); err != nil {
-		c.Log.Warn("pairing failed", logx.Event(logx.EventPairRejected), "agent_id", d.AgentID, "addr", d.Addr, "err", err)
+		c.Log.WarnContext(ctx, "pairing failed", logx.Event(logx.EventPairRejected), "agent_id", d.AgentID, "addr", d.Addr, "err", err)
 		if errors.Is(err, lanapi.ErrRejected) {
 			return localapi.Agent{}, localapi.Errorf(http.StatusBadGateway,
 				"pair %s: it has no active pairing code (expired after 10 minutes, already used, burnt by %d wrong codes, or the node restarted); run 'sevjala code' on it again",
@@ -180,7 +180,7 @@ func (c *Controller) Pair(ctx context.Context, agent, code, fp string) (localapi
 	}
 	d.Paired = true
 	c.remember(d)
-	c.Log.Info("paired with node", logx.Event(logx.EventPairSucceeded), "agent_id", a.AgentID, "hostname", a.Hostname, "fp", a.FP)
+	c.Log.InfoContext(ctx, "paired with node", logx.Event(logx.EventPairSucceeded), "agent_id", a.AgentID, "hostname", a.Hostname, "fp", a.FP)
 	return toAPI(a), nil
 }
 
@@ -234,7 +234,7 @@ func (c *Controller) RemoveAgent(ctx context.Context, agent string, force bool) 
 		c.seen[a.AgentID] = d
 	}
 	c.mu.Unlock()
-	c.Log.Info("agent removed", logx.Event(logx.EventAgentRemoved), "agent_id", a.AgentID, "hostname", a.Hostname,
+	c.Log.InfoContext(ctx, "agent removed", logx.Event(logx.EventAgentRemoved), "agent_id", a.AgentID, "hostname", a.Hostname,
 		"only_copies", len(only))
 	return toAPI(a), nil
 }
