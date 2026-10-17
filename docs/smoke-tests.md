@@ -366,6 +366,14 @@ Done on macOS (2026-10-17): `sevjala tray` ran 5 s against the Mac node's older 
 crash; `sevjala status` there showed WARNING and "the agent is older than this command; run:
 sevjala update".
 
+Done on the Windows controller (2026-10-17, build `0.3.0-alpha.2+38`, over an elevated SSH session):
+`sevjala update --from` works; `sevjala status` shows OK with the last backup, its copies, the next
+run, the backup PC and free disk. The first update from an older build runs the old updater, so
+the tray's start at login (`HKLM\...\Run` value `Sevjala Tray`) appears only after a second
+`sevjala update` (or `sevjala service install`); from this build on, every update adds it.
+Not testable over SSH (no desktop, and the session is elevated): the tray itself and the
+non-admin prompt.
+
 Still to do on real PCs (controller + at least one node), after `sevjala update` to this build:
 
 1. **Daily commands without admin** (Windows, ordinary Command Prompt): `sevjala status`,
