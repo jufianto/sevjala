@@ -68,6 +68,10 @@
     })
   }
 
+  function askRemove(a) {
+    if (confirm(`Remove ${a.hostname}? Backups stop going to it; the backup files on it stay there.`)) remove(a)
+  }
+
   const discover = () =>
     act(async () => {
       found = (await api('POST', '/discover')).agents.filter((d) => d.role !== 'controller')
@@ -175,7 +179,7 @@
     </dl>
     <div class="toolbar">
       <button class="plain" onclick={() => check(sel)} disabled={busy}>Check</button>
-      <button class="plain" onclick={() => remove(sel)} disabled={busy}>Remove…</button>
+      <button class="plain" onclick={() => askRemove(sel)} disabled={busy}>Remove…</button>
       {#if forceable}<button class="danger" onclick={() => remove(sel, true)} disabled={busy}>Remove anyway</button>{/if}
     </div>
   </section>
@@ -223,7 +227,7 @@
   {/if}
 </section>
 
-{#if need}<Confirm {need} onconfirm={(w) => remove(sel, true, w)} oncancel={() => (need = null)} />{/if}
+{#if need}<Confirm {need} onconfirm={(w) => remove(sel, true, w)} oncancel={() => ((need = null), (forceable = true))} />{/if}
 
 <style>
   .pairform {
