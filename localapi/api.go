@@ -63,7 +63,7 @@ type Ping struct {
 // returns a 409 *Error.
 type Backend interface {
 	Status() Status
-	Code() (Code, error)
+	Code(ctx context.Context) (Code, error)
 	Discover(ctx context.Context) ([]Discovered, error)
 	AddAgent(ctx context.Context, addr string) (Discovered, error)
 	Pair(ctx context.Context, agent, code, fp string) (Agent, error)
@@ -90,8 +90,9 @@ type Backend interface {
 
 // Error carries an HTTP status across the pipe; Msg is shown to the operator.
 type Error struct {
-	Code int
-	Msg  string
+	Code   int
+	Msg    string
+	Reason string // machine-readable, e.g. admin_required
 }
 
 func (e *Error) Error() string { return e.Msg }

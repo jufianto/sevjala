@@ -48,15 +48,19 @@ type fakeBackend struct {
 	gotAll, gotDryRun, gotForce       bool
 	gotPolicy                         PolicyChange
 	gotRestore                        RestoreRequest
+	sawCaller, gotAdmin               bool
 }
 
 func (f *fakeBackend) Status() Status { return f.status }
 
-func (f *fakeBackend) Code() (Code, error) {
+func (f *fakeBackend) Code(context.Context) (Code, error) {
 	return Code{Code: "123456", AgentID: "n1", ExpiresAt: time.Date(2026, 10, 12, 16, 42, 0, 0, time.UTC)}, f.err
 }
 
-func (f *fakeBackend) Discover(context.Context) ([]Discovered, error) {
+func (f *fakeBackend) Discover(ctx context.Context) ([]Discovered, error) {
+	f.mu.Lock()
+	f.sawCaller, f.gotAdmin = hasCaller(ctx), CallerIsAdmin(ctx)
+	f.mu.Unlock()
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -382,5 +386,40 @@ func TestRestoreRoutesRoundTrip(t *testing.T) {
 	f.err = Errorf(http.StatusConflict, "a restore is already running")
 	if _, err := c.Restore(ctx, req); err == nil || !strings.Contains(err.Error(), "already running") {
 		t.Errorf("conflict: %v", err)
+	}
+}
+
+func TestAdminRequiredTravels(t *testing.T) {
+	c := NewClient(startBackend(t, &fakeBackend{err: AdminRequired("pairing a backup PC")}))
+	_, err := c.Discover(context.Background())
+	var e *Error
+	if !errors.As(err, &e) || e.Code != http.StatusForbidden || e.Msg != "pairing a backup PC needs administrator rights" || !IsAdminRequired(err) {
+		t.Errorf("err = %#v", err)
+	}
+	if IsAdminRequired(Errorf(http.StatusForbidden, "no")) {
+		t.Error("a plain 403 is not admin_required")
+	}
+}
+
+func TestCallerIdentityReachesTheBackend(t *testing.T) {
+	f := &fakeBackend{}
+	c := NewClient(startBackend(t, f))
+	if _, err := c.Discover(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.sawCaller || f.gotAdmin != testIsAdmin() {
+		t.Errorf("saw caller %v, admin %v, want admin %v", f.sawCaller, f.gotAdmin, testIsAdmin())
+	}
+}
+
+func TestAdminContext(t *testing.T) {
+	ctx := context.Background()
+	if CallerIsAdmin(ctx) {
+		t.Error("a context without a caller is admin")
+	}
+	if !CallerIsAdmin(WithAdmin(ctx, true)) || CallerIsAdmin(WithAdmin(ctx, false)) {
+		t.Error("WithAdmin is not read back")
 	}
 }

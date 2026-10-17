@@ -29,9 +29,12 @@ var (
 
 func (s *Service) Status() localapi.Status { return s.StatusFunc() }
 
-func (s *Service) Code() (localapi.Code, error) {
+func (s *Service) Code(ctx context.Context) (localapi.Code, error) {
 	if s.Node == nil {
 		return localapi.Code{}, errNotNode
+	}
+	if !localapi.CallerIsAdmin(ctx) {
+		return localapi.Code{}, localapi.AdminRequired("issuing a pairing code")
 	}
 	return s.Node.Code()
 }
@@ -60,6 +63,9 @@ func (s *Service) RemoveAgent(ctx context.Context, agent string, force bool) (lo
 func (s *Service) Pair(ctx context.Context, agent, code, fp string) (localapi.Agent, error) {
 	if s.Controller == nil {
 		return localapi.Agent{}, errNotController
+	}
+	if !localapi.CallerIsAdmin(ctx) {
+		return localapi.Agent{}, localapi.AdminRequired("pairing a backup PC")
 	}
 	return s.Controller.Pair(ctx, agent, code, fp)
 }
@@ -106,6 +112,9 @@ func (s *Service) SetDatabase(ctx context.Context, set localapi.DBSettings) (loc
 	if s.Controller == nil {
 		return localapi.Detection{}, errNotController
 	}
+	if set.Dumper != nil && !localapi.CallerIsAdmin(ctx) {
+		return localapi.Detection{}, localapi.AdminRequired("choosing the dump program (--dumper)")
+	}
 	return s.Controller.SetDatabase(ctx, set)
 }
 
@@ -148,12 +157,26 @@ func (s *Service) AddPolicy(ctx context.Context, p localapi.PolicyChange) (local
 	if s.Controller == nil {
 		return localapi.Policy{}, errNotController
 	}
+	if !localapi.CallerIsAdmin(ctx) {
+		if used, err := s.Controller.tagInUse(ctx, p.Name); err != nil {
+			return localapi.Policy{}, err
+		} else if used {
+			return localapi.Policy{}, localapi.AdminRequired("adding policy " + p.Name + " (existing backups carry that tag, and it would delete some)")
+		}
+	}
 	return s.Controller.AddPolicy(ctx, p)
 }
 
 func (s *Service) SetPolicy(ctx context.Context, name string, p localapi.PolicyChange) (localapi.Policy, error) {
 	if s.Controller == nil {
 		return localapi.Policy{}, errNotController
+	}
+	if !localapi.CallerIsAdmin(ctx) {
+		if del, err := s.Controller.policyDeletes(ctx, name, p); err != nil {
+			return localapi.Policy{}, err
+		} else if del {
+			return localapi.Policy{}, localapi.AdminRequired("lowering keep or taking a backup PC out of policy " + name + " (it deletes backups)")
+		}
 	}
 	return s.Controller.SetPolicy(ctx, name, p)
 }

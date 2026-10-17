@@ -22,8 +22,8 @@ func NewHandler(b Backend) http.Handler {
 	mux.HandleFunc("GET /status", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, b.Status())
 	})
-	mux.HandleFunc("POST /code", func(w http.ResponseWriter, _ *http.Request) {
-		c, err := b.Code()
+	mux.HandleFunc("POST /code", func(w http.ResponseWriter, r *http.Request) {
+		c, err := b.Code(r.Context())
 		reply(w, c, err)
 	})
 	mux.HandleFunc("POST /discover", func(w http.ResponseWriter, r *http.Request) {
@@ -173,11 +173,15 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 func reply(w http.ResponseWriter, v any, err error) {
 	if err != nil {
 		code := http.StatusInternalServerError
+		body := map[string]string{"error": err.Error()}
 		var e *Error
 		if errors.As(err, &e) {
 			code = e.Code
+			if e.Reason != "" {
+				body["code"] = e.Reason
+			}
 		}
-		writeJSON(w, code, map[string]string{"error": err.Error()})
+		writeJSON(w, code, body)
 		return
 	}
 	writeJSON(w, http.StatusOK, v)
@@ -202,7 +206,9 @@ func Start(endpoint string, h http.Handler, log *slog.Logger) (*Server, error) {
 	if warn != "" {
 		log.Warn(warn)
 	}
-	s := &Server{srv: &http.Server{Handler: h, ReadHeaderTimeout: 5 * time.Second}, ln: ln}
+	s := &Server{srv: &http.Server{Handler: h, ReadHeaderTimeout: 5 * time.Second,
+		ConnContext: func(ctx context.Context, c net.Conn) context.Context { return WithAdmin(ctx, callerAdmin(c)) },
+	}, ln: ln}
 	go func() {
 		if err := s.srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("local api stopped", "err", err)

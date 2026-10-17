@@ -53,3 +53,5 @@ func TestStartErrorsOnBadEndpoint(t *testing.T) {
 		t.Fatal("Start succeeded in a missing directory")
 	}
 }
+
+func testIsAdmin() bool { return os.Geteuid() == 0 }

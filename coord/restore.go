@@ -661,6 +661,9 @@ func (s *Service) Restore(ctx context.Context, req localapi.RestoreRequest) (loc
 		return localapi.Restore{}, localapi.Errorf(http.StatusConflict, "this agent is a node, and restores run on the controller: "+
 			"copy a backup out with 'sevjala backups export', then on the controller run 'sevjala restore --file <path>'")
 	}
+	if req.File != "" && !localapi.CallerIsAdmin(ctx) {
+		return localapi.Restore{}, localapi.AdminRequired("restoring from a file")
+	}
 	return s.Controller.Restore(ctx, req)
 }
 

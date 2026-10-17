@@ -80,7 +80,7 @@ func TestWrongRoleIs409(t *testing.T) {
 		t.Errorf("RestoreStatus on a node: %v", err)
 	}
 	ctrl := &Service{Controller: &Controller{}}
-	if _, err := ctrl.Code(); !is409(err, "this agent is a controller") {
+	if _, err := ctrl.Code(context.Background()); !is409(err, "this agent is a controller") {
 		t.Errorf("Code on a controller: %v", err)
 	}
 }

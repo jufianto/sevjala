@@ -49,6 +49,11 @@ func (c *Controller) SetDatabase(ctx context.Context, s localapi.DBSettings) (lo
 	defer c.cfgMu.Unlock()
 	cfg := c.Config
 	db := &cfg.Controller.Database
+	// The saved password must not follow the agent to a server the caller chose.
+	if s.Password == nil && ((s.Host != nil && *s.Host != db.Host) || (s.User != nil && *s.User != db.User)) {
+		return localapi.Detection{}, localapi.Errorf(http.StatusBadRequest,
+			"changing the database host or user needs its password again: add --password (or --no-password)")
+	}
 	if s.Host != nil {
 		db.Host = *s.Host
 	}
