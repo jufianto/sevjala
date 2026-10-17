@@ -157,3 +157,13 @@ func TestDatabaseConfigHasNoPassword(t *testing.T) {
 		t.Errorf("the password is in %s", b)
 	}
 }
+
+func TestAdminRefusedThroughAManager(t *testing.T) {
+	dumptest.Use(t, dumptest.OK)
+	svc := &Service{Controller: newController(t)}
+	ctx := localapi.WithVia(asUser, localapi.Via{Manager: "BACKUP-PC-1", Controller: "SERVER-01"})
+	_, err := svc.SetDatabase(ctx, localapi.DBSettings{Dumper: ptr("/bin/sh")})
+	if localapi.IsAdminRequired(err) || !strings.Contains(err.Error(), "needs administrator rights on SERVER-01 itself") {
+		t.Errorf("err %v", err)
+	}
+}

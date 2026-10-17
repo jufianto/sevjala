@@ -665,7 +665,7 @@ func (s *Service) Restore(ctx context.Context, req localapi.RestoreRequest) (loc
 			"copy a backup out with 'sevjala backups export', then on the controller run 'sevjala restore --file <path>'")
 	}
 	if req.File != "" && !localapi.CallerIsAdmin(ctx) {
-		return localapi.Restore{}, localapi.AdminRequired("restoring from a file")
+		return localapi.Restore{}, localapi.AdminRequired(ctx, "restoring from a file")
 	}
 	return s.Controller.Restore(ctx, req)
 }

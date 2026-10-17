@@ -109,7 +109,7 @@ func (s *Service) SetDatabase(ctx context.Context, set localapi.DBSettings) (loc
 		return localapi.Detection{}, errNotController
 	}
 	if set.Dumper != nil && !localapi.CallerIsAdmin(ctx) {
-		return localapi.Detection{}, localapi.AdminRequired("choosing the dump program (--dumper)")
+		return localapi.Detection{}, localapi.AdminRequired(ctx, "choosing the dump program (--dumper)")
 	}
 	return s.Controller.SetDatabase(ctx, set)
 }

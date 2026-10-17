@@ -393,7 +393,7 @@ func TestRestoreRoutesRoundTrip(t *testing.T) {
 }
 
 func TestAdminRequiredTravels(t *testing.T) {
-	c := NewClient(startBackend(t, &fakeBackend{err: AdminRequired("pairing a backup PC")}))
+	c := NewClient(startBackend(t, &fakeBackend{err: AdminRequired(context.Background(), "pairing a backup PC")}))
 	_, err := c.Discover(context.Background())
 	var e *Error
 	if !errors.As(err, &e) || e.Code != http.StatusForbidden || e.Msg != "pairing a backup PC needs administrator rights" || !IsAdminRequired(err) {

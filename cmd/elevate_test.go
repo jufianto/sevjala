@@ -56,7 +56,7 @@ func TestRefusedElevationChangesNothing(t *testing.T) {
 func TestAgentAnswerAdminRequiredAsksForAdmin(t *testing.T) {
 	g := &globals{dataDirFlag: t.TempDir()}
 	_, err := callAgent(g, time.Second, func(context.Context, *localapi.Client) (struct{}, error) {
-		return struct{}{}, localapi.AdminRequired("pairing a backup PC")
+		return struct{}{}, localapi.AdminRequired(context.Background(), "pairing a backup PC")
 	})
 	var na *needsAdmin
 	if !errors.As(err, &na) || na.why != "pairing a backup PC needs administrator rights" {
