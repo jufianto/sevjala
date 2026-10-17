@@ -12,11 +12,20 @@ builds:
     env: [CGO_ENABLED=0]
     flags: [-trimpath]
     ldflags: ["-s -w -X github.com/jufianto/sevjala/cmd.version={{ .Version }}"]
-    goos: [windows, darwin, linux]
+    goos: [windows, linux]
     goarch: [amd64, arm64]
     ignore:
       - {goos: windows, goarch: arm64}
       - {goos: linux, goarch: arm64}
+  # The macOS tray (fyne.io/systray) needs cgo; build on a Mac.
+  - id: darwin
+    binary: sevjala
+    env: [CGO_ENABLED=1]
+    flags: [-trimpath]
+    tags: [tray]
+    ldflags: ["-s -w -X github.com/jufianto/sevjala/cmd.version={{ .Version }}"]
+    goos: [darwin]
+    goarch: [amd64, arm64]
   - id: win7
     binary: sevjala
     tool: .cache/go-win7/bin/go
@@ -28,7 +37,7 @@ builds:
 
 archives:
   - id: stock
-    ids: [stock]
+    ids: [stock, darwin]
     formats: [binary]
     name_template: "sevjala-{{ .Os }}-{{ .Arch }}"
   - id: win7
