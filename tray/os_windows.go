@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -45,7 +46,23 @@ func openStatus() error {
 	if err != nil {
 		return err
 	}
-	c := exec.Command(exe, "status")
-	c.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_CONSOLE}
-	return c.Start()
+	return newConsole(exe, "status")
+}
+
+// newConsole starts exe in a console window of its own. Go's exec always hands
+// the child stdin and stdout (NUL when unset), which hides that window from
+// it; CreateProcess without them lets the new console be both.
+func newConsole(exe string, args ...string) error {
+	cmdline, err := windows.UTF16PtrFromString(windows.ComposeCommandLine(append([]string{exe}, args...)))
+	if err != nil {
+		return err
+	}
+	var si windows.StartupInfo
+	si.Cb = uint32(unsafe.Sizeof(si))
+	var pi windows.ProcessInformation
+	if err := windows.CreateProcess(nil, cmdline, nil, nil, false, windows.CREATE_NEW_CONSOLE|windows.CREATE_UNICODE_ENVIRONMENT, nil, nil, &si, &pi); err != nil {
+		return err
+	}
+	_ = windows.CloseHandle(pi.Thread)
+	return windows.CloseHandle(pi.Process)
 }
