@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jufianto/sevjala/inventory"
 )
@@ -24,7 +25,7 @@ func (f *fakeBackend) OpenHeld(_ context.Context, id string) (inventory.Manifest
 	if f.err != nil {
 		return inventory.Manifest{}, nil, f.err
 	}
-	m := inventory.Manifest{BackupID: id, Size: int64(len(heldData))}
+	m := inventory.Manifest{BackupID: id, Database: "shop", CreatedAt: time.Date(2026, 10, 14, 0, 20, 0, 0, time.Local), Size: int64(len(heldData))}
 	if id == "short" {
 		m.Size++
 	}
@@ -64,5 +65,17 @@ func TestOpenHeldErrorTravels(t *testing.T) {
 	var e *Error
 	if !errors.As(err, &e) || e.Code != http.StatusNotFound || !strings.Contains(e.Msg, heldID) {
 		t.Errorf("err = %#v", err)
+	}
+}
+
+func TestHeldDownloadName(t *testing.T) {
+	hc := &http.Client{Transport: NewTransport(startBackend(t, &fakeBackend{}))}
+	resp, err := hc.Get("http://sevjala/held/" + heldID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if got := resp.Header.Get("Content-Disposition"); got != `attachment; filename=shop_2026-10-14_00-20-00.sql.gz` {
+		t.Errorf("Content-Disposition %q", got)
 	}
 }

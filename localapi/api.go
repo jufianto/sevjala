@@ -147,6 +147,8 @@ type Backend interface {
 	RestoreStatus(ctx context.Context) (Restore, error)
 	// Logs returns the newest log entries, newest first.
 	Logs(ctx context.Context, limit int) ([]json.RawMessage, error)
+	// Database is the controller's database settings, without the password.
+	Database(ctx context.Context) (DBConfig, error)
 }
 
 // Error carries an HTTP status across the pipe; Msg is shown to the operator.
@@ -197,6 +199,17 @@ type Detection struct {
 	ServerVersion string       `json:"server_version"`
 	Flavour       string       `json:"flavour"`
 	Databases     []DBDatabase `json:"databases"`
+}
+
+// DBConfig is what the controller backs up and how it connects; the password
+// itself never leaves the keyring.
+type DBConfig struct {
+	Host        string   `json:"host"`
+	Port        int      `json:"port"`
+	User        string   `json:"user"`
+	Dumper      string   `json:"dumper"`
+	Databases   []string `json:"databases"`
+	HasPassword bool     `json:"has_password"`
 }
 
 // DBSettings is a partial update: nil fields keep the agent's value; a nil

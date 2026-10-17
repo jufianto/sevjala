@@ -236,3 +236,8 @@ func (c *Client) Logs(ctx context.Context, limit int) ([]json.RawMessage, error)
 	var l logList
 	return l.Entries, c.do(ctx, http.MethodGet, path, nil, &l)
 }
+
+func (c *Client) Database(ctx context.Context) (DBConfig, error) {
+	var d DBConfig
+	return d, c.do(ctx, http.MethodGet, "/db", nil, &d)
+}

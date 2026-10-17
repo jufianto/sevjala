@@ -2,7 +2,9 @@ package coord
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -18,7 +20,7 @@ var (
 	asAdmin = localapi.WithAdmin(context.Background(), true)
 )
 
-func TestAdminOnlyActions(t *testing.T) {
+func TestAdminOnlyWhereNecessary(t *testing.T) {
 	dumptest.Use(t, dumptest.OK)
 	ctrl := newController(t)
 	pc1 := startAgent(t, "node", "PC-1")
@@ -42,17 +44,17 @@ func TestAdminOnlyActions(t *testing.T) {
 		call  func(ctx context.Context) error
 		admin bool
 	}{
-		{"pair", func(ctx context.Context) error { return second(svc.Pair(ctx, "PC-9", "123456", "")) }, true},
-		{"pairing code on a node", func(ctx context.Context) error { return second(node.Code(ctx)) }, true},
+		{"pair", func(ctx context.Context) error { return second(svc.Pair(ctx, "PC-9", "123456", "")) }, false},
+		{"pairing code on a node", func(ctx context.Context) error { return second(node.Code(ctx)) }, false},
 		{"db set --dumper", func(ctx context.Context) error {
 			return second(svc.SetDatabase(ctx, localapi.DBSettings{Dumper: ptr("/bin/sh")}))
 		}, true},
 		{"db set host", func(ctx context.Context) error {
 			return second(svc.SetDatabase(ctx, localapi.DBSettings{Host: ptr("192.168.1.99"), Password: ptr("theirs")}))
-		}, true},
+		}, false},
 		{"db set port", func(ctx context.Context) error {
 			return second(svc.SetDatabase(ctx, localapi.DBSettings{Port: ptr(3307)}))
-		}, true},
+		}, false},
 		{"db set user with its password", func(ctx context.Context) error {
 			return second(svc.SetDatabase(ctx, localapi.DBSettings{User: ptr("backup"), Password: ptr("pw")}))
 		}, false},
@@ -61,39 +63,39 @@ func TestAdminOnlyActions(t *testing.T) {
 		}, false},
 		{"policy add over an old tag", func(ctx context.Context) error {
 			return second(svc.AddPolicy(ctx, localapi.PolicyChange{Name: "weekly", Keep: ptr(1)}))
-		}, true},
+		}, false},
 		{"policy add, new tag", func(ctx context.Context) error {
 			return second(svc.AddPolicy(ctx, localapi.PolicyChange{Name: "yearly", Keep: ptr(1)}))
 		}, false},
 		{"keep lowered", func(ctx context.Context) error {
 			return second(svc.SetPolicy(ctx, "hourly", localapi.PolicyChange{Keep: ptr(3)}))
-		}, true},
+		}, false},
 		{"keep raised", func(ctx context.Context) error {
 			return second(svc.SetPolicy(ctx, "monthly", localapi.PolicyChange{Keep: ptr(20)}))
 		}, false},
 		{"every PC narrowed to one", func(ctx context.Context) error {
 			return second(svc.SetPolicy(ctx, "frequent", localapi.PolicyChange{To: []string{"PC-1"}}))
-		}, true},
+		}, false},
 		{"one PC widened to every PC", func(ctx context.Context) error {
 			return second(svc.SetPolicy(ctx, "daily", localapi.PolicyChange{To: []string{"all"}}))
 		}, false},
 		{"schedule changed", func(ctx context.Context) error {
 			return second(svc.SetPolicy(ctx, "monthly", localapi.PolicyChange{Schedule: ptr("0 2 1 * *")}))
-		}, true},
+		}, false},
 		{"schedule turned off", func(ctx context.Context) error {
 			return second(svc.SetPolicy(ctx, "monthly", localapi.PolicyChange{Enabled: ptr(false)}))
-		}, true},
+		}, false},
 		{"backup now", func(ctx context.Context) error { return second(svc.BackupNow(ctx, "nosuch", nil)) }, false},
 		{"backup now, manual", func(ctx context.Context) error { return second(svc.BackupNow(ctx, "nosuch", []string{"manual"})) }, false},
-		{"backup now --tag daily", func(ctx context.Context) error { return second(svc.BackupNow(ctx, "nosuch", []string{"daily"})) }, true},
-		{"remove a backup PC", func(ctx context.Context) error { return second(svc.RemoveAgent(ctx, "PC-404", false, "")) }, true},
+		{"backup now --tag daily", func(ctx context.Context) error { return second(svc.BackupNow(ctx, "nosuch", []string{"daily"})) }, false},
+		{"remove a backup PC", func(ctx context.Context) error { return second(svc.RemoveAgent(ctx, "PC-404", false, "")) }, false},
 		{"export (read a backup)", func(ctx context.Context) error {
 			_, rc, err := svc.OpenHeld(ctx, "BK-20261014-002000-30D3")
 			if rc != nil {
 				rc.Close()
 			}
 			return err
-		}, true},
+		}, false},
 		{"list what this PC holds", func(ctx context.Context) error { return second(svc.Held(ctx)) }, false},
 		{"restore --file", func(ctx context.Context) error {
 			return second(svc.Restore(ctx, localapi.RestoreRequest{File: "/nowhere/x.sql.gz", DryRun: true}))
@@ -126,7 +128,7 @@ func TestChangingTheDatabaseHostNeedsThePassword(t *testing.T) {
 		t.Fatal(err)
 	}
 	host := ctrl.config().Controller.Database.Host
-	for _, s := range []localapi.DBSettings{{Host: ptr("192.168.1.99")}, {User: ptr("someone")}} {
+	for _, s := range []localapi.DBSettings{{Host: ptr("192.168.1.99")}, {Port: ptr(3307)}, {User: ptr("someone")}} {
 		if _, err := ctrl.SetDatabase(context.Background(), s); errCode(err) != http.StatusBadRequest || !strings.Contains(err.Error(), "password") {
 			t.Errorf("%+v: %v", s, err)
 		}
@@ -136,5 +138,22 @@ func TestChangingTheDatabaseHostNeedsThePassword(t *testing.T) {
 	}
 	if _, err := ctrl.SetDatabase(context.Background(), localapi.DBSettings{Host: ptr("127.0.0.1"), Password: &pw}); err != nil {
 		t.Errorf("a new host with its password: %v", err)
+	}
+}
+
+func TestDatabaseConfigHasNoPassword(t *testing.T) {
+	dumptest.Use(t, dumptest.OK)
+	ctrl := newController(t)
+	pw := "s3cret-pw"
+	if _, err := ctrl.SetDatabase(context.Background(), localapi.DBSettings{Password: &pw, Databases: []string{"shop"}}); err != nil {
+		t.Fatal(err)
+	}
+	d, err := ctrl.Database(context.Background())
+	if err != nil || !d.HasPassword || !slices.Equal(d.Databases, []string{"shop"}) || d.Port == 0 {
+		t.Fatalf("%+v, %v", d, err)
+	}
+	b, _ := json.Marshal(d)
+	if strings.Contains(string(b), pw) {
+		t.Errorf("the password is in %s", b)
 	}
 }

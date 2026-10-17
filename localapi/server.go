@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net"
 	"net/http"
 	"strconv"
@@ -66,6 +67,10 @@ func NewHandler(b Backend) http.Handler {
 	})
 	mux.HandleFunc("POST /db/detect", func(w http.ResponseWriter, r *http.Request) {
 		d, err := b.DetectDatabase(r.Context())
+		reply(w, d, err)
+	})
+	mux.HandleFunc("GET /db", func(w http.ResponseWriter, r *http.Request) {
+		d, err := b.Database(r.Context())
 		reply(w, d, err)
 	})
 	mux.HandleFunc("PUT /db", func(w http.ResponseWriter, r *http.Request) {
@@ -144,6 +149,8 @@ func NewHandler(b Backend) http.Handler {
 		}
 		defer rc.Close()
 		w.Header().Set("Content-Type", "application/gzip")
+		name := m.Database + "_" + m.CreatedAt.Local().Format("2006-01-02_15-04-05") + inventory.DataExt
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name}))
 		w.Header().Set("Content-Length", strconv.FormatInt(m.Size, 10))
 		_, _ = io.Copy(w, rc)
 	})

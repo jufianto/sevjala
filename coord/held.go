@@ -23,9 +23,6 @@ func (s *Service) Held(context.Context) ([]inventory.Manifest, error) {
 
 func (s *Service) OpenHeld(ctx context.Context, id string) (inventory.Manifest, io.ReadCloser, error) {
 	var m inventory.Manifest
-	if !localapi.CallerIsAdmin(ctx) {
-		return m, nil, localapi.AdminRequired("copying a backup out (export)")
-	}
 	var rc io.ReadCloser
 	var err error
 	where := "this PC"

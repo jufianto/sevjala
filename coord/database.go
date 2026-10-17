@@ -50,9 +50,9 @@ func (c *Controller) SetDatabase(ctx context.Context, s localapi.DBSettings) (lo
 	cfg := c.Config
 	db := &cfg.Controller.Database
 	// The saved password must not follow the agent to a server the caller chose.
-	if s.Password == nil && ((s.Host != nil && *s.Host != db.Host) || (s.User != nil && *s.User != db.User)) {
+	if s.Password == nil && ((s.Host != nil && *s.Host != db.Host) || (s.Port != nil && *s.Port != db.Port) || (s.User != nil && *s.User != db.User)) {
 		return localapi.Detection{}, localapi.Errorf(http.StatusBadRequest,
-			"changing the database host or user needs its password again: add --password (or --no-password)")
+			"changing the database host, port or user needs its password again: add --password (or --no-password)")
 	}
 	if s.Host != nil {
 		db.Host = *s.Host
@@ -111,4 +111,15 @@ func (c *Controller) SetDatabase(ctx context.Context, s localapi.DBSettings) (lo
 	c.Log.InfoContext(ctx, "database configured", logx.Event(logx.EventDBConfigured), "host", db.Host, "port", db.Port, "user", db.User,
 		"databases", db.Databases)
 	return d, nil
+}
+
+func (c *Controller) Database(context.Context) (localapi.DBConfig, error) {
+	db := c.config().Controller.Database
+	pw, err := config.Secret(c.DataDir, db.PasswordRef)
+	dbs := db.Databases
+	if dbs == nil {
+		dbs = []string{}
+	}
+	return localapi.DBConfig{Host: db.Host, Port: db.Port, User: db.User, Dumper: db.Dumper, Databases: dbs,
+		HasPassword: err == nil && pw != ""}, nil
 }

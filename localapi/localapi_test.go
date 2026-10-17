@@ -474,3 +474,14 @@ func TestConfirmRequiredRoundTrip(t *testing.T) {
 		t.Error("a plain 409 is not confirm_required")
 	}
 }
+
+func (f *fakeBackend) Database(context.Context) (DBConfig, error) {
+	return DBConfig{Host: "127.0.0.1", Port: 3306, User: "root", Databases: []string{"shop"}, HasPassword: true}, f.err
+}
+
+func TestDatabaseConfigRoundTrip(t *testing.T) {
+	d, err := NewClient(startBackend(t, &fakeBackend{})).Database(context.Background())
+	if err != nil || d.Port != 3306 || !d.HasPassword || !slices.Equal(d.Databases, []string{"shop"}) {
+		t.Errorf("%+v, %v", d, err)
+	}
+}
