@@ -66,3 +66,20 @@ func TestTailEmptyDir(t *testing.T) {
 		t.Errorf("%v, %v", es, err)
 	}
 }
+
+func TestTailAcrossChunkEdges(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, FileName)
+	writeLog(t, p+".1", entry("a"), "", entry("bb")+"\n")
+	writeLog(t, p, entry("ccc"), "not json", entry("d"), `{"msg":"half`)
+	defer func(n int64) { tailChunk = n }(tailChunk)
+	for _, n := range []int64{1, 2, 3, 7, 11, 12, 13, 64, 1 << 16} {
+		tailChunk = n
+		for limit, want := range []string{"", "d", "d,ccc", "d,ccc,bb", "d,ccc,bb,a", "d,ccc,bb,a"} {
+			es, err := Tail(dir, limit)
+			if got := strings.Join(msgs(t, es), ","); err != nil || got != want {
+				t.Errorf("chunk %d, limit %d: got %q, %v; want %q", n, limit, got, err, want)
+			}
+		}
+	}
+}
