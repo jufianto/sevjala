@@ -1,7 +1,7 @@
 <script>
   import { api, get, every, ConfirmNeeded } from './lib/api.js'
   import { cronFor, describe, presetOf, weekdays } from './lib/cron.js'
-  import { when } from './lib/format.js'
+  import { until } from './lib/format.js'
   import Confirm from './Confirm.svelte'
 
   let { agents, now } = $props()
@@ -103,7 +103,7 @@
             <td>{p.keep}</td>
             <td>{toText(p)}</td>
             <td>{p.enabled ? 'on' : 'off'}</td>
-            <td>{p.next_run ? when(p.next_run, now) : '—'}</td>
+            <td>{p.next_run ? until(p.next_run, now) : '—'}</td>
             <td class="actions">
               <button class="link" onclick={() => open(p)}>Change</button>
               {#if p.name !== 'manual' && p.name !== 'pre-restore'}<button class="link" onclick={() => remove(p)}>Remove</button>{/if}

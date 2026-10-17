@@ -1,6 +1,6 @@
 <script>
   import { api, get, every, ConfirmNeeded } from './lib/api.js'
-  import { when, bytes } from './lib/format.js'
+  import { when, bytes, plural } from './lib/format.js'
   import Confirm from './Confirm.svelte'
 
   let { params, now } = $props()
@@ -115,7 +115,7 @@
       <p>{run.step}{run.size ? ` · ${pct}%` : ''}</p>
       <progress max="100" value={pct}></progress>
     {:else if run.state === 'done'}
-      <p class="msg ok">Done: {run.tables} tables in {run.target}.</p>
+      <p class="msg ok">Done: {plural(run.tables, 'table', 'tables')} in {run.target}.</p>
     {:else}
       <p class="msg bad">{run.error}</p>
     {/if}

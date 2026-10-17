@@ -13,7 +13,7 @@
 <dialog bind:this={dlg} oncancel={(e) => (e.preventDefault(), oncancel())}>
   <form method="dialog" onsubmit={(e) => (e.preventDefault(), ok && onconfirm(need.word))}>
     <h2>Are you sure?</h2>
-    <p>{need.message}.</p>
+    <p>{need.message.charAt(0).toUpperCase() + need.message.slice(1)}.</p>
     {#if need.hosts.length}<p class="muted">Backup PCs affected: {need.hosts.join(', ')}</p>{/if}
     <label>
       Type <strong>{need.word}</strong> to continue
