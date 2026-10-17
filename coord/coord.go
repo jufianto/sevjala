@@ -4,6 +4,7 @@ package coord
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -19,6 +20,7 @@ type Service struct {
 	StatusFunc func() localapi.Status
 	Node       *Node
 	Controller *Controller
+	LogDir     string // where the agent writes sevjala.log
 }
 
 var _ localapi.Backend = (*Service)(nil)
@@ -202,4 +204,8 @@ func (s *Service) RemovePolicy(ctx context.Context, name string) error {
 		return errNotController
 	}
 	return s.Controller.RemovePolicy(ctx, name)
+}
+
+func (s *Service) Logs(_ context.Context, limit int) ([]json.RawMessage, error) {
+	return logx.Tail(s.LogDir, limit)
 }

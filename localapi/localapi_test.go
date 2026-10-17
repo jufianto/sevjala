@@ -50,6 +50,7 @@ type fakeBackend struct {
 	gotRestore                        RestoreRequest
 	sawCaller, gotAdmin               bool
 	gotAccount                        string
+	gotLimit                          int
 }
 
 func (f *fakeBackend) Status() Status { return f.status }
@@ -425,5 +426,37 @@ func TestAdminContext(t *testing.T) {
 	}
 	if !CallerIsAdmin(WithAdmin(ctx, true)) || CallerIsAdmin(WithAdmin(ctx, false)) {
 		t.Error("WithAdmin is not read back")
+	}
+}
+
+func (f *fakeBackend) Logs(_ context.Context, limit int) ([]json.RawMessage, error) {
+	f.mu.Lock()
+	f.gotLimit = limit
+	f.mu.Unlock()
+	return []json.RawMessage{json.RawMessage(`{"msg":"newest"}`)}, f.err
+}
+
+func TestLogsRoute(t *testing.T) {
+	f := &fakeBackend{}
+	ep := startBackend(t, f)
+	hc := &http.Client{Transport: NewTransport(ep)}
+	for _, q := range []string{"?limit=abc", "?limit=0", "?limit=2001"} {
+		resp, err := hc.Get("http://sevjala/logs" + q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("%s: %d", q, resp.StatusCode)
+		}
+	}
+	es, err := NewClient(ep).Logs(context.Background(), 0)
+	if err != nil || len(es) != 1 || string(es[0]) != `{"msg":"newest"}` {
+		t.Fatalf("%q, %v", es, err)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.gotLimit != 500 {
+		t.Errorf("default limit %d", f.gotLimit)
 	}
 }

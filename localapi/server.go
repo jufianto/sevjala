@@ -157,6 +157,19 @@ func NewHandler(b Backend) http.Handler {
 		v, err := b.RestoreStatus(r.Context())
 		reply(w, v, err)
 	})
+	mux.HandleFunc("GET /logs", func(w http.ResponseWriter, r *http.Request) {
+		limit := 500
+		if q := r.URL.Query().Get("limit"); q != "" {
+			n, err := strconv.Atoi(q)
+			if err != nil || n < 1 || n > 2000 {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "limit must be a number from 1 to 2000"})
+				return
+			}
+			limit = n
+		}
+		es, err := b.Logs(r.Context(), limit)
+		reply(w, logList{Entries: es}, err)
+	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 	})

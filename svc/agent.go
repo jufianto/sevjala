@@ -89,7 +89,7 @@ func (a *Agent) start() error {
 	}
 	hostname, _ := os.Hostname()
 	a.host = hostname
-	backend := &coord.Service{StatusFunc: a.status}
+	backend := &coord.Service{StatusFunc: a.status, LogDir: config.LogDir(a.DataDir)}
 	var codes *pairing.Codes
 	switch a.Config.Role {
 	case config.RoleNode:

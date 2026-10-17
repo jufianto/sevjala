@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/jufianto/sevjala/inventory"
@@ -214,4 +215,14 @@ func (c *Client) Restore(ctx context.Context, req RestoreRequest) (Restore, erro
 func (c *Client) RestoreStatus(ctx context.Context) (Restore, error) {
 	var r Restore
 	return r, c.do(ctx, http.MethodGet, "/restore", nil, &r)
+}
+
+// Logs asks for the newest limit entries; 0 lets the agent choose (500).
+func (c *Client) Logs(ctx context.Context, limit int) ([]json.RawMessage, error) {
+	path := "/logs"
+	if limit > 0 {
+		path += "?limit=" + strconv.Itoa(limit)
+	}
+	var l logList
+	return l.Entries, c.do(ctx, http.MethodGet, path, nil, &l)
 }

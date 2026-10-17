@@ -2,6 +2,7 @@ package localapi
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"time"
@@ -144,6 +145,8 @@ type Backend interface {
 	OpenHeld(ctx context.Context, id string) (inventory.Manifest, io.ReadCloser, error)
 	Restore(ctx context.Context, req RestoreRequest) (Restore, error)
 	RestoreStatus(ctx context.Context) (Restore, error)
+	// Logs returns the newest log entries, newest first.
+	Logs(ctx context.Context, limit int) ([]json.RawMessage, error)
 }
 
 // Error carries an HTTP status across the pipe; Msg is shown to the operator.
@@ -247,6 +250,10 @@ type backupJobs struct {
 
 type backupList struct {
 	Backups []Backup `json:"backups"`
+}
+
+type logList struct {
+	Entries []json.RawMessage `json:"entries"`
 }
 
 type heldList struct {
