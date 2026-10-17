@@ -82,7 +82,7 @@ Every command explains itself with examples: `sevjala <command> --help`.
 | Group | Commands |
 |---|---|
 | Install & status | `status`, `ui` (dashboard in the browser), `tray`, `setup`, `update [--from FILE]`, `service install/start/stop/status/uninstall`, `doctor`, `version` |
-| Connect PCs | `discover`, `code` (on the backup PC), `pair`, `agents`, `agents add/remove`, `ping` |
+| Connect PCs | `discover`, `code` (on the backup PC), `pair`, `agents`, `agents add/remove`, `ping`, `agents manager <pc> on\|off` |
 | Database | `db detect`, `db set` |
 | Backups | `backup now`, `backups list [--matrix]`, `backups export <backup\|latest\|all> --to FOLDER` (copy out; the copy belongs to you), `restore <backup\|latest> [--into NAME \| --replace-production]`, `restore --file PATH`, `restore --status` |
 | Schedules & cleanup | `policy list/add/set/remove`, `retention run [--dry-run]` |
@@ -93,6 +93,13 @@ macOS/Linux. Changes that delete backups (a schedule keeping fewer, `agents remo
 `restore --replace-production`) ask you to type a word first, or take `--confirm WORD`; the log
 records which account made each change. Everything the commands do on the controller can also be
 done in the dashboard: `sevjala ui`.
+
+**Managers:** an administrator on the controller can make a backup PC a manager
+(`sevjala agents manager <pc> on`). On that PC, `sevjala --controller <command>` (status, agents,
+backup, restore, policy, …) and `sevjala ui --controller` (or the tray's "Open controller
+dashboard") work as if you sat at the controller, over the connections the controller already
+opens: the backup PC still never connects out, and nothing new listens on the database PC.
+Steps that need administrator rights are still done on the controller itself.
 
 Build: `make build` (host), `make build-all` (every asset incl. Windows 7), `make test`,
 `make test-integration` (real MariaDB 10.4 in Docker), `make lint`.

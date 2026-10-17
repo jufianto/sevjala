@@ -518,3 +518,42 @@ Still to do:
    agents remove <pc> --force` is refused naming the database.
 4. **Windows 7 browser:** the new screens render in Chrome 109 / Firefox 115 (the dialog uses
    `<dialog>`).
+
+## Managers — control the controller from a backup PC (AD-21, D-096..D-101)
+
+Exit criterion: on a backup PC marked as manager, `sevjala --controller …` and
+`sevjala ui --controller` do every normal-user controller operation; administrator-only ones
+are refused with "on <controller> itself"; the backup PC never dials.
+
+Already covered without real PCs: Go tests for the poll hello, `POST /manage` (101, 403 for a
+non-manager), the link pool, keeper and relay (every relay error text), the admin refusal over a
+link, `--controller` on the CLI, the dashboard proxy with a prefix and `via`, the tray item; an
+in-process controller + manager (`svc` TestManagerRunsControllerCommands: relay, `by` =
+`<account> via <manager>`, turning off refuses again).
+
+Done on macOS (2026-10-17) against an in-process controller and manager: `sevjala --controller
+status` and `agents` (MANAGER yes) from the node; `sevjala ui --controller` showed the banner
+"<controller> · controller — opened from <manager>", the footer "Controller", the Database
+hint "from an administrator prompt on <controller> itself", Manager yes with the `off`
+command on Backup PCs; plain `sevjala ui` on the node said "This PC can manage <controller>".
+
+Still to do:
+
+1. **Mark a manager on the Windows controller** (administrator prompt):
+   `sevjala agents manager BACKUP-PC-1 on`; `sevjala agents` shows MANAGER `yes`. In an ordinary
+   prompt the same command asks for administrator rights.
+2. **From the manager PC** (a real second PC, normal user), within 15 s:
+   `sevjala --controller status` is headed "Sevjala controller on SERVER-01 (via manager link)";
+   `sevjala --controller backup now`, `backups list`, `policy list` work; `sevjala --controller
+   db set --dumper …` says it needs administrator rights on SERVER-01 itself and offers no UAC
+   prompt. On the controller, the dashboard's Logs screen shows `by` = `<account> via
+   BACKUP-PC-1`.
+3. **Dashboard from the manager:** the tray shows "Open controller dashboard"; it opens the
+   controller's dashboard with the banner; Back up now and a schedule change work from it.
+4. **Turning off:** `sevjala agents manager BACKUP-PC-1 off` on the controller; on the manager,
+   `sevjala --controller status` soon says "this PC is not a manager of SERVER-01 (…)", and the
+   tray item disappears within 15 s.
+5. **Controller off:** stop the controller's service; on the manager, `--controller status`
+   answers "SERVER-01 has not connected to this PC for …" after about 20 s.
+6. **Firewall:** no new inbound rule on the database PC; on the manager PC, only the existing
+   Sevjala port is open.

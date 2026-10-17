@@ -89,6 +89,7 @@ except `PUT /backups/{id}`.
 | `PUT /backups/{id}` | paired controller cert | see below | see below |
 | `DELETE /backups/{id}` (M3) | paired controller cert | see below | see below |
 | `GET /backups/{id}` (M4) | paired controller cert | see below | see below |
+| `POST /manage` (managers) | paired controller cert | 101, then a manager link (below) | 403 `this PC is not a manager` (the latest poll said so, or a controller); 400 without `Upgrade: sevjala-manage` |
 | anything else | | | 404 `not found` |
 
 `POST /pair` body: `{"controller_id":"…","controller_fp":"sha256:…","proof":"<hex>"}` with
@@ -115,6 +116,25 @@ the inventory is unknown, and the controller makes no retention decision for tha
 The controller polls this route on every paired node every 15 s (since M3). An answer makes
 the node `online`, or `warning` when `health` is not `healthy`; three missed polls in a row
 make it `offline`; a TLS rejection or a changed certificate makes it `error` at once.
+
+Since managers (AD-21), every poll carries `X-Sevjala-Manager: 1|0` (whether an administrator
+marked this node as a manager) and `X-Sevjala-Controller-Host: <controller hostname>`. The node
+keeps the latest values in memory; a poll without `X-Sevjala-Manager` (an older controller)
+leaves them as they were, and until the first poll with it the node does not know.
+
+### Manager links (`POST /manage`, since managers)
+
+The controller keeps 4 links open to every manager whose poll state is `online` or `warning`.
+It dials like any LAN call (mutual TLS, pinned fingerprints) and sends `POST /manage` with
+`Connection: Upgrade`, `Upgrade: sevjala-manage`. The node answers `HTTP/1.1 101 Switching
+Protocols`, clears the connection's deadlines and pools it. From then on the roles swap on that
+TLS connection: the node writes HTTP/1.1 requests and the controller answers them with its local
+API, as a non-administrator caller whose account is `<X-Sevjala-By> via <manager hostname>`
+(`X-Sevjala-By` is the account that asked on the manager). The node uses a link for one request
+at a time and drops a link the controller closed; the controller closes a link idle for 5 min and
+redials lost links with a 1 s → 15 s backoff, logging `manager_link_failed` once per failure
+streak (a 404 says the node is an older build: "update Sevjala on <PC>"). Turning a manager off,
+or removing the PC, closes its links at once. The node never dials.
 
 ### `PUT /backups/{id}` (since M2)
 
@@ -262,6 +282,10 @@ macOS `LOCAL_PEERCRED` (uid 0, or the account running the agent — root for the
 else they answer 403 `{"error":"<action> needs administrator rights","code":"admin_required"}`,
 and the CLI re-runs the command elevated (UAC, `sudo`):
 
+Over a manager link (AD-21) the caller is never an administrator: an admin-only request answers
+403 `{"error":"<action> needs administrator rights on <controller> itself","code":"controller_admin_required"}`,
+and the CLI shows it without offering to elevate.
+
 | Request | Admin-only when |
 |---|---|
 | `PUT /db` | `dumper` is set (the service would run that program) |
@@ -297,6 +321,7 @@ on a node`); a LAN failure behind a route is 502. Bodies are capped at 4 KiB.
 | `GET /agents` (M1) | controller | — | `{"agents":[Agent…]}` |
 | `POST /pair` (M1) | controller | `{"agent":"<agent>","code":"123456","fp":"<at least 16 hex>"}` (`fp` since M2: `sha256:`, spaces, `-` and `:` ignored, any case; must prefix the discovered fingerprint, else 409 before anything is sent) | `Agent` |
 | `POST /agents/{agent}/ping` (M1) | controller | — | `{"agent":Agent,"rtt_ms":4,"uptime_s":7380,"health":"healthy"}` |
+| `PUT /agents/{agent}/manager` (managers) | controller | `{"manager":true|false}` | `Agent` (with `manager`). Administrator only (`admin_required`); 409 for the controller itself (`<host> is the controller; only a backup PC can be a manager`); event `manager_set` |
 | `DELETE /agents/{agent}[?force=true[&confirm=<hostname>]]` | controller | — | `Agent` removed. 409 while a policy sends only to it; while it holds the only verified copy of a configured database (no other PC and not the controller's own copy holds one; `force` does not help, M7); without `force` while a live backup's only verified copy is on it; with `force`, `confirm_required` until `confirm` is its hostname (M7). Drops its copy records and its policy destinations; nothing is sent to the node. |
 | `GET /db` (M7) | controller | — | `DBConfig` |
 | `POST /db/detect` (M2) | controller | — | `Detection` |
@@ -375,7 +400,7 @@ loaded.
 | `store` | object | node only, since M2: `{"path","free_bytes","backups":N,"problems":[…]}`; `sources` since 0.3.0-alpha.4: `[{"agent_id","hostname","backups":N,"current":bool}]`, the controllers its backups came from, the paired one (`current`) first. A pairing replaces the controller and keeps the old one's backups, which nothing deletes |
 | `hostname` | string | since M5 |
 | `health` | object | since M5, `Health` below; omitted while the agent starts |
-| `controller` | object | node only, paired, since 0.3.0-alpha.4: `{"agent_id","hostname","paired_at"}`; `hostname` is empty until a backup from it carries one |
+| `controller` | object | node only, paired, since 0.3.0-alpha.4: `{"agent_id","hostname","paired_at"}`; `hostname` is empty until a backup from it carries one. Since managers: `manager` (the latest poll said this PC is a manager), `links` (manager links waiting idle), `last_contact` (the last request from the controller); `hostname` also comes from the poll's `X-Sevjala-Controller-Host` |
 
 `Health` (M5): `{"level":"ok|warning|problem","headline","items":[{"level","text"}],"databases":[DBHealth],"next_backup_at","next_policy","agents":[AgentHealth],"free_bytes","controller_contact_at"}`.
 `items` lists problems before warnings; with any item, `headline` and `level` are the first
@@ -414,7 +439,26 @@ without the cookie everything else is 401.
 |---|---|
 | `/`, `/assets/…` | the embedded Svelte build (`ui/dist`); a binary built without it answers `/` with 404 "built without the dashboard" |
 | `/api/<route>` | the local API route `<route>` (table above), as that user; `Cookie` and `X-Sevjala-UI` are removed. Anything but `GET`/`HEAD` needs `X-Sevjala-UI: 1` (403 otherwise). An agent that does not answer is 502 `{"error":"The Sevjala service is not running"}` |
-| `/events` | `text/event-stream`. Every 2 s the proxy asks `GET /status` (and `GET /agents` on a controller) and sends only changes (nothing while `/agents` fails, so the page keeps its list): `event: state` with `{"status":Status,"agents":[Agent…]}`, or `event: down` with `{"error":"…"}`; a `: ping` comment after 15 s of silence |
+| `/events` | `text/event-stream`. Every 2 s the proxy asks `GET /status` (and `GET /agents` on a controller) and sends only changes (nothing while `/agents` fails, so the page keeps its list): `event: state` with `{"status":Status,"agents":[Agent…]}` (plus `"via":"<this PC>"` with `--controller`), or `event: down` with `{"error":"…"}`; a `: ping` comment after 15 s of silence |
+
+### The relay (`/controller/…`, since managers)
+
+On a node, the local API also answers `/controller/<route>`: it sends `<route>` to the
+controller over a free manager link (waiting up to 20 s for one) and passes the answer back
+unchanged. `sevjala --controller <command>` and `sevjala ui --controller` use it, with at least
+30 s per call. `Agent` (`GET /agents`) has `"manager":bool`. Relay errors:
+
+| Status | When | Message |
+|---|---|---|
+| 409 | on a controller | `this PC is the controller; run the command without --controller` |
+| 409 | not paired | `this PC is not paired with a controller` |
+| 403 | the latest poll says not a manager | `this PC is not a manager of <host> (on <host>, an administrator runs: sevjala agents manager <this hostname> on)` |
+| 503 | no poll yet since the agent started | `the controller has not contacted this PC since Sevjala started here (is it on and on the network?)` |
+| 503 | no link within 20 s | `<host> has not connected to this PC for <time> (is it on and on the network?)` |
+| 502 | a link broke during the request | `the link to <host> broke mid-way; try again` |
+
+With `--controller`, `sevjala ui` serves the controller's dashboard: `/api/<route>` goes to
+`/controller/<route>` and `/events` asks through the relay with a 30 s limit.
 
 ## Controller store (since M1)
 
