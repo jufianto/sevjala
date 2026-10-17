@@ -475,3 +475,43 @@ splash stopped anything Explorer started (the Start menu entry and the Run key a
 "Open status" opened a window that closed at once (Go's exec gave the child NUL as stdin and
 stdout; `TestNewConsoleIsTheChildsConsole` reproduced it on the PC). After `sevjala update` the
 running tray restarted itself on the new exe, and "Open status" kept its window open.
+
+## M7 — every operation from the dashboard (D-089..D-094)
+
+Exit criterion: every CLI operation on the controller is doable from the browser, by a normal
+user, with administrator rights only for the dump program and restoring from a file.
+
+Already covered without real PCs: Go tests for the amended admin table, `confirm_required` on
+policy changes (including a PC that is offline), forced removal and replace, the last-good rule in
+retention and removal, the caller account and `by` in the log (the pipe test ran on the Windows
+PC), `GET /logs`, `GET /db` without the password; the JS helpers (`npm test` in `ui/`).
+
+Done on macOS (2026-10-17) in a browser against a hand-started controller (MariaDB 10.4 in Docker)
+and two backup PCs: the Backups matrix with a column per PC; the export download is named
+`shop_<date>_<time>.sql.gz`; a restore into a new database finished with its table count; replace
+the live database asked for `shop` in a dialog (the button stayed off for `sho`), backed it up
+first and loaded it; lowering a schedule's keep asked for its name and named how many backups and
+which PCs; Logs showed each of these with `by` = the account; changing the port on the Database
+screen blocked Save until a password was typed.
+
+Done on the Windows controller over ssh (2026-10-17, an elevated session, so it says nothing about
+UAC): `sevjala update --from` installed the build; `policy set manual --keep 1` named the 12
+backups and the PC it would delete them on and asked to type `manual`, and a wrong word left keep
+at 10; `backups export latest --db … --to <folder>` wrote the file and its manifest; the log
+holds `backup_exported` with `"by":"<PC>\\<user>"`.
+
+Still to do:
+
+1. **Windows controller, normal user:** in an ordinary Command Prompt (no UAC prompt for any of
+   these): `sevjala policy set daily --keep 1` asks to type `daily` when backups would go;
+   `sevjala backups export latest --to %USERPROFILE%\Desktop`; `sevjala pair` with a node's code.
+   `sevjala db set --dumper …` and `sevjala restore --file …` still ask for administrator rights.
+2. **Every screen on the Windows PC** (`sevjala ui`): Backups (Back up now, Export downloads two
+   files), Restore (into a new database; replace asks for the database name), Backup PCs (Find,
+   Add by address, Pair, Check, Remove; Remove of a PC with the only copies asks for "Remove
+   anyway", then its name), Schedules (Add, Change with a preset, Remove, Clean up now), Database
+   (Detect, choose databases, Save), Logs (filter by level and text; `by` shows `PC\user`).
+3. **Last good copy:** with one backup PC only and the controller's own copy gone, `sevjala
+   agents remove <pc> --force` is refused naming the database.
+4. **Windows 7 browser:** the new screens render in Chrome 109 / Firefox 115 (the dialog uses
+   `<dialog>`).

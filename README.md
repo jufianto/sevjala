@@ -32,7 +32,7 @@ Pair a node with the controller (same LAN; the node's firewall must allow 17890/
 17891/tcp, which `service install` opens on Windows):
 
 ```sh
-# on the controller (pair asks for administrator rights itself)
+# on the controller
 sevjala discover                       # lists nodes; or: sevjala agents add 192.168.1.21
 # on the node
 sevjala code                           # prints a 6-digit code (valid 10 minutes) and a fingerprint
@@ -84,13 +84,15 @@ Every command explains itself with examples: `sevjala <command> --help`.
 | Install & status | `status`, `ui` (dashboard in the browser), `tray`, `setup`, `update [--from FILE]`, `service install/start/stop/status/uninstall`, `doctor`, `version` |
 | Connect PCs | `discover`, `code` (on the backup PC), `pair`, `agents`, `agents add/remove`, `ping` |
 | Database | `db detect`, `db set` |
-| Backups | `backup now`, `backups list [--matrix]`, `backups export <backup\|latest\|all> --to FOLDER` (copy out; asks for admin, the copy belongs to you), `restore <backup\|latest> [--into NAME \| --replace-production]`, `restore --file PATH`, `restore --status` |
+| Backups | `backup now`, `backups list [--matrix]`, `backups export <backup\|latest\|all> --to FOLDER` (copy out; the copy belongs to you), `restore <backup\|latest> [--into NAME \| --replace-production]`, `restore --file PATH`, `restore --status` |
 | Schedules & cleanup | `policy list/add/set/remove`, `retention run [--dry-run]` |
 
-Most commands need no administrator rights. The few that do (setup, service, update, pair,
-`code`, `agents remove`, `db set --dumper/--host/--port`, `backups export`, `restore --file`,
-`backup now --tag`, and policy changes that delete backups or change a schedule) ask for them
-themselves: UAC on Windows, `sudo` on macOS/Linux.
+Most commands need no administrator rights. The few that do (setup, service, update,
+`db set --dumper` and `restore --file`) ask for them themselves: UAC on Windows, `sudo` on
+macOS/Linux. Changes that delete backups (a schedule keeping fewer, `agents remove --force`,
+`restore --replace-production`) ask you to type a word first, or take `--confirm WORD`; the log
+records which account made each change. Everything the commands do on the controller can also be
+done in the dashboard: `sevjala ui`.
 
 Build: `make build` (host), `make build-all` (every asset incl. Windows 7), `make test`,
 `make test-integration` (real MariaDB 10.4 in Docker), `make lint`.

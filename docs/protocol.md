@@ -258,25 +258,32 @@ whose owner is not Administrators or SYSTEM (another user's pipe squatting the n
 
 Callers (M5, AD-20): every request carries who called, from the OS: on Windows the pipe
 client's process token (elevated, or SYSTEM, is an administrator), on Linux `SO_PEERCRED`, on
-macOS `LOCAL_PEERCRED` (uid 0, or the account running the agent — root for the service, the developer for one started by hand — is an administrator). Admin-only requests from anyone else answer
-403 `{"error":"<action> needs administrator rights","code":"admin_required"}`, and the CLI re-runs
-the command elevated (UAC, `sudo`). Admin-only:
+macOS `LOCAL_PEERCRED` (uid 0, or the account running the agent — root for the service, the developer for one started by hand — is an administrator). Since M7 (AD-20 amended) only two requests are admin-only; from anyone
+else they answer 403 `{"error":"<action> needs administrator rights","code":"admin_required"}`,
+and the CLI re-runs the command elevated (UAC, `sudo`):
 
 | Request | Admin-only when |
 |---|---|
-| `POST /pair`, `POST /code`, `DELETE /agents/{agent}` | always |
-| `GET /held/{id}` | always (a full database leaves the locked folder); `GET /held` lists without it |
-| `POST /backup/now` | a tag other than `manual` (each one pushes that policy's oldest backup out) |
-| `PUT /db` | `dumper` is set, or `host` or `port` differs from the saved one |
-| `POST /policies` | backups that are not expired already carry that tag (the new `keep` may delete them) |
-| `PATCH /policies/{name}` | `keep` goes down, `to` drops a destination (incl. every node → a list), or `schedule` or `enabled` is set |
-| `POST /restore` | `file` is set (the agent reads any path the caller names) |
+| `PUT /db` | `dumper` is set (the service would run that program) |
+| `POST /restore` | `file` is set (the service would run that file's SQL with the stored password) |
 
-Everything else, including `DELETE /policies/{name}` (it keeps the backups) and `restore` with
-`replace`, needs no administrator. `PUT /db` that changes `host` or `user` without `password` is
-400 `changing the database host or user needs its password again: add --password (or --no-password)`.
+Everything else is a normal-user action (until M7 also pairing, codes, removal, export, a
+database host or port, tagged backups and policy changes that delete). The caller's account is
+recorded per connection (Windows `DOMAIN\user` from the client token, else its SID; Unix the
+peer uid's user name, else the uid) and every change event logs it as `"by"`; events the agent
+starts itself, such as a scheduled backup, have none. `PUT /db` that changes `host`, `port` or
+`user` without `password` is 400 `changing the database host, port or user needs its password
+again: add --password (or --no-password)`.
 
-Errors are `{"error": "<message shown to the operator>"}`, with `"code"` when a client acts on it (`admin_required`, M5); a route for the other role is 409
+Destructive requests (M7) answer 409
+`{"error":"…","code":"confirm_required","word":"<word>","deletes":N,"hosts":["<hostname>"…]}`
+until they repeat the word in `confirm`: `POST /policies` and `PATCH /policies/{name}` when the
+change would delete backups (word: the policy name; `deletes` counts copies; PCs not polled
+count with the copies the store has verified there), `DELETE /agents/{agent}?force=true` while
+backups have their only copy there (word: its hostname), and `POST /restore` with `replace`
+(word: the database, `deletes` 0). The CLI asks for the word and takes `--confirm WORD`.
+
+Errors are `{"error": "<message shown to the operator>"}`, with `"code"` when a client acts on it (`admin_required`, M5; `confirm_required`, M7); a route for the other role is 409
 (`this agent is a node; run this on the controller` / `this agent is a controller; run this
 on a node`); a LAN failure behind a route is 502. Bodies are capped at 4 KiB.
 
@@ -289,21 +296,23 @@ on a node`); a LAN failure behind a route is 502. Bodies are capped at 4 KiB.
 | `GET /agents` (M1) | controller | — | `{"agents":[Agent…]}` |
 | `POST /pair` (M1) | controller | `{"agent":"<agent>","code":"123456","fp":"<at least 16 hex>"}` (`fp` since M2: `sha256:`, spaces, `-` and `:` ignored, any case; must prefix the discovered fingerprint, else 409 before anything is sent) | `Agent` |
 | `POST /agents/{agent}/ping` (M1) | controller | — | `{"agent":Agent,"rtt_ms":4,"uptime_s":7380,"health":"healthy"}` |
-| `DELETE /agents/{agent}[?force=true]` | controller | — | `Agent` removed. 409 while a policy sends only to it, or (without `force`) while a live backup's only verified copy is on it. Drops its copy records and its policy destinations; nothing is sent to the node. |
+| `DELETE /agents/{agent}[?force=true[&confirm=<hostname>]]` | controller | — | `Agent` removed. 409 while a policy sends only to it; while it holds the only verified copy of a configured database (no other PC and not the controller's own copy holds one; `force` does not help, M7); without `force` while a live backup's only verified copy is on it; with `force`, `confirm_required` until `confirm` is its hostname (M7). Drops its copy records and its policy destinations; nothing is sent to the node. |
+| `GET /db` (M7) | controller | — | `DBConfig` |
 | `POST /db/detect` (M2) | controller | — | `Detection` |
 | `PUT /db` (M2) | controller | `DBSettings`; tested against the server before anything is saved | `Detection` |
 | `POST /backup/now` (M2) | controller | `{"db":"<name or empty for all configured>","tags":["…"]}` | `{"backups":[{"backup_id","database"}]}`; 409 while that database is dumping |
 | `GET /backups` (M2) | controller | `?all=1` (M3) includes expired backups | `{"backups":[Backup…]}`, newest first |
 | `GET /backups/{id}` (M2) | controller | — | `Backup`; 404 unknown |
 | `GET /policies` (M3) | controller | — | `{"policies":[Policy…]}` in creation order |
-| `POST /policies` (M3) | controller | `PolicyChange` with `name` and `keep` | `Policy`; 400 invalid, 409 exists |
-| `PATCH /policies/{name}` (M3) | controller | `PolicyChange`; omitted fields keep their value | `Policy`; 404 unknown |
+| `POST /policies` (M3) | controller | `PolicyChange` with `name` and `keep` | `Policy`; 400 invalid, 409 exists or `confirm_required` (M7); with `dry_run` nothing is saved and `deletes` lists what it would delete |
+| `PATCH /policies/{name}` (M3) | controller | `PolicyChange`; omitted fields keep their value | `Policy`; 404 unknown, 409 `confirm_required` (M7); `dry_run` as for `POST` |
 | `DELETE /policies/{name}` (M3) | controller | — | `{}`; 404 unknown, 409 for `manual` and `pre-restore` (M4). Backups carrying the tag are kept. |
 | `POST /retention/run` (M3) | controller | `{"dry_run":bool}` | `RetentionPlan` |
-| `POST /restore` (M4) | controller | `RestoreRequest` | `Restore` as started (`state` `running`), or with `dry_run` what would run (`state` `""`). 400 bad input or both `backup` and `file`; 404 no such backup, or none of that database to restore; 409 a restore is running, the target exists, `replace` without `confirm` equal to the database, `replace` while that database is dumping or does not exist, or the backup expired. On a node: 409 saying to export the file and restore it with `--file` on the controller. |
+| `POST /restore` (M4) | controller | `RestoreRequest` | `Restore` as started (`state` `running`), or with `dry_run` what would run (`state` `""`). 400 bad input or both `backup` and `file`; 404 no such backup, or none of that database to restore; 409 a restore is running, the target exists, `replace` without `confirm` equal to the database (`confirm_required` since M7), `replace` while that database is dumping or does not exist, or the backup expired. On a node: 409 saying to export the file and restore it with `--file` on the controller. |
 | `GET /restore` (M4) | controller | — | the running or last `Restore`; 404 when none ran since the agent started |
+| `GET /logs[?limit=N]` (M7) | both | — | `{"entries":[…]}`: the JSON lines of `sevjala.log` and its rotations, newest first; `limit` 1-2000 (default 500, else 400); lines that are not JSON are skipped |
 | `GET /held` | both | — | `{"backups":[Manifest…]}`, oldest first: the complete backups this PC holds (a node's store, the controller's staging). Read-only: unlike the scan behind the LAN `GET /status`, it removes nothing and reports no problems. |
-| `GET /held/{id}` | both | — | The `.sql.gz` bytes, `Content-Length` = manifest size. 400 not a backup id, 404 not here, 409 being received or deleted (a node holds the backup until the stream ends, so a `DELETE` from the controller waits) or damaged. The CLI checks size and sha256 itself. |
+| `GET /held/{id}` | both | — | The `.sql.gz` bytes, `Content-Length` = manifest size, `Content-Disposition: attachment; filename=<database>_<yyyy-mm-dd_hh-mm-ss>.sql.gz` in the agent's local time (M7). 400 not a backup id, 404 not here, 409 being received or deleted (a node holds the backup until the stream ends, so a `DELETE` from the controller waits) or damaged. The CLI checks size and sha256 itself. |
 | anything else | | | 404 `not found` |
 
 `Discovered`: `{"agent_id","hostname","addr":"ip:port","role","version","os","fp","paired":bool}`.
@@ -313,15 +322,17 @@ from the last poll, `problem` why it warned or failed, both since M3). `<agent>`
 case), else a unique agent_id prefix of at least 4 characters; ambiguity is 409 listing the
 candidates, no match is 404.
 `Detection`: `{"dumper","client","server_version","flavour":"MariaDB|MySQL","databases":[{"name","tables","consistency":"--single-transaction|--lock-tables","non_innodb":["posts (MyISAM)"],"configured":bool}]}`.
+`DBConfig` (M7): `{"host","port","user","dumper","databases":[…],"has_password":bool}`; the password itself is never sent.
 `DBSettings`: `{"host","port","user","password","dumper","databases":[…]}`; an omitted field keeps
 the current value, `databases` omitted or `null` keeps the list, `[]` clears it, `"password":""`
 removes the stored password. Policy names match `^[a-z0-9][a-z0-9_-]{0,31}$`; since M3 every
 tag of `backup now` must be a policy name (default `manual`).
-`Policy`: `{"name","schedule","keep","to":[{"agent_id","hostname"}],"enabled","next_run"}`;
+`Policy`: `{"name","schedule","keep","to":[{"agent_id","hostname"}],"enabled","next_run","deletes"}`
+(`deletes`, M7: `[Action]` the change would delete, on a dry run only);
 `schedule` is 5-field cron (`*`, `n`, `a-b`, `a,b`, `*/n`, `a-b/n`; day of week 0-7, Sunday 0
 or 7) or `@hourly|@daily|@weekly|@monthly`, in the controller's local time; `""` never fires.
 `to: []` is every paired node; `next_run` is omitted when disabled or never firing.
-`PolicyChange`: `{"name","schedule","keep","to":["<agent>"…],"enabled"}`; `keep` 1-1000; `to`
+`PolicyChange`: `{"name","schedule","keep","to":["<agent>"…],"enabled","confirm","dry_run"}` (the last two since M7); `keep` 1-1000; `to`
 omitted or `null` keeps the destinations, `[]` or `["all"]` is every node.
 `RetentionPlan`: `{"dry_run","deletes":[Action],"sends":[Action],"kept":[Action],"unstaged":[id],"expired":[id]}`
 with `Action` `{"backup_id","agent_id","hostname","reason"}`; a `kept` entry without
