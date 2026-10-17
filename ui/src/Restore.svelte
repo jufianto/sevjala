@@ -69,6 +69,7 @@
   $effect(() => {
     id
     mode
+    into
     plan = null
   })
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { errorFrom, ConfirmNeeded } from './api.js'
+import { errorFrom, ConfirmNeeded, fetchFile } from './api.js'
 
 test('confirm_required becomes ConfirmNeeded with the word and what it deletes', () => {
   const e = errorFrom(409, { error: 'this change deletes 2 backups on PC-1', code: 'confirm_required', word: 'daily', deletes: 2, hosts: ['PC-1'] })
@@ -20,4 +20,16 @@ test('admin_required says where to run it', () => {
 test("any other error is the agent's message, or the status", () => {
   assert.equal(errorFrom(404, { error: 'BK-1 is not in this PC' }).message, 'BK-1 is not in this PC')
   assert.equal(errorFrom(502, {}).message, 'HTTP 502')
+})
+
+test("fetchFile hands back the body only when the agent answers OK", async (t) => {
+  const answers = {
+    '/api/held/BK-1': new Response('gzip bytes', { status: 200 }),
+    '/api/held/BK-2': new Response(JSON.stringify({ error: 'BK-2 is damaged on this PC' }), { status: 409 }),
+    '/api/held/BK-3': new Response('Bad Gateway', { status: 502 }),
+  }
+  t.mock.method(globalThis, 'fetch', async (url) => answers[url])
+  assert.equal(await (await fetchFile('/held/BK-1')).text(), 'gzip bytes')
+  await assert.rejects(fetchFile('/held/BK-2'), { message: 'BK-2 is damaged on this PC' })
+  await assert.rejects(fetchFile('/held/BK-3'), { message: 'HTTP 502' })
 })

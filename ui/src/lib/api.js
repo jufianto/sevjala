@@ -31,6 +31,14 @@ export async function api(method, path, body) {
 
 export const get = (path) => api('GET', path)
 
+// fetchFile downloads path into a Blob, so nothing is saved when the agent
+// answers with an error instead of the file.
+export async function fetchFile(path) {
+  const r = await fetch('/api' + path)
+  if (!r.ok) throw errorFrom(r.status, await r.json().catch(() => ({})))
+  return r.blob()
+}
+
 // every runs fn now and then every ms while the page is visible; it returns
 // the stop function an $effect wants.
 export function every(ms, fn) {

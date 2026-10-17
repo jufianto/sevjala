@@ -1,5 +1,5 @@
 <script>
-  import { api, get, every } from './lib/api.js'
+  import { api, get, every, fetchFile } from './lib/api.js'
   import { matrix } from './lib/matrix.js'
   import { when, bytes, exportName } from './lib/format.js'
 
@@ -76,11 +76,13 @@
         return
       }
       const name = exportName(man)
-      download('/api/held/' + encodeURIComponent(id), name + '.sql.gz')
-      const url = URL.createObjectURL(new Blob([JSON.stringify(man, null, 2) + '\n'], { type: 'application/json' }))
-      download(url, name + '.json')
-      setTimeout(() => URL.revokeObjectURL(url), 60e3)
-      say(`Downloading ${name}.sql.gz and ${name}.json.`)
+      say(`Downloading ${name}.sql.gz…`)
+      const body = await fetchFile('/held/' + encodeURIComponent(id))
+      const urls = [URL.createObjectURL(body), URL.createObjectURL(new Blob([JSON.stringify(man, null, 2) + '\n'], { type: 'application/json' }))]
+      download(urls[0], name + '.sql.gz')
+      download(urls[1], name + '.json')
+      setTimeout(() => urls.forEach((u) => URL.revokeObjectURL(u)), 60e3)
+      say(`Saved ${name}.sql.gz and ${name}.json to your downloads.`)
     } catch (e) {
       say(e.message, true)
     }

@@ -8,7 +8,9 @@
 
   let policies = $state([])
   let err = $state('')
-  let note = $state('')
+  let msg = $state('')
+  let bad = $state(false)
+  const say = (text, isBad = false) => ((msg = text), (bad = isBad))
   let edit = $state(null) // the form: null, or { adding, name, kind, minute, hour, weekday, day, cron, keep, everyPC, to, enabled }
   let need = $state(null)
   let cleanup = $state(null)
@@ -50,12 +52,12 @@
     try {
       if (f.adding) await api('POST', '/policies', { ...ch, name: f.name.trim() })
       else await api('PATCH', '/policies/' + encodeURIComponent(f.name), { ...ch, enabled: f.enabled })
-      note = `Saved ${f.name}.`
+      say(`Saved ${f.name}.`)
       edit = null
       load()
     } catch (e) {
       if (e instanceof ConfirmNeeded) need = e
-      else err = e.message
+      else say(e.message, true)
     } finally {
       busy = false
     }
@@ -65,21 +67,20 @@
     if (!confirm(`Remove schedule ${p.name}? It stops running; the backups it made are kept.`)) return
     try {
       await api('DELETE', '/policies/' + encodeURIComponent(p.name))
-      note = `Removed ${p.name}.`
+      say(`Removed ${p.name}.`)
       load()
     } catch (e) {
-      err = e.message
+      say(e.message, true)
     }
   }
 
   async function cleanUp(run) {
     busy = true
-    err = ''
     try {
       cleanup = await api('POST', '/retention/run', { dry_run: !run })
-      if (run) note = `Clean-up done: ${cleanup.deletes.length} deleted, ${cleanup.sends.length} sent again.`
+      if (run) say(`Clean-up done: ${cleanup.deletes.length} deleted, ${cleanup.sends.length} sent again.`)
     } catch (e) {
-      err = e.message
+      say(e.message, true)
     } finally {
       busy = false
     }
@@ -117,7 +118,7 @@
     <button class="primary" onclick={() => open(null)}>Add a schedule</button>
     <button class="plain" onclick={() => cleanUp(false)} disabled={busy}>Clean up now…</button>
   </div>
-  {#if note}<p class="msg ok">{note}</p>{/if}
+  {#if msg}<p class="msg" class:bad class:ok={!bad}>{msg}</p>{/if}
   {#if err}<p class="msg bad">{err}</p>{/if}
 </section>
 
