@@ -504,7 +504,10 @@ Still to do:
 
 1. **Windows controller, normal user:** in an ordinary Command Prompt (no UAC prompt for any of
    these): `sevjala policy set daily --keep 1` asks to type `daily` when backups would go;
-   `sevjala backups export latest --to %USERPROFILE%\Desktop`; `sevjala pair` with a node's code.
+   `sevjala backups export latest --to %USERPROFILE%\Desktop`; `sevjala pair` with a node's code;
+   on a spare backup PC that holds the only copy of some backups, `sevjala agents remove <pc>`
+   refuses and names `--force`, `--force` asks to type the PC's name, a wrong name cancels, and
+   `--force --confirm <pc>` removes it without asking.
    `sevjala db set --dumper …` and `sevjala restore --file …` still ask for administrator rights.
 2. **Every screen on the Windows PC** (`sevjala ui`): Backups (Back up now, Export downloads two
    files), Restore (into a new database; replace asks for the database name), Backup PCs (Find,
