@@ -21,6 +21,13 @@ func (c *Controller) previewDeletes(ctx context.Context, next store.Policy) ([]l
 	if err != nil {
 		return nil, err
 	}
+	// A clock behind a backup freezes retention; preview what it deletes once
+	// the clock has caught up.
+	for _, b := range in.Backups {
+		if b.Created.After(in.Now) {
+			in.Now = b.Created
+		}
+	}
 	for i := range in.Nodes {
 		n := &in.Nodes[i]
 		if n.Polled {
@@ -53,10 +60,20 @@ func confirmDeletes(name, confirm string, deletes []localapi.RetentionAction) er
 	if len(deletes) == 0 || confirm == name {
 		return nil
 	}
-	var hosts []string
+	ids := map[string][]string{} // hostname → agent ids
 	for _, d := range deletes {
-		if !slices.Contains(hosts, d.Hostname) {
-			hosts = append(hosts, d.Hostname)
+		if !slices.Contains(ids[d.Hostname], d.AgentID) {
+			ids[d.Hostname] = append(ids[d.Hostname], d.AgentID)
+		}
+	}
+	var hosts []string
+	for host, as := range ids {
+		for _, id := range as {
+			if len(as) > 1 {
+				hosts = append(hosts, fmt.Sprintf("%s (%.8s)", host, id))
+			} else {
+				hosts = append(hosts, host)
+			}
 		}
 	}
 	slices.Sort(hosts)

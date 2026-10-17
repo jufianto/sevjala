@@ -82,6 +82,41 @@ func TestPreviewCountsOfflinePCs(t *testing.T) {
 	wantConfirm(t, err, "daily", 2)
 }
 
+func TestPreviewSeesPastAClockBehind(t *testing.T) {
+	dumptest.Use(t, dumptest.OK)
+	ctrl := newController(t)
+	pairNode(t, ctrl, startAgent(t, "node", "PC-1"))
+	ahead := time.Now().Add(time.Hour)
+	for i := range 3 {
+		backupAt(t, ctrl, ahead.Add(time.Duration(i)*time.Minute), store.BackupDistributed, "daily")
+	}
+	ctrl.PollAll(context.Background())
+	_, err := ctrl.SetPolicy(context.Background(), "daily", localapi.PolicyChange{Keep: ptr(1)})
+	wantConfirm(t, err, "daily", 2)
+}
+
+func TestConfirmNamesPCsSharingAHostname(t *testing.T) {
+	dumptest.Use(t, dumptest.OK)
+	ctrl := newController(t)
+	a, b := startAgent(t, "node", "PC-1"), startAgent(t, "node", "PC-1")
+	pairNode(t, ctrl, a)
+	pairNode(t, ctrl, b)
+	for i := range 2 {
+		backupAt(t, ctrl, tick0.Add(time.Duration(i)*time.Minute), store.BackupDistributed, "daily")
+	}
+	ctrl.PollAll(context.Background())
+	_, err := ctrl.SetPolicy(context.Background(), "daily", localapi.PolicyChange{Keep: ptr(1)})
+	e, ok := localapi.AsConfirm(err)
+	if !ok || e.Deletes != 2 {
+		t.Fatalf("err %v", err)
+	}
+	want := []string{"PC-1 (" + a.id.AgentID[:8] + ")", "PC-1 (" + b.id.AgentID[:8] + ")"}
+	slices.Sort(want)
+	if !slices.Equal(e.Hosts, want) || !strings.Contains(e.Msg, strings.Join(want, ", ")) {
+		t.Errorf("hosts %q, msg %q", e.Hosts, e.Msg)
+	}
+}
+
 func TestConfirmDoesNotBypassLastGood(t *testing.T) {
 	dumptest.Use(t, dumptest.OK)
 	ctx := context.Background()
