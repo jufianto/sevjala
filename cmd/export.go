@@ -59,7 +59,7 @@ copies only the new ones.`,
 			}
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 			defer stop()
-			cl := localapi.NewClient(localapi.Endpoint(dataDir))
+			cl := g.client(localapi.Endpoint(dataDir))
 			if args[0] == "all" {
 				open := func(ctx context.Context, id string) (io.ReadCloser, error) {
 					rc, err := cl.OpenHeld(ctx, id)

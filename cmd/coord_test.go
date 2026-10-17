@@ -53,12 +53,12 @@ func TestRenderAgents(t *testing.T) {
 	var b bytes.Buffer
 	seen := time.Date(2026, 10, 12, 16, 30, 0, 0, time.Local)
 	renderAgents(&b, []localapi.Agent{
-		{AgentID: "3f2a9c1e-1111", Hostname: "BACKUP-PC-01", Addr: "192.168.1.21:17891", State: "online", LastSeen: seen, FreeBytes: 3 << 30},
+		{AgentID: "3f2a9c1e-1111", Hostname: "BACKUP-PC-01", Addr: "192.168.1.21:17891", State: "online", LastSeen: seen, FreeBytes: 3 << 30, Manager: true},
 		{AgentID: "9b000000-4444", Hostname: "BACKUP-PC-02", Addr: "192.168.1.22:17891", State: "offline", Problem: "connection refused"},
 	})
-	want := "AGENT     HOSTNAME      ADDRESS             STATE    FREE     LAST SEEN         PROBLEM\n" +
-		"3f2a9c1e  BACKUP-PC-01  192.168.1.21:17891  online   3.0 GiB  2026-10-12 16:30  \n" +
-		"9b000000  BACKUP-PC-02  192.168.1.22:17891  offline  -        never             connection refused\n"
+	want := "AGENT     HOSTNAME      ADDRESS             STATE    MANAGER  FREE     LAST SEEN         PROBLEM\n" +
+		"3f2a9c1e  BACKUP-PC-01  192.168.1.21:17891  online   yes      3.0 GiB  2026-10-12 16:30  \n" +
+		"9b000000  BACKUP-PC-02  192.168.1.22:17891  offline  -        -        never             connection refused\n"
 	if b.String() != want {
 		t.Errorf("got\n%s\nwant\n%s", b.String(), want)
 	}

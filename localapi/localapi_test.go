@@ -492,3 +492,25 @@ func TestDatabaseConfigRoundTrip(t *testing.T) {
 		t.Errorf("%+v, %v", d, err)
 	}
 }
+
+func TestClientPrefixReachesTheRelay(t *testing.T) {
+	ep := Endpoint(testDir(t))
+	f := &fakeBackend{status: Status{Role: "controller", Hostname: "SERVER-01"}}
+	mux := http.NewServeMux()
+	mux.Handle("/controller/", http.StripPrefix("/controller", NewHandler(f)))
+	mux.Handle("/", http.NotFoundHandler())
+	srv, err := Start(ep, mux, discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { srv.Shutdown(context.Background()) })
+	c := NewClientPrefix(ep, "/controller")
+	if st, err := c.Status(context.Background()); err != nil || st.Hostname != "SERVER-01" {
+		t.Errorf("Status through the prefix: %+v %v", st, err)
+	}
+	rc, err := c.OpenHeld(context.Background(), "BK-1")
+	if err != nil {
+		t.Fatalf("OpenHeld through the prefix: %v", err)
+	}
+	rc.Close()
+}

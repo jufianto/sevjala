@@ -120,7 +120,7 @@ func followRestore(g *globals, c *cobra.Command) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	ok, err := watchRestore(ctx, localapi.NewClient(localapi.Endpoint(dataDir)).RestoreStatus, c.OutOrStdout(), time.Second)
+	ok, err := watchRestore(ctx, g.client(localapi.Endpoint(dataDir)).RestoreStatus, c.OutOrStdout(), time.Second)
 	switch {
 	case ctx.Err() != nil:
 		fmt.Fprintln(c.ErrOrStderr(), "still running in the agent; see 'sevjala restore --status'")

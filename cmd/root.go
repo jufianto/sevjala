@@ -7,11 +7,14 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/jufianto/sevjala/config"
+	"github.com/jufianto/sevjala/localapi"
 )
 
 var version = "dev"
@@ -43,10 +46,33 @@ func usagef(format string, a ...any) error {
 
 type globals struct {
 	dataDirFlag string
+	controller  bool // --controller: run on the controller through this PC's manager link
 }
 
 func (g *globals) dataDir() (string, error) {
 	return config.ResolveDataDir(g.dataDirFlag)
+}
+
+// client is the only way commands reach the agent, so --controller covers them all.
+func (g *globals) client(endpoint string) *localapi.Client {
+	if g.controller {
+		return localapi.NewClientPrefix(endpoint, "/controller")
+	}
+	return localapi.NewClient(endpoint)
+}
+
+// remoteCommands run on the controller's local API and so work with --controller.
+var remoteCommands = []string{"status", "discover", "pair", "agents", "ping", "db", "backup", "backups", "restore", "policy", "retention"}
+
+func checkControllerFlag(c *cobra.Command, g *globals) error {
+	if !g.controller {
+		return nil
+	}
+	path := strings.Fields(c.CommandPath())
+	if len(path) > 1 && slices.Contains(remoteCommands, path[1]) && c.CommandPath() != "sevjala agents manager" {
+		return nil
+	}
+	return usagef("--controller works with: %s", strings.Join(remoteCommands, ", "))
 }
 
 func newRootCmd() *cobra.Command {
@@ -62,6 +88,9 @@ do ask for them. New here? Start with: sevjala setup`,
 	}
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.PersistentFlags().StringVar(&g.dataDirFlag, "data-dir", "", "`FOLDER` holding Sevjala's data (default: $SEVJALA_DATA_DIR, else the OS default)")
+	root.PersistentFlags().BoolVar(&g.controller, "controller", false,
+		"run the command on the controller, from a backup PC it made a manager")
+	root.PersistentPreRunE = func(c *cobra.Command, _ []string) error { return checkControllerFlag(c, g) }
 	root.PersistentFlags().Bool(elevatedMarker[2:], false, "")
 	_ = root.PersistentFlags().MarkHidden(elevatedMarker[2:])
 	root.AddCommand(newAgentCmd(g))

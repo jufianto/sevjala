@@ -31,6 +31,7 @@ type statusView struct {
 	Agent     *localapi.Status
 	AgentErr  error
 	DataDir   string
+	Via       string // this PC's name when the agent answered through its manager link
 }
 
 func (v statusView) OK() bool { return v.ServiceUp && v.Agent != nil }
@@ -56,6 +57,18 @@ func buildStatusView(s serviceStatuser, st localapi.Status, apiErr error, dataDi
 		v.Service, v.ServiceUp = "unknown (run with sudo for the service state)", true
 	default:
 		v.Service = "stopped"
+	}
+	return v
+}
+
+// viaManagerView is the controller seen through this PC's manager link: the
+// service state is the controller's, so only its answer counts.
+func viaManagerView(st localapi.Status, apiErr error, self string) statusView {
+	v := statusView{Via: self, ServiceUp: true}
+	if apiErr != nil {
+		v.AgentErr = agentProblem(apiErr, nil)
+	} else {
+		v.Agent = &st
 	}
 	return v
 }
@@ -94,6 +107,10 @@ func waitForAgent(c *localapi.Client, timeout time.Duration) (localapi.Status, e
 // answer.
 func renderOverview(w io.Writer, v statusView, host string, now time.Time) bool {
 	a := v.Agent
+	if a == nil && v.Via != "" {
+		fmt.Fprintf(w, "Sevjala controller (via manager link): PROBLEM\n  ! %v\n", v.AgentErr)
+		return false
+	}
 	if a == nil {
 		fmt.Fprintf(w, "Sevjala on %s: PROBLEM\n  ! %v\n\n", host, v.AgentErr)
 		fmt.Fprintf(w, "  %-12s%s (%s)\n", "service", v.Service, v.Platform)
@@ -108,7 +125,11 @@ func renderOverview(w io.Writer, v statusView, host string, now time.Time) bool 
 	if role == config.RoleNode {
 		role = "backup PC"
 	}
-	fmt.Fprintf(w, "Sevjala %s on %s: %s\n", role, cmp.Or(a.Hostname, host), strings.ToUpper(h.Level))
+	via := ""
+	if v.Via != "" {
+		via = " (via manager link)"
+	}
+	fmt.Fprintf(w, "Sevjala %s on %s%s: %s\n", role, cmp.Or(a.Hostname, host), via, strings.ToUpper(h.Level))
 	if len(h.Items) == 0 {
 		fmt.Fprintf(w, "  %s\n", h.Headline)
 	}
@@ -119,7 +140,12 @@ func renderOverview(w io.Writer, v statusView, host string, now time.Time) bool 
 		fmt.Fprintf(w, "  %-12s%s\n", label, fmt.Sprintf(format, args...))
 	}
 	fmt.Fprintln(w)
-	line("service", "%s (%s), agent %s, up %s", v.Service, v.Platform, a.Version, upFor(time.Duration(a.UptimeS)*time.Second))
+	up := upFor(time.Duration(a.UptimeS) * time.Second)
+	if v.Via != "" {
+		line("service", "reached through this PC's manager link (%s), agent %s, up %s", v.Via, a.Version, up)
+	} else {
+		line("service", "%s (%s), agent %s, up %s", v.Service, v.Platform, a.Version, up)
+	}
 	for _, d := range h.Databases {
 		if d.LastGood == "" {
 			line(d.Name, "no backup on a backup PC yet")
@@ -160,6 +186,8 @@ func renderOverview(w io.Writer, v statusView, host string, now time.Time) bool 
 					plural(s.Backups, "backup"), sourceName(s))
 			}
 		}
+	case a.Role == config.RoleController && v.Via != "":
+		line("disk", "%s free on %s", inventory.HumanBytes(h.FreeBytes), a.Hostname)
 	case a.Role == config.RoleController:
 		line("disk", "%s free here", inventory.HumanBytes(h.FreeBytes))
 	}
@@ -195,8 +223,17 @@ Exit code 0 for OK or WARNING, 1 for a PROBLEM or when the service does not answ
 			if err != nil {
 				return fail(err)
 			}
-			st, apiErr := queryAgent(localapi.NewClient(localapi.Endpoint(dataDir)))
 			host, _ := os.Hostname()
+			if g.controller {
+				ctx, cancel := context.WithTimeout(context.Background(), localapi.RelayTimeout)
+				defer cancel()
+				st, apiErr := g.client(localapi.Endpoint(dataDir)).Status(ctx)
+				if !renderOverview(c.OutOrStdout(), viaManagerView(st, apiErr, host), host, time.Now()) {
+					return errSilent1
+				}
+				return nil
+			}
+			st, apiErr := queryAgent(localapi.NewClient(localapi.Endpoint(dataDir)))
 			if !renderOverview(c.OutOrStdout(), buildStatusView(s, st, apiErr, dataDir, svc.IsAdmin()), host, time.Now()) {
 				return errSilent1
 			}

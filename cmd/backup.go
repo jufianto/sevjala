@@ -47,7 +47,7 @@ carries on.`,
 			}
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 			defer stop()
-			ok, err := watchBackups(ctx, localapi.NewClient(localapi.Endpoint(dataDir)).Backup, jobs, c.OutOrStdout(), time.Second)
+			ok, err := watchBackups(ctx, g.client(localapi.Endpoint(dataDir)).Backup, jobs, c.OutOrStdout(), time.Second)
 			switch {
 			case ctx.Err() != nil:
 				fmt.Fprintln(c.ErrOrStderr(), "still running in the agent; see 'sevjala backups list'")

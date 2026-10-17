@@ -16,16 +16,28 @@ import (
 )
 
 type Client struct {
-	hc *http.Client
+	hc     *http.Client
+	prefix string // "/controller" sends every call through a manager link (AD-21)
 }
 
 // callTimeout covers discover (2 s wait) and a pairing round trip; callers pass
 // shorter contexts where they want them.
 var callTimeout = 15 * time.Second
 
-func NewClient(endpoint string) *Client {
-	return &Client{hc: &http.Client{Transport: NewTransport(endpoint), Timeout: callTimeout}}
+func NewClient(endpoint string) *Client { return NewClientPrefix(endpoint, "") }
+
+// NewClientPrefix puts prefix before every route. A relayed call may wait for
+// a manager link first, so it gets longer.
+func NewClientPrefix(endpoint, prefix string) *Client {
+	timeout := callTimeout
+	if prefix != "" {
+		timeout = max(timeout, RelayTimeout)
+	}
+	return &Client{hc: &http.Client{Transport: NewTransport(endpoint), Timeout: timeout}, prefix: prefix}
 }
+
+// RelayTimeout is the least a call through a manager link is given.
+const RelayTimeout = 30 * time.Second
 
 // NewTransport carries HTTP to the agent at endpoint, whatever the URL says.
 func NewTransport(endpoint string) *http.Transport {
@@ -101,7 +113,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 		}
 		rd = bytes.NewReader(b)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, "http://sevjala"+path, rd)
+	req, err := http.NewRequestWithContext(ctx, method, "http://sevjala"+c.prefix+path, rd)
 	if err != nil {
 		return err
 	}
@@ -193,7 +205,7 @@ func (c *Client) Held(ctx context.Context) ([]inventory.Manifest, error) {
 // OpenHeld streams one held backup; only ctx bounds it, and a stream shorter
 // than the backup fails on read.
 func (c *Client) OpenHeld(ctx context.Context, id string) (io.ReadCloser, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://sevjala/held/"+url.PathEscape(id), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://sevjala"+c.prefix+"/held/"+url.PathEscape(id), nil)
 	if err != nil {
 		return nil, err
 	}

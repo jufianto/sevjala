@@ -30,9 +30,12 @@ func callAgent[T any](g *globals, timeout time.Duration, f func(context.Context,
 		return zero, fail(err)
 	}
 	ep := localapi.Endpoint(dataDir)
+	if g.controller {
+		timeout = max(timeout, localapi.RelayTimeout)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	v, err := f(ctx, localapi.NewClient(ep))
+	v, err := f(ctx, g.client(ep))
 	var le *localapi.Error
 	switch {
 	case localapi.IsAdminRequired(err) && errors.As(err, &le):
@@ -259,6 +262,35 @@ only to that PC, and, without --force, while some backup exists only there.`,
 	remove.Flags().BoolVar(&force, "force", false, "remove even if some backups have their only copy on that PC")
 	remove.Flags().StringVar(&confirm, "confirm", "", "with --force, the PC's `NAME` again, instead of typing it at the prompt")
 	c.AddCommand(remove)
+	c.AddCommand(&cobra.Command{
+		Use:   "manager <agent> on|off",
+		Short: "Let a backup PC run controller commands and open its dashboard (controller)",
+		Long: `A manager runs 'sevjala --controller <command>' and 'sevjala ui --controller' as if it
+were on this controller, over the link the controller already keeps to it. Anything that
+needs administrator rights here still has to be done on this PC. Needs administrator
+rights.`,
+		Example: `  sevjala agents manager BACKUP-PC-1 on
+  sevjala agents manager BACKUP-PC-1 off`,
+		Args: cobra.ExactArgs(2),
+		RunE: func(c *cobra.Command, args []string) error {
+			if args[1] != "on" && args[1] != "off" {
+				return usagef(`the last word is "on" or "off", not %q`, args[1])
+			}
+			a, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) (localapi.Agent, error) {
+				return cl.SetManager(ctx, args[0], args[1] == "on")
+			})
+			if err != nil {
+				return err
+			}
+			if a.Manager {
+				fmt.Fprintf(c.OutOrStdout(), "%s is now a manager: from it, 'sevjala --controller <command>' and 'sevjala ui --controller' control this controller.\n"+
+					"Undo: sevjala agents manager %s off\n", a.Hostname, a.Hostname)
+			} else {
+				fmt.Fprintf(c.OutOrStdout(), "%s is no longer a manager; its open links were closed.\n", a.Hostname)
+			}
+			return nil
+		},
+	})
 	return c
 }
 
@@ -268,7 +300,7 @@ func renderAgents(w io.Writer, as []localapi.Agent) {
 		return
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "AGENT\tHOSTNAME\tADDRESS\tSTATE\tFREE\tLAST SEEN\tPROBLEM")
+	fmt.Fprintln(tw, "AGENT\tHOSTNAME\tADDRESS\tSTATE\tMANAGER\tFREE\tLAST SEEN\tPROBLEM")
 	for _, a := range as {
 		seen, free := "never", "-"
 		if !a.LastSeen.IsZero() {
@@ -277,7 +309,11 @@ func renderAgents(w io.Writer, as []localapi.Agent) {
 		if a.FreeBytes > 0 {
 			free = inventory.HumanBytes(a.FreeBytes)
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", shortID(a.AgentID), a.Hostname, a.Addr, a.State, free, seen, a.Problem)
+		manager := "-"
+		if a.Manager {
+			manager = "yes"
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", shortID(a.AgentID), a.Hostname, a.Addr, a.State, manager, free, seen, a.Problem)
 	}
 	tw.Flush()
 }
