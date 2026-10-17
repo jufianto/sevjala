@@ -350,3 +350,45 @@ points at the original from inside the copy; check before testing an application
 
 Logs: the controller has `restore_started`, `restore_succeeded` (source, duration, tables) or
 `restore_failed` (step, error), and `restore_source_failed` / `copy_corrupt` per bad source.
+
+## M5 — operator comfort
+
+Exit criterion: a non-engineer can tell from the tray alone whether protection is healthy.
+
+Already covered without real PCs: the coord tests compute every health rule (protected,
+overdue, failed dump, half-loaded replace, disk, PC off, stuck copy, damaged copy, no schedule,
+no database; node: not paired, silent controller, disk), the admin-only actions refused to a
+normal caller and allowed to an administrator, and `sevjala status` against golden output.
+The localapi tests carry `admin_required` and the caller identity over a real socket; the
+Windows SDDL is pinned by a test. The tray builds for every asset, including both go-win7 ones.
+
+Done on macOS (2026-10-17): `sevjala tray` ran 5 s against the Mac node's older agent without a
+crash; `sevjala status` there showed WARNING and "the agent is older than this command; run:
+sevjala update".
+
+Still to do on real PCs (controller + at least one node), after `sevjala update` to this build:
+
+1. **Daily commands without admin** (Windows, ordinary Command Prompt): `sevjala status`,
+   `backups list`, `backup now`, `doctor` (data-folder lines say `skip`), `restore latest`,
+   `backups export latest --to <folder>` all work with no UAC prompt.
+2. **Admin commands ask:** `sevjala pair …` shows UAC and finishes in a second window
+   (`finished in the administrator window (exit 0)`); answering No prints "Cancelled:
+   administrator rights were refused; nothing was changed." The same for `service stop`,
+   `restore --file`, `policy set frequent --keep 6`. `policy set frequent --keep 20` does not ask.
+   macOS/Linux: the same commands ask for the password through `sudo`.
+3. **Tray colours** (Windows controller): green with the last backup in the tooltip; switch
+   the node off → yellow within a minute ("… has not answered since …"); stop MySQL and run
+   `backup now` → red ("The last backup of … failed"); `sevjala service stop` → grey ("Sevjala
+   service is not running"); start everything → green again. "Back up now" in the menu starts a
+   backup; "Open status" opens a window with `sevjala status`.
+4. **At login:** after `setup`, the tray appears without a reboot; log out and in, it appears
+   again (no lasting console window; a brief flash is accepted). macOS node: the same after
+   login (`/Library/LaunchAgents/dev.jufi.sevjala.tray.plist`).
+5. **Update and uninstall:** `sevjala update --from <file>` with the tray running: within 15 s
+   the tray restarts on the new exe (Task Manager shows one `sevjala.exe tray`), and a later
+   update does not fail on a locked `sevjala.exe.old`. `setup` → uninstall: the tray quits
+   within 15 s and `C:\Program Files\Sevjala` is gone.
+6. **Pipe squatting** (optional): with the service stopped, a normal user's program that
+   creates `\\.\pipe\sevjala` makes `sevjala status` refuse with "the program answering on
+   \\.\pipe\sevjala is not the Sevjala service".
+7. **Windows 7:** the tray draws its icon and menu on a real Windows 7 PC (go-win7 build).

@@ -1,7 +1,10 @@
 # Restoring a database
 
 How to get a database back from a Sevjala backup. Commands run on the **controller** (the PC
-with MySQL/MariaDB) from an **Administrator** Command Prompt on Windows (`sudo` on macOS/Linux).
+with MySQL/MariaDB) from an ordinary Command Prompt; no administrator rights are needed, except
+for `restore --file`, which asks for them itself (Windows shows the UAC prompt, macOS/Linux ask
+for your password through `sudo`). `sevjala status` or the tray icon shows first whether the backups
+are in good shape.
 Examples use a database called `shop`; use yours.
 
 MySQL must be running (XAMPP Control Panel → MySQL → Start).
@@ -85,7 +88,7 @@ stays true after a restart.
 
 The backup PCs still hold the backups, and a new PC can be restored from a file.
 
-1. On a backup PC (Administrator prompt), copy the newest backup out to a USB stick or a shared
+1. On a backup PC, copy the newest backup out to a USB stick or a shared
    folder:
 
    ```bat
@@ -107,7 +110,8 @@ The backup PCs still hold the backups, and a new PC can be restored from a file.
    sevjala restore --file E:\sevjala-export\shop\2026-10-16_10-15-00.sql.gz --into shop
    ```
 
-   The file is checked against its `.json` first; a damaged file is refused before anything is
+   This one asks for administrator rights (the service reads the file you name). The file is
+   checked against its `.json` first; a damaged file is refused before anything is
    created.
 4. Back it up again from now on: `sevjala db set --db shop`, then pair the backup PCs with the
    new controller (`sevjala discover`, `sevjala pair`).

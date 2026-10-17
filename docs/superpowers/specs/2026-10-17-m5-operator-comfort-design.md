@@ -92,8 +92,9 @@ decide per request *who may do what*:
   - Custom (dev/test) endpoints keep the default DACL, as today.
 - **Pipe squatting (my call):** when the service is stopped, any user can create
   `\\.\pipe\sevjala` first. On the default endpoint the Windows client therefore checks that the
-  pipe's server process runs as LocalSystem (`GetNamedPipeServerProcessId` → token user
-  `S-1-5-18`) before sending anything. If it doesn't, it refuses with `the program answering on
+  pipe is owned by Administrators or SYSTEM before sending anything (as built: a normal user
+  cannot open the SYSTEM service's process token, but can read the pipe's owner, and cannot
+  create a pipe owned by Administrators). If it doesn't, it refuses with `the program answering on
   \\.\pipe\sevjala is not the Sevjala service`. The Unix socket lives in root-owned
   `/var/run`, so this check is not needed there.
 - **Unix socket:** unchanged, root:`sevjala` mode 0660.
@@ -256,7 +257,7 @@ removed by `service uninstall`):
 - Windows: value `Sevjala Tray` under `HKLM\Software\Microsoft\Windows\CurrentVersion\Run`, =
   `"<install dir>\sevjala.exe" tray`.
 - macOS: `/Library/LaunchAgents/dev.jufi.sevjala.tray.plist`.
-- Linux: `/etc/xdg/autostart/sevjala-tray.desktop`, only when the binary has the tray built in.
+- Linux: `/etc/xdg/autostart/sevjala-tray.desktop`.
 
 **No console window on Windows (my call):** `sevjala.exe` is a console program, so a tray
 started from the `Run` key gets a console window. `sevjala tray` calls `FreeConsole` first
@@ -264,17 +265,20 @@ thing, so the window only flashes briefly at login. One binary stays one binary 
 the smoke shows the flash bothers people, a GUI-subsystem launcher is a later decision, not M5.
 
 **Trays and updates (my call):**
-- A running tray keeps its exe locked on Windows. A tray that sees the agent's `version`
-  differ from its own starts the installed exe as a new tray and exits, so after `update` every
-  tray moves to the new binary within 15 s and releases `sevjala.exe.old`.
+- A running tray keeps its exe locked on Windows. A tray that sees the installed binary
+  replaced (another file at that path, not a version compare) starts it as a new tray and
+  exits, so after `update` every tray moves to the new binary within 15 s and releases
+  `sevjala.exe.old`.
 - `update` also copes with a `.old` that is still locked: it renames it to
   `sevjala.exe.old-<n>` and removes any older ones it can.
-- `service uninstall` ends every `sevjala tray` process in all sessions before removing files.
+- `service uninstall` removes the autostart entry; every tray quits within 15 s once its entry
+  is gone, and uninstall retries removing the exe for 20 s. (As built: killing `sevjala.exe`
+  processes would also end the setup windows.)
 
 After setup finishes, the tray is started for the user who ran it, **not elevated**:
-- Windows: the first, non-elevated window starts it once the elevated setup ends.
-- Unix: `sudo -u $SUDO_USER` with the user's session environment. If that fails, it prints
-  `the tray icon appears at your next login`.
+- The first, non-elevated process (the one that asked for UAC or ran `sudo`) starts it once the
+  elevated setup ends successfully. Setup started already elevated does not; the tray appears
+  at the next login.
 
 ### `doctor` without admin
 
@@ -290,10 +294,11 @@ with `run 'sevjala doctor' as administrator for the full check`.
   go-win7 builds. The `tray` build tag gates only the cgo platforms.
 - **macOS:** the release builds with `-tags tray` and `CGO_ENABLED=1`. `make build-all` runs on
   a Mac, so both darwin architectures build there. This needs a separate GoReleaser build id.
-- **Linux:** release assets ship **without** the tray (cross-compiling cgo with
-  libayatana-appindicator from a Mac is not worth it, and Linux controllers are usually
-  headless). On such a build `sevjala tray` prints `this build has no tray; build from source
-  with -tags tray on Linux` and exits 1. **My call.**
+- **Linux:** as built, the release ships the tray: `fyne.io/systray` talks D-Bus
+  (StatusNotifierItem) in pure Go, so it compiles with `CGO_ENABLED=0`. Without a desktop
+  session `sevjala tray` fails to reach D-Bus and says so. Only a macOS build without cgo has
+  no tray; there `sevjala tray` prints `this build has no tray; on macOS build it with
+  CGO_ENABLED=1 and -tags tray` and exits 1.
 - `fyne.io/systray` is a blueprint-named dependency. It must be checked to load and draw on
   Windows 7 (go-win7 build). If it calls an API newer than Windows 7 without a fallback, stop
   and report: that is a blueprint-level problem.

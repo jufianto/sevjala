@@ -55,13 +55,14 @@ needs a new row and a reason.
 | AD-10 | Controller keeps a local staging copy of recent backups | Recovery point zero; source for offline backfill and future self-heal |
 | AD-11 | Single-pass streaming: `mysqldump → gzip → (file, sha256)`; Node hashes while writing; temp file + atomic rename | No file read twice anywhere; a killed transfer leaves no partial file |
 | AD-12 | No resumable chunks in Phase 1; whole-file retry | LAN + files of a few hundred MB; simplicity wins |
-| AD-13 | Local control channel = Windows named pipe / Unix socket, HTTP over it; CLI, tray and UI proxy use it | No extra port on Windows; OS ACL is the auth |
+| AD-13 | **Amended** by AD-20: Local control channel = Windows named pipe / Unix socket, HTTP over it; CLI, tray and UI proxy use it | No extra port on Windows; the OS ACL decides who may connect, AD-20 decides who may do what |
 | AD-14 | UI = browser dashboard on `127.0.0.1` served by an on-demand `sevjala ui` process that reverse-proxies to the pipe; Svelte 5 + Vite, embedded in the binary | No native toolkit; nothing listens when not in use; not reachable from the LAN |
 | AD-15 | Toolchain: stock Go for win10+/macOS/Linux; XTLS/go-win7 patched SDK for Windows 7 builds (amd64 + 386), pinned by checksum | Modern Go on Windows 7; one source tree |
 | AD-16 | Service management via `kardianos/service`; tray via `fyne.io/systray` | Windows Service / launchd / systemd behind one interface; pure-Go tray on Windows |
 | AD-17 | Replication monitoring, PITR, self-heal, notifications are Phase 3 | Keep the MVP to discover, pair, back up, verify, retain, restore |
 | AD-18 | **Amended** 2026-10-14 ([D-055](./decisions.md)): the only Internet use is `sevjala update`, run by hand: it downloads the newest GitHub release for the PC, checks it against the release's `checksums.txt`, and swaps the installed binary. The agent never contacts the Internet; `update --from FILE` covers offline PCs | Copying a new exe to every PC by hand is the main chore of keeping a fleet current; an operator-run download keeps the service LAN-only |
 | AD-19 | Accepted 2026-10-17 ([D-064](./decisions.md)): a restore reads its backup file twice, once to check size and sha256 and once to load it; a node copy or an exported file is first copied into `staging/<id>.restore.part` while hashing, and that copy is loaded. The exception to AD-11 is restore only. | A damaged file must never be partly loaded into a database before the damage is known; one extra read (about 1-2 s per 120 MB) is the price |
+| AD-20 | Accepted 2026-10-17 ([D-066](./decisions.md)), amends AD-13: any interactive user (Windows) or member of group `sevjala` (macOS/Linux) may connect to the local API; the agent asks the OS who the caller is on every request and refuses admin-only actions (setup, service, update, `pair`, `code`, `db set --dumper`, `restore --file`, policy changes that delete backups) to a caller without administrator rights with 403 `admin_required`. The CLI then re-runs the same command elevated: UAC on Windows, `sudo` on macOS/Linux | Daily work (status, backup now, restore, export, the tray, later the UI) must not need an Administrator prompt; XAMPP itself does not |
 
 ## Components
 
@@ -166,6 +167,14 @@ Windows: `\\.\pipe\sevjala`. macOS/Linux: `/var/run/sevjala.sock` (0660, group
 `sevjala`). Same JSON style as the LAN API, plus controller-only routes: `/agents`,
 `/discover`, `/pair`, `/policies`, `/backups`, `/backup/now`, `/restore`, `/events`
 (SSE), `/logs`. The CLI, tray and UI proxy are the only clients.
+
+Who may connect and who may do what (AD-20): on Windows the pipe admits SYSTEM and
+Administrators fully and interactive users with read/write but not create-instance, and the
+CLI checks the pipe is owned by Administrators or SYSTEM before talking to it; on Unix the
+socket stays `root:sevjala` 0660. Per request the agent asks the OS for the caller (the
+pipe client's process token, `SO_PEERCRED` / `LOCAL_PEERCRED`); an elevated token, SYSTEM or
+uid 0 is an administrator. Admin-only routes answer 403 with `"code":"admin_required"`;
+the exact list is in [protocol.md](./protocol.md#local-api).
 
 **Ports** (all configurable): 17890/udp discovery, 17891/tcp LAN API.
 `sevjala service install` adds the firewall rules on Windows; `sevjala doctor` verifies
@@ -367,7 +376,7 @@ destructive runs without a typed confirmation.
 | Discovery (UDP) | Read-only metadata; nonce-matched replies; no credentials, no store paths |
 | Pairing | One-time 6-digit code, 10-minute TTL, 5 attempts, HMAC proof bound to both fingerprints; fingerprint seen in discovery must match the TLS cert |
 | LAN API | mTLS, TLS 1.2+, both sides pin peer fingerprints; unknown cert = handshake failure before any HTTP; a node accepts one controller |
-| Local API | Named pipe ACL (Administrators + SYSTEM) on Windows; socket mode 0660 + group on Unix; no network exposure |
+| Local API | Named pipe ACL (SYSTEM + Administrators full, interactive users read/write, nobody else) and an owner check by the client on Windows; socket mode 0660 + group on Unix; per-request caller check for admin-only actions (AD-20); no network exposure |
 | UI proxy | Binds 127.0.0.1 on a random port; one-time token in the launch URL exchanged for a session cookie; rejects requests whose `Host` is not `127.0.0.1:<port>`; CORS disabled |
 | Secrets | DB password and pairing secrets in the OS keyring; never in config, logs, or `/status` |
 | Backup files | SHA-256 verified on receipt and before restore; optional AES-256-GCM file encryption is Phase 3 |
@@ -389,8 +398,8 @@ XTLS/go-win7 patched SDK for the Windows 7 assets.
 | `sevjala-windows-amd64.exe` | windows/amd64 | stock Go | Windows 10/11 |
 | `sevjala-win7-amd64.exe` | windows/amd64 | go-win7 | Windows 7 64-bit, needs KB3125574 |
 | `sevjala-win7-386.exe` | windows/386 | go-win7 | Windows 7 32-bit |
-| `sevjala-darwin-arm64` / `-amd64` | darwin | stock Go | tray needs cgo; build on macOS runner |
-| `sevjala-linux-amd64` | linux/amd64 | stock Go | tray needs libayatana-appindicator; agent/CLI do not |
+| `sevjala-darwin-arm64` / `-amd64` | darwin | stock Go, `CGO_ENABLED=1 -tags tray` | the tray needs cgo (Cocoa); built on a Mac |
+| `sevjala-linux-amd64` | linux/amd64 | stock Go | pure Go incl. the tray (D-Bus StatusNotifierItem); the tray needs a desktop session, agent/CLI do not |
 
 ### Rules
 

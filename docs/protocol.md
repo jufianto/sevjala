@@ -247,11 +247,31 @@ name `db`), keyed by the 32 random bytes in `<data-dir>/secrets/key`; both files
 
 ## Local API
 
-Transport: HTTP/1.1 over `\\.\pipe\sevjala` (Windows, SDDL `D:P(A;;GA;;;BA)(A;;GA;;;SY)`) or
+Transport: HTTP/1.1 over `\\.\pipe\sevjala` (Windows, SDDL `O:BAD:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;0x12008b;;;IU)` since M5: SYSTEM and Administrators full, interactive users read/write without create-instance) or
 `/var/run/sevjala.sock` (macOS/Linux, `0660 root:sevjala`). A non-default data dir uses
 `<data-dir>/sevjala.sock` or `\\.\pipe\sevjala-<first 8 hex of sha256(data dir)>` (default DACL).
+On the default pipe the client opens with `GENERIC_READ|FILE_WRITE_DATA` and refuses a pipe
+whose owner is not Administrators or SYSTEM (another user's pipe squatting the name).
 
-Errors are `{"error": "<message shown to the operator>"}`; a route for the other role is 409
+Callers (M5, AD-20): every request carries who called, from the OS: on Windows the pipe
+client's process token (elevated, or SYSTEM, is an administrator), on Linux `SO_PEERCRED`, on
+macOS `LOCAL_PEERCRED` (uid 0 is an administrator). Admin-only requests from anyone else answer
+403 `{"error":"<action> needs administrator rights","code":"admin_required"}`, and the CLI re-runs
+the command elevated (UAC, `sudo`). Admin-only:
+
+| Request | Admin-only when |
+|---|---|
+| `POST /pair`, `POST /code` | always |
+| `PUT /db` | `dumper` is set |
+| `POST /policies` | backups that are not expired already carry that tag (the new `keep` may delete them) |
+| `PATCH /policies/{name}` | `keep` goes down, or `to` drops a destination (incl. every node → a list) |
+| `POST /restore` | `file` is set (the agent reads any path the caller names) |
+
+Everything else, including `DELETE /policies/{name}` (it keeps the backups) and `restore` with
+`replace`, needs no administrator. `PUT /db` that changes `host` or `user` without `password` is
+400 `changing the database host or user needs its password again: add --password (or --no-password)`.
+
+Errors are `{"error": "<message shown to the operator>"}`, with `"code"` when a client acts on it (`admin_required`, M5); a route for the other role is 409
 (`this agent is a node; run this on the controller` / `this agent is a controller; run this
 on a node`); a LAN failure behind a route is 502. Bodies are capped at 4 KiB.
 
@@ -336,6 +356,23 @@ loaded.
 | `agent_id` | string | since M1 |
 | `fp` | string | since M1 |
 | `store` | object | node only, since M2: `{"path","free_bytes","backups":N,"problems":[…]}` |
+| `hostname` | string | since M5 |
+| `health` | object | since M5, `Health` below; omitted while the agent starts |
+
+`Health` (M5): `{"level":"ok|warning|problem","headline","items":[{"level","text"}],"databases":[DBHealth],"next_backup_at","next_policy","agents":[AgentHealth],"free_bytes","controller_contact_at"}`.
+`items` lists problems before warnings; with any item, `headline` and `level` are the first
+one's, else `headline` says what is protected. Controller only: `databases`
+(`{"name","last_good","last_good_at","size","copies","planned","last_failed_at","last_error"}`:
+the newest backup with a verified copy, its verified and planned copies, the last failed dump),
+`next_backup_at`/`next_policy`, `agents` (`{"hostname","state","last_seen","waiting"}`, `waiting`
+copies not yet on it). Node only: `controller_contact_at`, the last request from its paired
+controller (since the agent started). `free_bytes` is staging on a controller, the store on a node.
+The verdict reads only the store and memory, never MySQL; the tray asks every 15 s.
+
+| Level | Controller | Node |
+|---|---|---|
+| problem | no backup PC paired; a configured database without a verified copy (with a PC paired), or the newest one older than twice the shortest enabled schedule (at least 1 h); the last dump of a database failed; a replace left a database partly loaded; staging free under max(1 GiB, 2 × the newest backup of the largest database) | store free under `min_free_bytes` |
+| warning | a node offline or in error (with the copies waiting for it) or warning; the newest backup still partial after 30 min on an answering node; a damaged copy the controller cannot replace (not in staging); no enabled schedule; no database configured | not paired; paired but no controller request for 15 min; each store problem |
 
 ## Controller store (since M1)
 

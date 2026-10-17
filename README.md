@@ -5,16 +5,17 @@ Windows 7+, macOS and Linux. A Controller on the database server dumps, verifies
 backups over mutual TLS to paired backup PCs (Nodes); everything is operated from a CLI and
 tray, with a local browser dashboard later. No cloud; the only Internet use is `sevjala update`, when you run it.
 
-**Status:** pre-alpha. P0–M3 code done (scheduled backups, retention), manual smokes pending, see [docs/PROGRESS.md](docs/PROGRESS.md).
+**Status:** pre-alpha. P0–M5 code done (scheduled backups, retention, restore, tray), manual smokes pending, see [docs/PROGRESS.md](docs/PROGRESS.md).
 
 ## Try it
 
 **Windows:** download `sevjala-win7-amd64.exe` (64-bit Windows 7 to 11) or `sevjala-win7-386.exe`
 (32-bit Windows 7) from [Releases](https://github.com/jufianto/sevjala/releases) and double-click it.
-Setup asks for administrator rights, then whether this PC runs the database (controller) or keeps
+Setup asks for administrator rights (UAC), then whether this PC runs the database (controller) or keeps
 backups (node); it installs to `C:\Program Files\Sevjala`, starts the service and shows the next
-step. Double-click it again later to update, show a pairing code or uninstall. To update
-later, run `sevjala update` on each PC (Administrator prompt / sudo): it downloads the newest release
+step; a tray icon by the clock then shows whether the data is protected (green), needs a look
+(yellow) or has a problem (red). Double-click it again later to update, show a pairing code or
+uninstall. To update later, run `sevjala update` on each PC: it asks for administrator rights, downloads the newest release
 from here, checks it and restarts the service; `--from FILE` installs a file you copied over. `sudo ./sevjala
 setup` does the same on macOS and Linux (installs to `/usr/local/bin`).
 
@@ -31,7 +32,7 @@ Pair a node with the controller (same LAN; the node's firewall must allow 17890/
 17891/tcp, which `service install` opens on Windows):
 
 ```sh
-# on the controller (sudo / Administrator prompt)
+# on the controller (pair asks for administrator rights itself)
 sevjala discover                       # lists nodes; or: sevjala agents add 192.168.1.21
 # on the node
 sevjala code                           # prints a 6-digit code (valid 10 minutes) and a fingerprint
@@ -80,11 +81,15 @@ Every command explains itself with examples: `sevjala <command> --help`.
 
 | Group | Commands |
 |---|---|
-| Install & status | `setup`, `update [--from FILE]`, `service install/start/stop/status/uninstall`, `doctor`, `version` |
+| Install & status | `status`, `tray`, `setup`, `update [--from FILE]`, `service install/start/stop/status/uninstall`, `doctor`, `version` |
 | Connect PCs | `discover`, `code` (on the backup PC), `pair`, `agents`, `agents add/remove`, `ping` |
 | Database | `db detect`, `db set` |
 | Backups | `backup now`, `backups list [--matrix]`, `backups export <backup\|latest\|all> --to FOLDER` (copy out, no sudo needed on macOS/Linux), `restore <backup\|latest> [--into NAME \| --replace-production]`, `restore --file PATH`, `restore --status` |
 | Schedules & cleanup | `policy list/add/set/remove`, `retention run [--dry-run]` |
+
+Most commands need no administrator rights. The few that do (setup, service, update, pair,
+`code`, `db set --dumper`, `restore --file`, policy changes that delete backups) ask for them
+themselves: UAC on Windows, `sudo` on macOS/Linux.
 
 Build: `make build` (host), `make build-all` (every asset incl. Windows 7), `make test`,
 `make test-integration` (real MariaDB 10.4 in Docker), `make lint`.

@@ -17,14 +17,13 @@ Fill in your own values once:
 Write down what each step prints next to its **Expect** line. Anything different is a
 finding: copy the whole output.
 
-## 1. Open an Administrator prompt (Windows)
+## 1. Open a Command Prompt (Windows)
 
-Every `sevjala` command on Windows runs from an Administrator prompt: Start → type `cmd` →
-right-click **Command Prompt** → **Run as administrator** → Yes.
-
-In a normal prompt the agent refuses on purpose (only Administrators may talk to it). Builds
-up to v0.3.0-alpha.1 print `… \\.\pipe\sevjala: Access is denied.`; later builds print
-`refused this user: run this from an Administrator prompt`.
+Start → type `cmd` → **Command Prompt**. Since M5 an ordinary prompt is enough: the commands
+that need administrator rights (setup, service, update, pair, `code`, `restore --file`) show the
+UAC prompt themselves and finish in a second window. Builds before M5 refuse a normal prompt
+(`refused this user: run this from an Administrator prompt`); with those, right-click
+**Command Prompt** → **Run as administrator**.
 
 ## 2. Check the controller (Windows)
 
