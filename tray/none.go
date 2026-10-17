@@ -10,6 +10,8 @@ import (
 
 const Available = false
 
-func Run(*localapi.Client, string) error {
+func Run(*localapi.Client, string, func() bool) error {
 	return errors.New("this build has no tray; on macOS build it with CGO_ENABLED=1 and -tags tray")
 }
+
+func Start(string) error { return Run(nil, "", nil) }

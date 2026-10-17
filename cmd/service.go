@@ -16,6 +16,7 @@ import (
 	"github.com/jufianto/sevjala/localapi"
 	"github.com/jufianto/sevjala/logx"
 	"github.com/jufianto/sevjala/svc"
+	"github.com/jufianto/sevjala/tray"
 )
 
 const agentWait = 10 * time.Second
@@ -124,6 +125,13 @@ runs this and the next steps for you.`,
 			}
 			logEvent(dataDir, "service installed", logx.EventServiceInstalled, "role", role, "executable", exe)
 			fmt.Fprintf(out, "installed service %s → %s\n", svc.Name, exe)
+			if tray.Available {
+				if err := svc.InstallTrayAutostart(exe); err != nil {
+					fmt.Fprintf(out, "could not start the tray icon at login: %v\n", err)
+				} else {
+					fmt.Fprintln(out, "the tray icon starts at every login (sevjala tray)")
+				}
+			}
 			if err := s.Start(); err != nil {
 				return failf("start service: %w", err)
 			}
@@ -167,6 +175,9 @@ where it left off.`,
 				return failf("uninstall service: %w", err)
 			}
 			svc.RemoveFirewallRules()
+			if err := svc.RemoveTrayAutostart(); err != nil {
+				fmt.Fprintf(c.OutOrStdout(), "could not remove the tray from login: %v\n", err)
+			}
 			fmt.Fprintf(c.OutOrStdout(), "uninstalled service %s; data kept in %s\n", svc.Name, dataDir)
 			return nil
 		},

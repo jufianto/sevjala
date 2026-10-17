@@ -3,6 +3,8 @@ package cmd
 import (
 	"bufio"
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -225,5 +227,19 @@ func TestSetupDoesNotRepeatAFailedStep(t *testing.T) {
 	}
 	if strings.Contains(f.out.String(), "status:") || strings.Contains(f.out.String(), "exit status") {
 		t.Errorf("repeats the failed step:\n%s", f.out.String())
+	}
+}
+
+func TestUninstallRemovesOldFilesMovedAside(t *testing.T) {
+	var f fakeSetup
+	s := f.flow("", "node", false)
+	dir := t.TempDir()
+	s.dir, s.target = dir, filepath.Join(dir, "sevjala.exe")
+	os.WriteFile(s.target+".old-1", nil, 0o644)
+	if err := s.uninstall(); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(f.calls, "remove "+s.target+".old-1") {
+		t.Errorf("calls %q", f.calls)
 	}
 }

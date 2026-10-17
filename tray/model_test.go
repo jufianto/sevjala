@@ -108,3 +108,18 @@ func TestBinaryReplaced(t *testing.T) {
 		t.Error("a new binary at the installed path was not seen")
 	}
 }
+
+func TestQuitsWhenUninstalled(t *testing.T) {
+	installed := true
+	w := watchAutostart(func() bool { return installed })
+	if w.removed() {
+		t.Error("removed while installed")
+	}
+	installed = false
+	if !w.removed() {
+		t.Error("uninstall not seen")
+	}
+	if watchAutostart(func() bool { return false }).removed() {
+		t.Error("a tray started without autostart (a dev run) must not quit")
+	}
+}

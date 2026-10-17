@@ -10,12 +10,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
 	"github.com/jufianto/sevjala/config"
 	"github.com/jufianto/sevjala/svc"
+	"github.com/jufianto/sevjala/tray"
 )
 
 func newSetupCmd(g *globals) *cobra.Command {
@@ -30,7 +32,7 @@ later to update to a newer sevjala.exe, pair another PC, or uninstall.`,
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			if !svc.IsAdmin() {
-				return &needsAdmin{why: "installing Sevjala needs administrator rights"}
+				return &needsAdmin{why: "installing Sevjala needs administrator rights", after: startInstalledTray}
 			}
 			self, err := os.Executable()
 			if err != nil {
@@ -65,7 +67,7 @@ func newSetupFlow(g *globals, c *cobra.Command, self string) (*setupFlow, error)
 	dir := installDir()
 	target := filepath.Join(dir, exeName)
 	return &setupFlow{in: bufio.NewReader(c.InOrStdin()), out: c.OutOrStdout(), self: self, dir: dir, target: target,
-		role: role, fromInstall: sameFile(self, target), copyExe: copyFile, restoreExe: restoreExe, removeExe: os.Remove, onPath: setPath,
+		role: role, fromInstall: sameFile(self, target), copyExe: copyFile, restoreExe: restoreExe, removeExe: removeWhenFree, onPath: setPath,
 		run: func(stdin string, args ...string) error {
 			if g.dataDirFlag != "" {
 				args = append([]string{"--data-dir", g.dataDirFlag}, args...)
@@ -275,6 +277,8 @@ func (s *setupFlow) uninstall() error {
 		fmt.Fprintf(s.out, "could not remove %s from PATH: %v\n", s.dir, err)
 	}
 	exes := []string{s.target, s.target + ".old"}
+	aside, _ := filepath.Glob(s.target + ".old-*")
+	exes = append(exes, aside...)
 	if s.fromInstall {
 		fmt.Fprintf(s.out, "delete %s yourself once this window is closed\n", s.target)
 		exes = exes[1:]
@@ -376,9 +380,21 @@ func copyFile(src, dst string) error {
 		os.Remove(tmp)
 		return err
 	}
-	// A running exe cannot be replaced on Windows but can be renamed.
+	// A running exe cannot be replaced on Windows but can be renamed. The .old
+	// of the previous update may still run as a tray; it moves aside.
 	old := dst + ".old"
-	_ = os.Remove(old)
+	if err := os.Remove(old); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		for n := 1; ; n++ {
+			aside := fmt.Sprintf("%s-%d", old, n)
+			if _, err := os.Lstat(aside); errors.Is(err, fs.ErrNotExist) {
+				if err := os.Rename(old, aside); err != nil {
+					os.Remove(tmp)
+					return err
+				}
+				break
+			}
+		}
+	}
 	if err := os.Rename(dst, old); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		os.Remove(tmp)
 		return err
@@ -392,3 +408,24 @@ func copyFile(src, dst string) error {
 }
 
 func restoreExe(path string) error { return os.Rename(path+".old", path) }
+
+// removeWhenFree retries for a while: a tray running from the file closes
+// within 15 s of 'service uninstall' removing its start at login.
+func removeWhenFree(path string) error {
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		err := os.Remove(path)
+		if err == nil || errors.Is(err, fs.ErrNotExist) || time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(time.Second)
+	}
+}
+
+// startInstalledTray runs after an elevated setup, as the user who started
+// it: the tray must never run as administrator.
+func startInstalledTray() {
+	if tray.Available && svc.TrayAutostartInstalled() {
+		_ = tray.Start(filepath.Join(installDir(), exeName))
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/jufianto/sevjala/localapi"
+	"github.com/jufianto/sevjala/svc"
 	"github.com/jufianto/sevjala/tray"
 )
 
@@ -28,7 +29,7 @@ it at every login; it needs no administrator rights.`,
 			if err != nil {
 				return fail(err)
 			}
-			if err := tray.Run(localapi.NewClient(localapi.Endpoint(dataDir)), exe); err != nil {
+			if err := tray.Run(localapi.NewClient(localapi.Endpoint(dataDir)), exe, svc.TrayAutostartInstalled); err != nil {
 				return fail(err)
 			}
 			return nil

@@ -105,7 +105,7 @@ func run(args []string, out, errOut io.Writer) int {
 	c, err := root.ExecuteC()
 	var na *needsAdmin
 	if errors.As(err, &na) {
-		return rerunElevated(args, na.why, out, errOut)
+		return rerunElevated(args, na, out, errOut)
 	}
 	code := exitCode(plainArgsError(c, err), errOut)
 	if code == 2 && c != nil {

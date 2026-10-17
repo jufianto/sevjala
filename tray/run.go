@@ -19,13 +19,13 @@ const Available = true
 
 // Run shows the icon until Quit. exe is the running binary: when an update
 // replaces it, the tray starts the new one and ends.
-func Run(cl *localapi.Client, exe string) error {
+func Run(cl *localapi.Client, exe string, autostart func() bool) error {
 	release, first, err := singleInstance()
 	if err != nil || !first {
 		return err
 	}
 	hideConsole()
-	t := &tray{cl: cl, watch: watchBinary(exe)}
+	t := &tray{cl: cl, watch: watchBinary(exe), auto: watchAutostart(autostart)}
 	systray.Run(t.ready, func() {})
 	release()
 	if t.restart {
@@ -37,6 +37,7 @@ func Run(cl *localapi.Client, exe string) error {
 type tray struct {
 	cl      *localapi.Client
 	watch   binaryWatch
+	auto    autostartWatch
 	restart bool
 
 	lines                [MaxLines]*systray.MenuItem
@@ -89,6 +90,10 @@ func (t *tray) loop() {
 }
 
 func (t *tray) refresh() {
+	if t.auto.removed() {
+		systray.Quit()
+		return
+	}
 	if t.watch.replaced() {
 		t.restart = true
 		systray.Quit()
@@ -163,3 +168,6 @@ func icon(c string) []byte {
 	}
 	return PNG(c)
 }
+
+// Start runs exe's tray on its own, as the calling user.
+func Start(exe string) error { return spawn(exe, "tray") }

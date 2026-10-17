@@ -90,3 +90,19 @@ func TestSetupAsksForAdminItself(t *testing.T) {
 		t.Errorf("exit %d, elevated %q, stderr %q", code, *got, errOut.String())
 	}
 }
+
+func TestAfterElevationRunsOnlyOnSuccess(t *testing.T) {
+	for _, tt := range []struct {
+		code int
+		err  error
+		want bool
+	}{{0, nil, true}, {1, nil, false}, {0, errElevationRefused, false}} {
+		fakeElevation(t, tt.code, tt.err)
+		ran := false
+		var out, errOut bytes.Buffer
+		rerunElevated([]string{"setup"}, &needsAdmin{why: "x", after: func() { ran = true }}, &out, &errOut)
+		if ran != tt.want {
+			t.Errorf("exit %d, err %v: after ran %v", tt.code, tt.err, ran)
+		}
+	}
+}

@@ -178,3 +178,25 @@ func TestUpdateRollsBackWhenTheNewVersionDoesNotStart(t *testing.T) {
 		t.Errorf("calls\n got %q\nwant %q", f.calls, want)
 	}
 }
+
+// A tray still running from the previous .old keeps it locked on Windows; a
+// non-empty folder stands in for that file here, since it cannot be removed.
+func TestCopyFileMovesALockedOldAside(t *testing.T) {
+	dir := t.TempDir()
+	src, dst := filepath.Join(dir, "new"), filepath.Join(dir, "sevjala")
+	os.WriteFile(src, []byte("v3"), 0o755)
+	os.WriteFile(dst, []byte("v2"), 0o755)
+	os.MkdirAll(filepath.Join(dst+".old", "busy"), 0o755)
+	if err := copyFile(src, dst); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(dst); string(got) != "v3" {
+		t.Errorf("installed %q", got)
+	}
+	if got, _ := os.ReadFile(dst + ".old"); string(got) != "v2" {
+		t.Errorf("kept %q", got)
+	}
+	if _, err := os.Stat(dst + ".old-1"); err != nil {
+		t.Errorf("the locked .old was not moved aside: %v", err)
+	}
+}
