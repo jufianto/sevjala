@@ -78,6 +78,10 @@ func TestControllerHealth(t *testing.T) {
 			in.backups = append(in.backups, hBackup("BK-1", "shop", 17*time.Minute, 10<<20, store.BackupPartial,
 				hCopy("n1", store.CopyVerified, ""), hCopy("n2", store.CopyPending, "")))
 		}, localapi.HealthWarning, "PC-2 has not answered since 08:12 (2 h ago); 2 copies wait for it", ""},
+		{"one copy waits", func(in *healthInput) {
+			in.agents = append(in.agents, hAgent("n2", "PC-2", store.AgentOffline, time.Hour))
+			in.backups[0].Copies = append(in.backups[0].Copies, hCopy("n2", store.CopyOffline, ""))
+		}, localapi.HealthWarning, "PC-2 has not answered since 09:27 (1 h ago); 1 copy waits for it", ""},
 		{"a backup PC never answered", func(in *healthInput) {
 			in.agents = append(in.agents, hAgent("n2", "PC-2", store.AgentOffline, -1))
 		}, localapi.HealthWarning, "PC-2 has not answered yet", ""},

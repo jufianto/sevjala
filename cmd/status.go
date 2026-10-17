@@ -1,15 +1,22 @@
 package cmd
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/kardianos/service"
+	"github.com/spf13/cobra"
 
+	"github.com/jufianto/sevjala/config"
+	"github.com/jufianto/sevjala/inventory"
 	"github.com/jufianto/sevjala/localapi"
+	"github.com/jufianto/sevjala/svc"
 )
 
 type serviceStatuser interface {
@@ -79,5 +86,104 @@ func waitForAgent(c *localapi.Client, timeout time.Duration) (localapi.Status, e
 			return st, err
 		}
 		time.Sleep(250 * time.Millisecond)
+	}
+}
+
+// renderOverview is 'sevjala status': the verdict and what needs attention
+// first, then the facts. ok is false for a problem or an agent that does not
+// answer.
+func renderOverview(w io.Writer, v statusView, host string, now time.Time) bool {
+	a := v.Agent
+	if a == nil {
+		fmt.Fprintf(w, "Sevjala on %s: PROBLEM\n  ! %v\n\n", host, v.AgentErr)
+		fmt.Fprintf(w, "  %-12s%s (%s)\n", "service", v.Service, v.Platform)
+		return false
+	}
+	h := a.Health
+	if h == nil {
+		h = &localapi.Health{Level: localapi.HealthWarning, Items: []localapi.HealthItem{
+			{Level: localapi.HealthWarning, Text: "the agent is older than this command; run: sevjala update"}}}
+	}
+	role := a.Role
+	if role == config.RoleNode {
+		role = "backup PC"
+	}
+	fmt.Fprintf(w, "Sevjala %s on %s: %s\n", role, cmp.Or(a.Hostname, host), strings.ToUpper(h.Level))
+	if len(h.Items) == 0 {
+		fmt.Fprintf(w, "  %s\n", h.Headline)
+	}
+	for _, it := range h.Items {
+		fmt.Fprintf(w, "  ! %s\n", it.Text)
+	}
+	line := func(label, format string, args ...any) {
+		fmt.Fprintf(w, "  %-12s%s\n", label, fmt.Sprintf(format, args...))
+	}
+	fmt.Fprintln(w)
+	line("service", "%s (%s), agent %s, up %s", v.Service, v.Platform, a.Version, upFor(time.Duration(a.UptimeS)*time.Second))
+	for _, d := range h.Databases {
+		if d.LastGood == "" {
+			line(d.Name, "no backup on a backup PC yet")
+			continue
+		}
+		line(d.Name, "last backup %s, %s, on %d of %d backup PCs", localapi.When(d.LastGoodAt, now), inventory.HumanBytes(d.Size), d.Copies, d.Planned)
+	}
+	if !h.NextBackupAt.IsZero() {
+		line("next", "%s (%s)", localapi.Clock(h.NextBackupAt, now), h.NextPolicy)
+	}
+	if len(h.Agents) > 0 {
+		pcs := make([]string, len(h.Agents))
+		for i, ag := range h.Agents {
+			pcs[i] = ag.Hostname + " " + ag.State
+			if ag.State != "online" && !ag.LastSeen.IsZero() {
+				pcs[i] += " since " + localapi.Clock(ag.LastSeen, now)
+			}
+		}
+		line("backup PCs", "%s", strings.Join(pcs, " · "))
+	}
+	switch {
+	case a.Store != nil:
+		line("holds", "%d backups, %s free", a.Store.Backups, inventory.HumanBytes(a.Store.FreeBytes))
+	case a.Role == config.RoleController:
+		line("disk", "%s free here", inventory.HumanBytes(h.FreeBytes))
+	}
+	return h.Level != localapi.HealthProblem
+}
+
+func upFor(d time.Duration) string {
+	switch {
+	case d >= 24*time.Hour:
+		return fmt.Sprintf("%dd %dh", int(d.Hours())/24, int(d.Hours())%24)
+	case d >= time.Hour:
+		return fmt.Sprintf("%dh %dm", int(d.Hours()), int(d.Minutes())%60)
+	}
+	return fmt.Sprintf("%dm", int(d.Minutes()))
+}
+
+func newStatusCmd(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:   "status",
+		Short: "Is the data protected? One screen: last backups, backup PCs, what needs attention",
+		Long: `Shows whether backups are healthy: OK, WARNING or PROBLEM, what needs attention, the
+last backup of each database and where its copies are, the next scheduled backup, the
+backup PCs and free space. Needs no administrator rights.
+Exit code 0 for OK or WARNING, 1 for a PROBLEM or when the service does not answer.`,
+		Example: `  sevjala status`,
+		Args:    cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			dataDir, err := g.dataDir()
+			if err != nil {
+				return fail(err)
+			}
+			s, err := svc.New(dataDir, &svc.Agent{})
+			if err != nil {
+				return fail(err)
+			}
+			st, apiErr := queryAgent(localapi.NewClient(localapi.Endpoint(dataDir)))
+			host, _ := os.Hostname()
+			if !renderOverview(c.OutOrStdout(), buildStatusView(s, st, apiErr, dataDir, svc.IsAdmin()), host, time.Now()) {
+				return errSilent1
+			}
+			return nil
+		},
 	}
 }

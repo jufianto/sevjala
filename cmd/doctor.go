@@ -25,6 +25,7 @@ type checkResult struct {
 	Name, Detail string
 	OK           bool
 	Warn         bool // not OK, but shown as WARN and does not fail doctor
+	Skip         bool // not run: it needs administrator rights
 }
 
 func checkWritable(name, dir string) checkResult {
@@ -106,6 +107,8 @@ func renderChecks(w io.Writer, rs []checkResult) bool {
 		mark := "ok"
 		switch {
 		case r.OK:
+		case r.Skip:
+			mark = "skip"
 		case r.Warn:
 			mark = "WARN"
 		default:
@@ -217,9 +220,6 @@ Each line is ok, WARN or FAIL with the reason; exit code 1 when something fails.
 		Example: `  sevjala doctor`,
 		Args:    cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
-			if err := requireAdmin(); err != nil {
-				return err
-			}
 			dataDir, err := g.dataDir()
 			if err != nil {
 				return fail(err)
@@ -230,32 +230,54 @@ Each line is ok, WARN or FAIL with the reason; exit code 1 when something fails.
 			}
 			endpoint := localapi.Endpoint(dataDir)
 			st, apiErr := queryAgent(localapi.NewClient(endpoint))
-			v := buildStatusView(s, st, apiErr, dataDir, svc.IsAdmin())
-			cfgCheck, cfg := checkConfig(dataDir)
-			idCheck, id := checkIdentity(dataDir)
-			rs := []checkResult{checkWritable("data dir", dataDir), checkLockdown(dataDir), cfgCheck, idCheck}
+			admin := svc.IsAdmin()
+			v := buildStatusView(s, st, apiErr, dataDir, admin)
+			// The data folder is locked to administrators (D-010): a normal user's
+			// doctor runs every check that goes through the agent.
+			var rs []checkResult
+			var cfg *config.Config
+			if admin {
+				cfgCheck, loaded := checkConfig(dataDir)
+				idCheck, id := checkIdentity(dataDir)
+				rs = append(rs, checkWritable("data dir", dataDir), checkLockdown(dataDir), cfgCheck, idCheck)
+				if cfg = loaded; cfg != nil {
+					rs = append(rs, checkLAN(*cfg, id))
+				}
+			} else {
+				rs = append(rs, checkResult{Name: "data dir", Skip: true,
+					Detail: "needs administrator rights: run 'sevjala doctor' as administrator for these"})
+			}
 			rs = append(rs, serviceChecks(v, endpoint)...)
+			role, dbs, minFree := st.Role, 0, int64(0)
 			if cfg != nil {
-				rs = append(rs, checkLAN(*cfg, id))
-				if apiErr == nil {
-					switch cfg.Role {
-					case config.RoleController:
+				role, dbs, minFree = cfg.Role, len(cfg.Controller.Database.Databases), cfg.Node.Store.MinFreeBytes
+			} else if st.Health != nil {
+				dbs = len(st.Health.Databases)
+			}
+			if apiErr == nil {
+				switch role {
+				case config.RoleController:
+					if admin {
 						rs = append(rs, checkWritable("staging", config.StagingDir(dataDir)))
-						cl := localapi.NewClient(endpoint)
-						d, err := withTimeout(15*time.Second, cl.DetectDatabase)
-						ps, perr := withTimeout(5*time.Second, cl.Policies)
-						as, aerr := withTimeout(5*time.Second, cl.Agents)
-						rs = append(rs, databaseChecks(d, plain(err))...)
-						rs = append(rs, scheduleCheck(ps, plain(perr), len(cfg.Controller.Database.Databases)), nodesCheck(as, plain(aerr)))
-					case config.RoleNode:
-						rs = append(rs, storeCheck(st.Store, cfg.Node.Store.MinFreeBytes))
 					}
+					cl := localapi.NewClient(endpoint)
+					d, err := withTimeout(15*time.Second, cl.DetectDatabase)
+					ps, perr := withTimeout(5*time.Second, cl.Policies)
+					as, aerr := withTimeout(5*time.Second, cl.Agents)
+					rs = append(rs, databaseChecks(d, plain(err))...)
+					rs = append(rs, scheduleCheck(ps, plain(perr), dbs), nodesCheck(as, plain(aerr)))
+				case config.RoleNode:
+					rs = append(rs, storeCheck(st.Store, minFree))
 				}
 			}
 			if runtime.GOOS == "windows" {
 				rs = append(rs, checkFirewall())
 			}
-			if !renderChecks(c.OutOrStdout(), rs) {
+			ok := renderChecks(c.OutOrStdout(), rs)
+			if !admin && apiErr != nil {
+				fmt.Fprintln(c.OutOrStdout(), "\nrun 'sevjala doctor' as administrator for the full check")
+			}
+			if !ok {
 				return errSilent1
 			}
 			return nil

@@ -205,3 +205,28 @@ func TestNodesCheck(t *testing.T) {
 		})
 	}
 }
+
+func TestDoctorWithoutAdminSkipsTheDataFolder(t *testing.T) {
+	fakeElevation(t, 0, nil)
+	var out, errOut bytes.Buffer
+	code := run([]string{"doctor", "--data-dir", t.TempDir()}, &out, &errOut)
+	if code != 1 || errOut.Len() != 0 {
+		t.Errorf("exit %d, stderr %q: the service is not installed, so doctor fails without asking for admin", code, errOut.String())
+	}
+	for _, want := range []string{"skip  data dir    needs administrator rights: run 'sevjala doctor' as administrator for these",
+		"FAIL  service", "run 'sevjala doctor' as administrator for the full check"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("no %q in\n%s", want, out.String())
+		}
+	}
+	if strings.Contains(out.String(), "FAIL  config") || strings.Contains(out.String(), "identity") {
+		t.Errorf("read the locked folder:\n%s", out.String())
+	}
+}
+
+func TestRenderChecksSkipDoesNotFail(t *testing.T) {
+	var b bytes.Buffer
+	if !renderChecks(&b, []checkResult{{Name: "data dir", Detail: "needs administrator rights", Skip: true}}) || !strings.HasPrefix(b.String(), "skip  data dir") {
+		t.Errorf("%q", b.String())
+	}
+}

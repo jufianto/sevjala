@@ -115,7 +115,7 @@ func controllerHealth(in healthInput) localapi.Health {
 		}
 		if f, ok := in.failed[db]; ok {
 			d.LastFailedAt, d.LastError = f.at, f.err
-			problem("The last backup of %s failed at %s: %s", db, clock(f.at, in.now), f.err)
+			problem("The last backup of %s failed at %s: %s", db, localapi.Clock(f.at, in.now), f.err)
 		}
 		if id, ok := in.incomplete[db]; ok {
 			problem("%s was left partly loaded by a failed restore; run: sevjala restore %s --replace-production", db, id)
@@ -124,7 +124,7 @@ func controllerHealth(in healthInput) localapi.Health {
 		case good == nil && len(in.agents) > 0:
 			problem("No backup of %s has reached a backup PC yet", db)
 		case good != nil && scheduled && in.now.Sub(good.CreatedAt) > limit:
-			problem("No backup of %s has reached a backup PC since %s", db, when(good.CreatedAt, in.now))
+			problem("No backup of %s has reached a backup PC since %s", db, localapi.When(good.CreatedAt, in.now))
 		}
 		if good != nil {
 			d.LastGood, d.LastGoodAt, d.Size = good.BackupID, good.CreatedAt, good.Size
@@ -170,13 +170,16 @@ func controllerHealth(in healthInput) localapi.Health {
 		case store.AgentOffline, store.AgentError:
 			text := a.Hostname + " has not answered yet"
 			if !a.LastSeen.IsZero() {
-				text = fmt.Sprintf("%s has not answered since %s", a.Hostname, when(a.LastSeen, in.now))
+				text = fmt.Sprintf("%s has not answered since %s", a.Hostname, localapi.When(a.LastSeen, in.now))
 			}
 			if a.State == store.AgentError && a.Problem != "" {
 				text += " (" + a.Problem + ")"
 			}
-			if n := waiting[a.AgentID]; n > 0 {
-				text += fmt.Sprintf("; %s wait for it", plural(n, "copy", "copies"))
+			switch n := waiting[a.AgentID]; {
+			case n == 1:
+				text += "; 1 copy waits for it"
+			case n > 1:
+				text += fmt.Sprintf("; %d copies wait for it", n)
 			}
 			warn("%s", text)
 		case store.AgentWarning:
@@ -206,7 +209,7 @@ func controllerHealth(in healthInput) localapi.Health {
 
 	headline := ""
 	if oldestGood != nil {
-		headline = fmt.Sprintf("Protected: last backup %s is on %s", when(oldestGood.LastGoodAt, in.now),
+		headline = fmt.Sprintf("Protected: last backup %s is on %s", localapi.When(oldestGood.LastGoodAt, in.now),
 			plural(oldestGood.Copies, "backup PC", "backup PCs"))
 	}
 	return finish(h, headline)
@@ -265,16 +268,16 @@ func nodeHealth(in nodeInput) localapi.Health {
 		since = in.started
 	}
 	if in.paired && in.now.Sub(since) > silentAfter {
-		text := "The controller has not contacted this PC since " + when(in.contact, in.now)
+		text := "The controller has not contacted this PC since " + localapi.When(in.contact, in.now)
 		if in.contact.IsZero() {
-			text = "The controller has not contacted this PC since this agent started at " + when(in.started, in.now)
+			text = "The controller has not contacted this PC since this agent started at " + localapi.When(in.started, in.now)
 		}
 		h.Items = append(h.Items, localapi.HealthItem{Level: localapi.HealthWarning, Text: text})
 	}
 	for _, p := range st.Problems {
 		h.Items = append(h.Items, localapi.HealthItem{Level: localapi.HealthWarning, Text: p})
 	}
-	headline := fmt.Sprintf("Holding %s; the controller last checked in at %s", plural(st.Backups, "backup", "backups"), when(in.contact, in.now))
+	headline := fmt.Sprintf("Holding %s; the controller last checked in at %s", plural(st.Backups, "backup", "backups"), localapi.When(in.contact, in.now))
 	if in.contact.IsZero() {
 		headline = fmt.Sprintf("Holding %s; waiting for the controller to check in", plural(st.Backups, "backup", "backups"))
 	}
@@ -327,29 +330,4 @@ func plural(n int, one, many string) string {
 		return "1 " + one
 	}
 	return fmt.Sprintf("%d %s", n, many)
-}
-
-// when is "10:20 (7 min ago)"; another day adds the date.
-func when(t, now time.Time) string {
-	return clock(t, now) + " (" + ago(now.Sub(t)) + ")"
-}
-
-func clock(t, now time.Time) string {
-	t, now = t.Local(), now.Local()
-	if t.YearDay() == now.YearDay() && t.Year() == now.Year() {
-		return t.Format("15:04")
-	}
-	return t.Format("2006-01-02 15:04")
-}
-
-func ago(d time.Duration) string {
-	switch {
-	case d < time.Minute:
-		return "just now"
-	case d < time.Hour:
-		return fmt.Sprintf("%d min ago", int(d.Minutes()))
-	case d < 48*time.Hour:
-		return fmt.Sprintf("%d h ago", int(d.Hours()))
-	}
-	return fmt.Sprintf("%d days ago", int(d.Hours()/24))
 }

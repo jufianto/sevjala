@@ -55,8 +55,8 @@ func newRootCmd() *cobra.Command {
 		Use:   "sevjala",
 		Short: "Sevjala — Database Backup & Replication",
 		Long: `Sevjala backs up a MySQL/MariaDB database (the controller PC) to backup PCs
-on the same network (nodes). Run commands from an Administrator prompt on
-Windows, or with sudo on macOS/Linux. New here? Start with: sevjala setup`,
+on the same network (nodes). Most commands need no administrator rights; the few that
+do ask for them. New here? Start with: sevjala setup`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
@@ -67,7 +67,7 @@ Windows, or with sudo on macOS/Linux. New here? Start with: sevjala setup`,
 		id, title string
 		cmds      []*cobra.Command
 	}{
-		{"install", "Install & status:", []*cobra.Command{newSetupCmd(g), newUpdateCmd(g), newServiceCmd(g), newDoctorCmd(g), newVersionCmd()}},
+		{"install", "Install & status:", []*cobra.Command{newStatusCmd(g), newSetupCmd(g), newUpdateCmd(g), newServiceCmd(g), newDoctorCmd(g), newVersionCmd()}},
 		{"connect", "Connect PCs:", []*cobra.Command{newDiscoverCmd(g), newCodeCmd(g), newPairCmd(g), newAgentsCmd(g), newPingCmd(g)}},
 		{"database", "Database:", []*cobra.Command{newDBCmd(g)}},
 		{"backups", "Backups:", []*cobra.Command{newBackupCmd(g), newBackupsCmd(g), newRestoreCmd(g)}},

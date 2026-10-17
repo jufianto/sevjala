@@ -153,7 +153,7 @@ func (s *setupFlow) install() error {
 	if err := s.onPath(true, s.dir); err != nil {
 		fmt.Fprintf(s.out, "could not add %s to PATH (%v); run sevjala from that folder\n", s.dir, err)
 	} else {
-		fmt.Fprintf(s.out, "%s is on the PATH: in a new Administrator prompt, type sevjala\n", s.dir)
+		fmt.Fprintf(s.out, "%s is on the PATH: in a new Command Prompt, type sevjala\n", s.dir)
 	}
 	fmt.Fprintln(s.out)
 	if role == config.RoleNode {
