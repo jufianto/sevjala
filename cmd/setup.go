@@ -67,7 +67,7 @@ func newSetupFlow(g *globals, c *cobra.Command, self string) (*setupFlow, error)
 	dir := installDir()
 	target := filepath.Join(dir, exeName)
 	return &setupFlow{in: bufio.NewReader(c.InOrStdin()), out: c.OutOrStdout(), self: self, dir: dir, target: target,
-		role: role, fromInstall: sameFile(self, target), copyExe: copyFile, restoreExe: restoreExe, removeExe: removeWhenFree, onPath: setPath,
+		role: role, fromInstall: sameFile(self, target), copyExe: copyFile, restoreExe: restoreExe, removeExe: removeWhenFree, onPath: setPath, autostart: trayAtLogin,
 		run: func(stdin string, args ...string) error {
 			if g.dataDirFlag != "" {
 				args = append([]string{"--data-dir", g.dataDirFlag}, args...)
@@ -122,6 +122,7 @@ type setupFlow struct {
 	run         func(stdin string, args ...string) error // runs target
 	copyExe     func(src, dst string) error              // keeps the replaced file as dst.old
 	restoreExe  func(path string) error                  // puts path.old back
+	autostart   func(exe string) error                   // starts the tray from exe at every login
 	removeExe   func(path string) error
 	onPath      func(add bool, dir string) error
 	password    func() (string, error)
@@ -257,6 +258,10 @@ func (s *setupFlow) update() error {
 	}
 	fmt.Fprintf(s.out, "updated %s\n", s.target)
 	if err := s.run("", "service", "start"); err == nil {
+		// Installs from before M5 have no tray at login yet.
+		if err := s.autostart(s.target); err != nil {
+			fmt.Fprintf(s.out, "the tray icon could not be set to start at login: %v\n", err)
+		}
 		return nil
 	}
 	fmt.Fprintln(s.out, "the new version did not start; putting the previous one back")
@@ -428,6 +433,13 @@ func removeWhenFree(path string) error {
 		}
 		time.Sleep(time.Second)
 	}
+}
+
+func trayAtLogin(exe string) error {
+	if !tray.Available {
+		return nil
+	}
+	return svc.InstallTrayAutostart(exe)
 }
 
 // startInstalledTray runs after an elevated setup, as the user who started

@@ -42,6 +42,7 @@ func (f *fakeSetup) flow(input, role string, fromInstall bool, passwords ...stri
 		copyExe:    func(src, dst string) error { f.calls = append(f.calls, "copy "+src+" → "+dst); return nil },
 		removeExe:  func(p string) error { f.calls = append(f.calls, "remove "+p); return nil },
 		restoreExe: func(p string) error { f.calls = append(f.calls, "restore "+p); return nil },
+		autostart:  func(p string) error { f.calls = append(f.calls, "autostart "+p); return nil },
 		onPath: func(add bool, dir string) error {
 			f.calls = append(f.calls, map[bool]string{true: "path add ", false: "path remove "}[add]+dir)
 			return nil
@@ -139,7 +140,7 @@ func TestSetupInstalledMenu(t *testing.T) {
 		want              []string
 	}{
 		{"update", "1\n", "node", false, []string{"run service status", "run service stop",
-			`copy D:\Downloads\sevjala.exe → C:\Program Files\Sevjala\sevjala.exe`, "run service start"}},
+			`copy D:\Downloads\sevjala.exe → C:\Program Files\Sevjala\sevjala.exe`, "run service start", `autostart C:\Program Files\Sevjala\sevjala.exe`}},
 		{"node code", "2\n", "node", false, []string{"run service status", "run code"}},
 		{"controller pairs", "2\nn1 --code 1 --fp ab\n\n", "controller", false,
 			[]string{"run service status", "run discover", "run pair n1 --code 1 --fp ab"}},
