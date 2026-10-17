@@ -1,12 +1,11 @@
 <script>
   let { v } = $props()
-  const word = { green: 'Protected', yellow: 'Needs a look', red: 'Problem', grey: 'Not running' }
 </script>
 
 <section class="verdict card {v.color}" aria-live="polite">
   <div class="dot" aria-hidden="true"></div>
   <div>
-    <div class="word">{word[v.color]}</div>
+    <div class="word">{v.word}</div>
     <h2>{v.headline}</h2>
     {#if v.items.length}
       <ul>
