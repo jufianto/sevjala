@@ -40,6 +40,9 @@ type Controller struct {
 	Ctx       context.Context // the agent's lifetime: dumps outlive the request that started them
 	FindTools func(dumper string) (dump.Tools, error)
 	Pool      *transfer.Pool
+	// OnManagersChanged runs after a PC becomes or stops being a manager, or a
+	// manager is removed, so its links follow at once.
+	OnManagersChanged func()
 
 	mu       sync.Mutex
 	seen     map[string]localapi.Discovered // from discover and agents add; pair needs the fp seen here

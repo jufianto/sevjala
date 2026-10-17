@@ -65,6 +65,15 @@ func NewHandler(b Backend) http.Handler {
 		a, err := b.RemoveAgent(r.Context(), r.PathValue("agent"), q.Get("force") == "true", q.Get("confirm"))
 		reply(w, a, err)
 	})
+	mux.HandleFunc("PUT /agents/{agent}/manager", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Manager bool `json:"manager"`
+		}
+		if decode(w, r, &req) {
+			a, err := b.SetManager(r.Context(), r.PathValue("agent"), req.Manager)
+			reply(w, a, err)
+		}
+	})
 	mux.HandleFunc("POST /db/detect", func(w http.ResponseWriter, r *http.Request) {
 		d, err := b.DetectDatabase(r.Context())
 		reply(w, d, err)

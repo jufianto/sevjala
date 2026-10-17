@@ -56,6 +56,8 @@ const (
 	EventRestoreSucceeded   = "restore_succeeded"
 	EventRestoreFailed      = "restore_failed"
 	EventBackupExported     = "backup_exported"
+	EventManagerSet         = "manager_set"
+	EventManagerLinkFailed  = "manager_link_failed"
 )
 
 func Event(name string) slog.Attr { return slog.String("event", name) }

@@ -77,6 +77,11 @@ func (c *Client) RemoveAgent(ctx context.Context, agent string, force bool, conf
 	return a, c.do(ctx, http.MethodDelete, path, nil, &a)
 }
 
+func (c *Client) SetManager(ctx context.Context, agent string, on bool) (Agent, error) {
+	var a Agent
+	return a, c.do(ctx, http.MethodPut, "/agents/"+url.PathEscape(agent)+"/manager", map[string]bool{"manager": on}, &a)
+}
+
 func (c *Client) Agents(ctx context.Context) ([]Agent, error) {
 	var l list[Agent]
 	return l.Agents, c.do(ctx, http.MethodGet, "/agents", nil, &l)
