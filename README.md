@@ -3,9 +3,9 @@
 LAN-first database backup for MySQL/MariaDB (XAMPP first), shipped as one Go binary for
 Windows 7+, macOS and Linux. A Controller on the database server dumps, verifies and pushes
 backups over mutual TLS to paired backup PCs (Nodes); everything is operated from a CLI and
-tray, with a local browser dashboard later. No cloud; the only Internet use is `sevjala update`, when you run it.
+tray, and a local browser dashboard (`sevjala ui`). No cloud; the only Internet use is `sevjala update`, when you run it.
 
-**Status:** pre-alpha. P0–M5 code done (scheduled backups, retention, restore, tray), manual smokes pending, see [docs/PROGRESS.md](docs/PROGRESS.md).
+**Status:** pre-alpha. P0–M6 code done (scheduled backups, retention, restore, tray, dashboard), manual smokes pending, see [docs/PROGRESS.md](docs/PROGRESS.md).
 
 ## Try it
 
@@ -81,7 +81,7 @@ Every command explains itself with examples: `sevjala <command> --help`.
 
 | Group | Commands |
 |---|---|
-| Install & status | `status`, `tray`, `setup`, `update [--from FILE]`, `service install/start/stop/status/uninstall`, `doctor`, `version` |
+| Install & status | `status`, `ui` (dashboard in the browser), `tray`, `setup`, `update [--from FILE]`, `service install/start/stop/status/uninstall`, `doctor`, `version` |
 | Connect PCs | `discover`, `code` (on the backup PC), `pair`, `agents`, `agents add/remove`, `ping` |
 | Database | `db detect`, `db set` |
 | Backups | `backup now`, `backups list [--matrix]`, `backups export <backup\|latest\|all> --to FOLDER` (copy out; asks for admin, the copy belongs to you), `restore <backup\|latest> [--into NAME \| --replace-production]`, `restore --file PATH`, `restore --status` |

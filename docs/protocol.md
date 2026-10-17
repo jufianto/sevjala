@@ -255,7 +255,7 @@ whose owner is not Administrators or SYSTEM (another user's pipe squatting the n
 
 Callers (M5, AD-20): every request carries who called, from the OS: on Windows the pipe
 client's process token (elevated, or SYSTEM, is an administrator), on Linux `SO_PEERCRED`, on
-macOS `LOCAL_PEERCRED` (uid 0 is an administrator). Admin-only requests from anyone else answer
+macOS `LOCAL_PEERCRED` (uid 0, or the account running the agent — root for the service, the developer for one started by hand — is an administrator). Admin-only requests from anyone else answer
 403 `{"error":"<action> needs administrator rights","code":"admin_required"}`, and the CLI re-runs
 the command elevated (UAC, `sudo`). Admin-only:
 
@@ -366,7 +366,7 @@ loaded.
 one's, else `headline` says what is protected. Controller only: `databases`
 (`{"name","last_good","last_good_at","size","copies","planned","last_failed_at","last_error"}`:
 the newest backup with a verified copy, its verified and planned copies, the last failed dump),
-`next_backup_at`/`next_policy`, `agents` (`{"hostname","state","last_seen","waiting"}`, `waiting`
+`next_backup_at`/`next_policy`, `agents` (`{"agent_id","hostname","state","last_seen","waiting"}`, `agent_id` since M6, `waiting`
 copies not yet on it). Node only: `controller_contact_at`, the last request from its paired
 controller (since the agent started). `free_bytes` is staging on a controller, the store on a node.
 The verdict reads only the store and memory, never MySQL; the tray asks every 15 s.
@@ -375,6 +375,26 @@ The verdict reads only the store and memory, never MySQL; the tray asks every 15
 |---|---|---|
 | problem | no backup PC paired; a configured database without a verified copy (with a PC paired), or two runs of an enabled schedule passed since its newest one (and at least 1 h); the last dump of a database failed; a replace left a database partly loaded; staging free under max(1 GiB, 2 × the newest backup of the largest database) | store free under `min_free_bytes` |
 | warning | a node offline or in error (with the copies waiting for it) or warning; the newest backup still partial after 30 min on an answering node; a damaged copy the controller cannot replace (not in staging); no enabled schedule; no database configured | not paired; paired but no controller request for 15 min; each store problem |
+
+## Dashboard (`sevjala ui`, since M6)
+
+`sevjala ui` listens on `127.0.0.1:<random port>` as the user who ran it and prints (and opens)
+`http://127.0.0.1:<port>/?token=<64 hex>`. The token works once: it sets the cookie
+`sevjala_session_<port>` (random, `HttpOnly`, `SameSite=Strict`, path `/`; named per port because
+browsers keep cookies per host) and redirects 303 to `/`; a used or wrong token is 403. The process
+stops 60 s after its last `/events` client leaves (counted from start before the first).
+
+Every response carries `Content-Security-Policy: default-src 'self'; img-src 'self' data:;
+style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`,
+`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
+`Cache-Control: no-store`. A `Host` other than `127.0.0.1:<port>` is 403 (DNS rebinding);
+without the cookie everything else is 401.
+
+| Path | Meaning |
+|---|---|
+| `/`, `/assets/…` | the embedded Svelte build (`ui/dist`); a binary built without it answers `/` with 404 "built without the dashboard" |
+| `/api/<route>` | the local API route `<route>` (table above), as that user; `Cookie` and `X-Sevjala-UI` are removed. Anything but `GET`/`HEAD` needs `X-Sevjala-UI: 1` (403 otherwise). An agent that does not answer is 502 `{"error":"The Sevjala service is not running"}` |
+| `/events` | `text/event-stream`. Every 2 s the proxy asks `GET /status` (and `GET /agents` on a controller) and sends only changes: `event: state` with `{"status":Status,"agents":[Agent…]}`, or `event: down` with `{"error":"…"}`; a `: ping` comment after 15 s of silence |
 
 ## Controller store (since M1)
 

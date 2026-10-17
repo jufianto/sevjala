@@ -173,7 +173,7 @@ Administrators fully and interactive users with read/write but not create-instan
 CLI checks the pipe is owned by Administrators or SYSTEM before talking to it; on Unix the
 socket stays `root:sevjala` 0660. Per request the agent asks the OS for the caller (the
 pipe client's process token, `SO_PEERCRED` / `LOCAL_PEERCRED`); an elevated token, SYSTEM or
-uid 0 is an administrator. Admin-only routes answer 403 with `"code":"admin_required"`;
+uid 0 or the account running the agent (root for the service) is an administrator. Admin-only routes answer 403 with `"code":"admin_required"`;
 the exact list is in [protocol.md](./protocol.md#local-api).
 
 **Ports** (all configurable): 17890/udp discovery, 17891/tcp LAN API.

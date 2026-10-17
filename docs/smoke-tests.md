@@ -402,3 +402,33 @@ Still to do on real PCs (controller + at least one node), after `sevjala update`
    creates `\\.\pipe\sevjala` makes `sevjala status` refuse with "the program answering on
    \\.\pipe\sevjala is not the Sevjala service".
 7. **Windows 7:** the tray draws its icon and menu on a real Windows 7 PC (go-win7 build).
+
+## M6 — dashboard
+
+Exit criterion: the dashboard matches `sevjala status` live.
+
+Already covered without real PCs: the uiproxy tests (one-time link, per-port cookie, Host check,
+no session → 401, `/api` reaches the agent without the cookie, changes need the dashboard header,
+a stopped agent is named, `/events` follows changes and says when the agent stops, it stops once
+the tab closes, two dashboards keep their sessions); `sevjala ui` opens a browser and stops when
+idle; the JS helpers (`npm test` in `ui/`) word times and sizes like the CLI and colour the
+verdict like the tray.
+
+Done on macOS (2026-10-17) in a browser against a hand-started controller (MariaDB 10.4 in Docker)
+and two backup PCs: the verdict, database card, next backup and backup PCs matched `sevjala
+status`; stopping one PC turned the page yellow and its line red and dashed within the controller's
+45 s, with "1 copy waiting" after Back up now; starting it again turned everything green without a
+reload; a backup PC's own dashboard; two dashboards in one browser; dark mode; a 390 px wide window;
+"lost its connection" after `sevjala ui` stopped.
+
+Still to do:
+
+1. **Windows controller:** `sevjala ui` from an ordinary Command Prompt opens the default browser;
+   the dashboard matches `sevjala status`. The tray's "Open dashboard" opens it too (no console
+   window stays open). Closing the tab: within about a minute `sevjala.exe ui` is gone from Task
+   Manager.
+2. **Back up now** in the dashboard starts a backup; the page updates by itself when it is done.
+3. **Mac node:** `sevjala ui` there shows what it holds and when the controller last checked in.
+4. **Windows 7:** the dashboard renders in Chrome 109 or Firefox 115.
+5. **Admin-only from the page:** nothing in M6 needs admin; an admin-only answer would say to use
+   the command line, which asks for the rights.
