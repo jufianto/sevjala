@@ -377,12 +377,14 @@ non-admin prompt.
 Still to do on real PCs (controller + at least one node), after `sevjala update` to this build:
 
 1. **Daily commands without admin** (Windows, ordinary Command Prompt): `sevjala status`,
-   `backups list`, `backup now`, `doctor` (data-folder lines say `skip`), `restore latest`,
-   `backups export latest --to <folder>` all work with no UAC prompt.
+   `backups list`, `backup now`, `doctor` (data-folder lines say `skip`) and `restore latest`
+   all work with no UAC prompt.
 2. **Admin commands ask:** `sevjala pair …` shows UAC and finishes in a second window
    (`finished in the administrator window (exit 0)`); answering No prints "Cancelled:
    administrator rights were refused; nothing was changed." The same for `service stop`,
-   `restore --file`, `policy set frequent --keep 6`. `policy set frequent --keep 20` does not ask.
+   `restore --file`, `backups export latest --to <folder>`, `agents remove`, `backup now --tag daily`,
+   `policy set frequent --keep 6` and `policy set frequent --schedule "*/15 * * * *"`.
+   `policy set frequent --keep 20` and plain `backup now` do not ask.
    macOS/Linux: the same commands ask for the password through `sudo`.
 3. **Tray colours** (Windows controller): green with the last backup in the tooltip; switch
    the node off → yellow within a minute ("… has not answered since …"); stop MySQL and run

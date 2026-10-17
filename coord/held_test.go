@@ -53,7 +53,7 @@ func TestHeldOnBothRoles(t *testing.T) {
 		if err != nil || len(ms) != 1 || ms[0].BackupID != heldID {
 			t.Errorf("%s: Held %+v, %v", name, ms, err)
 		}
-		_, rc, err := s.OpenHeld(ctx, heldID)
+		_, rc, err := s.OpenHeld(asAdmin, heldID)
 		if err != nil {
 			t.Fatalf("%s: OpenHeld: %v", name, err)
 		}
@@ -67,7 +67,7 @@ func TestHeldOnBothRoles(t *testing.T) {
 			code int
 		}{{"../x", http.StatusBadRequest}, {"BK-20261014-002000-FFFF", http.StatusNotFound}} {
 			var e *localapi.Error
-			if _, _, err := s.OpenHeld(ctx, tt.id); !errors.As(err, &e) || e.Code != tt.code || !strings.Contains(e.Msg, tt.id) {
+			if _, _, err := s.OpenHeld(asAdmin, tt.id); !errors.As(err, &e) || e.Code != tt.code || !strings.Contains(e.Msg, tt.id) {
 				t.Errorf("%s %s: err = %#v", name, tt.id, err)
 			}
 		}
@@ -85,13 +85,13 @@ func TestOpenHeldWhileDeletingIsBusy(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := &Service{Node: &Node{Store: inv}}
-	_, rc, err := s.OpenHeld(context.Background(), heldID)
+	_, rc, err := s.OpenHeld(asAdmin, heldID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rc.Close()
 	var e *localapi.Error
-	if _, _, err := s.OpenHeld(context.Background(), heldID); !errors.As(err, &e) || e.Code != http.StatusConflict {
+	if _, _, err := s.OpenHeld(asAdmin, heldID); !errors.As(err, &e) || e.Code != http.StatusConflict {
 		t.Errorf("second open: %#v", err)
 	}
 }

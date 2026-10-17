@@ -84,11 +84,12 @@ Every command explains itself with examples: `sevjala <command> --help`.
 | Install & status | `status`, `tray`, `setup`, `update [--from FILE]`, `service install/start/stop/status/uninstall`, `doctor`, `version` |
 | Connect PCs | `discover`, `code` (on the backup PC), `pair`, `agents`, `agents add/remove`, `ping` |
 | Database | `db detect`, `db set` |
-| Backups | `backup now`, `backups list [--matrix]`, `backups export <backup\|latest\|all> --to FOLDER` (copy out, no sudo needed on macOS/Linux), `restore <backup\|latest> [--into NAME \| --replace-production]`, `restore --file PATH`, `restore --status` |
+| Backups | `backup now`, `backups list [--matrix]`, `backups export <backup\|latest\|all> --to FOLDER` (copy out; asks for admin, the copy belongs to you), `restore <backup\|latest> [--into NAME \| --replace-production]`, `restore --file PATH`, `restore --status` |
 | Schedules & cleanup | `policy list/add/set/remove`, `retention run [--dry-run]` |
 
 Most commands need no administrator rights. The few that do (setup, service, update, pair,
-`code`, `db set --dumper/--host/--port`, `restore --file`, policy changes that delete backups) ask for them
+`code`, `agents remove`, `db set --dumper/--host/--port`, `backups export`, `restore --file`,
+`backup now --tag`, and policy changes that delete backups or change a schedule) ask for them
 themselves: UAC on Windows, `sudo` on macOS/Linux.
 
 Build: `make build` (host), `make build-all` (every asset incl. Windows 7), `make test`,

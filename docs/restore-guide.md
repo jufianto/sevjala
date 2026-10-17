@@ -2,7 +2,7 @@
 
 How to get a database back from a Sevjala backup. Commands run on the **controller** (the PC
 with MySQL/MariaDB) from an ordinary Command Prompt; no administrator rights are needed, except
-for `restore --file`, which asks for them itself (Windows shows the UAC prompt, macOS/Linux ask
+for `restore --file` and `backups export`, which ask for them themselves (Windows shows the UAC prompt, macOS/Linux ask
 for your password through `sudo`). `sevjala status` or the tray icon shows first whether the backups
 are in good shape.
 Examples use a database called `shop`; use yours.
@@ -89,7 +89,7 @@ stays true after a restart.
 The backup PCs still hold the backups, and a new PC can be restored from a file.
 
 1. On a backup PC, copy the newest backup out to a USB stick or a shared
-   folder:
+   folder (it asks for administrator rights):
 
    ```bat
    sevjala backups export latest --db shop --to E:\sevjala-export

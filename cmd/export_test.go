@@ -176,3 +176,28 @@ func TestExportAll(t *testing.T) {
 		t.Errorf("unknown db: %v", err)
 	}
 }
+
+func TestExportAsksForAdminFirst(t *testing.T) {
+	got := fakeElevation(t, 0, nil)
+	args := []string{"backups", "export", "latest", "--to", t.TempDir(), "--data-dir", t.TempDir()}
+	var out, errOut bytes.Buffer
+	if code := run(args, &out, &errOut); code != 0 || len(*got) == 0 {
+		t.Errorf("exit %d, elevated %q, stderr %q", code, *got, errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "exporting a backup needs administrator rights") {
+		t.Errorf("stderr %q", errOut.String())
+	}
+}
+
+// Under sudo the copy is handed to the user who ran it, not left to root.
+func TestSudoOwner(t *testing.T) {
+	t.Setenv("SUDO_UID", "501")
+	t.Setenv("SUDO_GID", "20")
+	if uid, gid, ok := sudoOwner(); !ok || uid != 501 || gid != 20 {
+		t.Errorf("got %d %d %v", uid, gid, ok)
+	}
+	t.Setenv("SUDO_UID", "")
+	if _, _, ok := sudoOwner(); ok {
+		t.Error("not under sudo")
+	}
+}

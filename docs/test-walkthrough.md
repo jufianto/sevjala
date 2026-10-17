@@ -118,8 +118,7 @@ sudo shasum -a 256 "/Library/Application Support/Sevjala/store/"BK-*.sql.gz
 **Expect:** one `BK-….sql.gz` and its `.json`; the hash equals the `sha256` in the `.json`
 and in `sevjala backups list` on Windows.
 
-Copy the newest one out without sudo (setup added you to the `sevjala` group; log out and
-back in once after the first install):
+Copy the newest one out (it asks for your password through sudo; the copy belongs to you):
 
 ```sh
 sevjala backups list

@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/jufianto/sevjala/inventory"
 	"github.com/jufianto/sevjala/localapi"
+	"github.com/jufianto/sevjala/svc"
 )
 
 func newBackupsExportCmd(g *globals) *cobra.Command {
@@ -36,13 +38,16 @@ belongs to you, not to the service. Sevjala's own copy stays where it is.
 Works on a backup PC (what 'sevjala backups list' shows there) and on the controller
 (only the newest backups, which it keeps in staging). An existing file is never replaced
 unless you add --force; with all, backups already there are skipped, so running it again
-copies only the new ones.`,
+copies only the new ones. It asks for administrator rights: the copy carries the whole database.`,
 		Example: `  sevjala backups export latest --to ~/Desktop
   sevjala backups export latest --db shop --to D:\restore
   sevjala backups export all --to D:\backups              (every backup of every database)
   sevjala backups export BK-20261014-002000-30D3          (into the current folder)`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
+			if !svc.IsAdmin() {
+				return &needsAdmin{why: "exporting a backup needs administrator rights"}
+			}
 			held, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) ([]inventory.Manifest, error) {
 				return cl.Held(ctx)
 			})
@@ -174,6 +179,11 @@ func writeExport(m inventory.Manifest, body io.Reader, dir string, force bool) (
 	if err := inventory.WriteManifest(manifest, m); err != nil {
 		return "", failf("the backup is at %s, but its manifest could not be written: %w", data, err)
 	}
+	if uid, gid, ok := sudoOwner(); ok {
+		for _, p := range []string{data, manifest, dir} {
+			_ = os.Chown(p, uid, gid)
+		}
+	}
 	return data, nil
 }
 
@@ -272,4 +282,11 @@ func exportAll(ctx context.Context, held []inventory.Manifest, db string, open f
 	}
 	fmt.Fprintln(w)
 	return nil
+}
+
+// sudoOwner is the user who ran sudo: an export belongs to them, not to root.
+func sudoOwner() (uid, gid int, ok bool) {
+	uid, err1 := strconv.Atoi(os.Getenv("SUDO_UID"))
+	gid, err2 := strconv.Atoi(os.Getenv("SUDO_GID"))
+	return uid, gid, err1 == nil && err2 == nil
 }

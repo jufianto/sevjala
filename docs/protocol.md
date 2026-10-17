@@ -261,10 +261,12 @@ the command elevated (UAC, `sudo`). Admin-only:
 
 | Request | Admin-only when |
 |---|---|
-| `POST /pair`, `POST /code` | always |
+| `POST /pair`, `POST /code`, `DELETE /agents/{agent}` | always |
+| `GET /held/{id}` | always (a full database leaves the locked folder); `GET /held` lists without it |
+| `POST /backup/now` | a tag other than `manual` (each one pushes that policy's oldest backup out) |
 | `PUT /db` | `dumper` is set, or `host` or `port` differs from the saved one |
 | `POST /policies` | backups that are not expired already carry that tag (the new `keep` may delete them) |
-| `PATCH /policies/{name}` | `keep` goes down, or `to` drops a destination (incl. every node → a list) |
+| `PATCH /policies/{name}` | `keep` goes down, `to` drops a destination (incl. every node → a list), or `schedule` or `enabled` is set |
 | `POST /restore` | `file` is set (the agent reads any path the caller names) |
 
 Everything else, including `DELETE /policies/{name}` (it keeps the backups) and `restore` with

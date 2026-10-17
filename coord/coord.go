@@ -6,6 +6,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"slices"
 
 	"github.com/jufianto/sevjala/inventory"
 	"github.com/jufianto/sevjala/localapi"
@@ -56,6 +57,9 @@ func (s *Service) AddAgent(ctx context.Context, addr string) (localapi.Discovere
 func (s *Service) RemoveAgent(ctx context.Context, agent string, force bool) (localapi.Agent, error) {
 	if s.Controller == nil {
 		return localapi.Agent{}, errNotController
+	}
+	if !localapi.CallerIsAdmin(ctx) {
+		return localapi.Agent{}, localapi.AdminRequired("removing a backup PC")
 	}
 	return s.Controller.RemoveAgent(ctx, agent, force)
 }
@@ -127,6 +131,10 @@ func (s *Service) BackupNow(ctx context.Context, db string, tags []string) ([]lo
 	if s.Controller == nil {
 		return nil, errNotController
 	}
+	// Each backup with a policy's tag pushes that policy's oldest one out.
+	if slices.ContainsFunc(tags, func(t string) bool { return t != defaultTag }) && !localapi.CallerIsAdmin(ctx) {
+		return nil, localapi.AdminRequired("a backup tagged for a schedule (--tag) pushes that schedule's oldest backups out, so it")
+	}
 	return s.Controller.BackupNow(ctx, db, tags)
 }
 
@@ -177,6 +185,9 @@ func (s *Service) SetPolicy(ctx context.Context, name string, p localapi.PolicyC
 		return localapi.Policy{}, errNotController
 	}
 	if !localapi.CallerIsAdmin(ctx) {
+		if p.Schedule != nil || p.Enabled != nil {
+			return localapi.Policy{}, localapi.AdminRequired("changing when policy " + name + " runs (a faster schedule pushes old backups out)")
+		}
 		if del, err := s.Controller.policyDeletes(ctx, name, p); err != nil {
 			return localapi.Policy{}, err
 		} else if del {

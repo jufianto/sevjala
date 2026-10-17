@@ -77,9 +77,24 @@ func TestAdminOnlyActions(t *testing.T) {
 		{"one PC widened to every PC", func(ctx context.Context) error {
 			return second(svc.SetPolicy(ctx, "daily", localapi.PolicyChange{To: []string{"all"}}))
 		}, false},
-		{"schedule and enabled", func(ctx context.Context) error {
-			return second(svc.SetPolicy(ctx, "monthly", localapi.PolicyChange{Schedule: ptr("0 2 1 * *"), Enabled: ptr(false)}))
-		}, false},
+		{"schedule changed", func(ctx context.Context) error {
+			return second(svc.SetPolicy(ctx, "monthly", localapi.PolicyChange{Schedule: ptr("0 2 1 * *")}))
+		}, true},
+		{"schedule turned off", func(ctx context.Context) error {
+			return second(svc.SetPolicy(ctx, "monthly", localapi.PolicyChange{Enabled: ptr(false)}))
+		}, true},
+		{"backup now", func(ctx context.Context) error { return second(svc.BackupNow(ctx, "nosuch", nil)) }, false},
+		{"backup now, manual", func(ctx context.Context) error { return second(svc.BackupNow(ctx, "nosuch", []string{"manual"})) }, false},
+		{"backup now --tag daily", func(ctx context.Context) error { return second(svc.BackupNow(ctx, "nosuch", []string{"daily"})) }, true},
+		{"remove a backup PC", func(ctx context.Context) error { return second(svc.RemoveAgent(ctx, "PC-404", false)) }, true},
+		{"export (read a backup)", func(ctx context.Context) error {
+			_, rc, err := svc.OpenHeld(ctx, "BK-20261014-002000-30D3")
+			if rc != nil {
+				rc.Close()
+			}
+			return err
+		}, true},
+		{"list what this PC holds", func(ctx context.Context) error { return second(svc.Held(ctx)) }, false},
 		{"restore --file", func(ctx context.Context) error {
 			return second(svc.Restore(ctx, localapi.RestoreRequest{File: "/nowhere/x.sql.gz", DryRun: true}))
 		}, true},
