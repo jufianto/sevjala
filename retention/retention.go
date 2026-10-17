@@ -56,6 +56,7 @@ type Input struct {
 	Nodes       []Node // every paired node
 	StagingKeep int
 	Busy        map[string]bool // still dumping: never unstaged
+	Databases   []string        // configured: each keeps its newest verified backup
 	Now         time.Time
 }
 
@@ -78,6 +79,7 @@ const (
 	ReasonBackfill    = "missing on this PC"
 	ReasonStillNeeded = "a PC that should hold it does not have it yet"
 	ReasonClockBehind = "a backup is dated after now (clock moved back): nothing is deleted, unstaged or expired"
+	ReasonLastGood    = "the newest verified backup of its database: kept whatever the policies say"
 )
 
 type group struct{ db, tag string }
@@ -92,6 +94,7 @@ type computer struct {
 	final    map[string]map[string]string // backup → agent → copy state once the plan ran
 	wants    map[string]map[string]bool   // agent → wanted, memoized
 	frozen   bool                         // the clock is behind a backup: delete nothing
+	lastGood map[string]bool              // per configured database, its newest backup verified on some node
 }
 
 func Compute(in Input) Plan {
@@ -119,6 +122,7 @@ func Compute(in Input) Plan {
 	for _, p := range in.Policies {
 		c.policies[p.Name] = p
 	}
+	c.lastGood = c.newestVerified()
 	for _, n := range in.Nodes {
 		if n.Polled {
 			c.node(n)
@@ -183,12 +187,7 @@ func (c *computer) lastSource(b *Backup, agent string) bool {
 }
 
 func (c *computer) node(n Node) {
-	// The node's inventory checks size and the manifest's sha256, not the bytes; a
-	// copy the controller read and found damaged stays damaged until replaced.
-	verified := func(b *Backup) bool {
-		h, ok := n.Actual[b.ID]
-		return ok && h.State == inventory.StateVerified && h.SHA256 == b.SHA256 && !b.Copies[n.AgentID].HashFailed
-	}
+	verified := func(b *Backup) bool { return heldVerified(n, b) }
 	// A node drops an old copy only once newer ones are verified on that same node.
 	needed, why := maps.Clone(c.wanted(n.AgentID)), map[string]string{}
 	for _, g := range c.keys {
@@ -245,6 +244,8 @@ func (c *computer) node(n Node) {
 			c.plan.Kept = append(c.plan.Kept, Action{id, n.AgentID, ReasonUnknown})
 		case !needed[id] && c.lastSource(b, n.AgentID):
 			c.plan.Kept = append(c.plan.Kept, Action{id, n.AgentID, ReasonStillNeeded})
+		case !needed[id] && c.lastGood[id] && verified(b):
+			c.plan.Kept = append(c.plan.Kept, Action{id, n.AgentID, ReasonLastGood})
 		case !needed[id]:
 			reason := why[id]
 			if reason == "" {
@@ -368,4 +369,45 @@ func (p *Plan) sort() {
 	slices.SortFunc(p.Kept, byAction)
 	slices.Sort(p.Unstage)
 	slices.Sort(p.Expire)
+}
+
+// newestVerified finds, per configured database, the newest backup with a
+// verified copy on a node: in its last inventory when polled, else in the store.
+func (c *computer) newestVerified() map[string]bool {
+	verifiedOn := func(b *Backup) bool {
+		for _, n := range c.in.Nodes {
+			if !n.Polled {
+				if b.Copies[n.AgentID].State == store.CopyVerified {
+					return true
+				}
+				continue
+			}
+			if heldVerified(n, b) {
+				return true
+			}
+		}
+		return false
+	}
+	newest := map[string]*Backup{}
+	for _, b := range c.byID {
+		if !slices.Contains(c.in.Databases, b.Database) || b.Expired || !verifiedOn(b) {
+			continue
+		}
+		if cur := newest[b.Database]; cur == nil || newestFirst(b, cur) < 0 {
+			newest[b.Database] = b
+		}
+	}
+	out := map[string]bool{}
+	for _, b := range newest {
+		out[b.ID] = true
+	}
+	return out
+}
+
+// heldVerified: the node's inventory checks size and the manifest's sha256,
+// not the bytes; a copy the controller read and found damaged stays damaged
+// until replaced.
+func heldVerified(n Node, b *Backup) bool {
+	h, ok := n.Actual[b.ID]
+	return ok && h.State == inventory.StateVerified && h.SHA256 == b.SHA256 && !b.Copies[n.AgentID].HashFailed
 }

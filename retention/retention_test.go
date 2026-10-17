@@ -184,3 +184,63 @@ func TestCompute(t *testing.T) {
 		})
 	}
 }
+
+func hasAction(as []Action, a Action) bool {
+	for _, x := range as {
+		if x == a {
+			return true
+		}
+	}
+	return false
+}
+
+func TestLastGoodCopy(t *testing.T) {
+	toB := []Policy{{Name: "p", Keep: 2, Dest: []string{"B"}}}
+	lastGood := Action{id(1), "A", ReasonLastGood}
+	tests := []struct {
+		name         string
+		in           func() Input
+		kept, delete bool // b1 on A
+	}{
+		{"dropping a destination while the newest is verified nowhere else", func() Input {
+			b0, b1 := on(bk(0, "p"), "A"), on(bk(1, "p"), "A")
+			return Input{Policies: toB, Backups: []Backup{b0, b1}, Nodes: []Node{node("A", b0, b1), node("B")},
+				StagingKeep: 10, Databases: []string{"shop"}}
+		}, true, false},
+		{"a database no longer configured gets no guard", func() Input {
+			b0, b1 := on(bk(0, "p"), "A"), on(bk(1, "p"), "A")
+			return Input{Policies: toB, Backups: []Backup{b0, b1}, Nodes: []Node{node("A", b0, b1), node("B")}, StagingKeep: 10}
+		}, false, true},
+		{"a newer verified copy on an offline PC is the last good one", func() Input {
+			b1, b2 := on(bk(1, "p"), "A"), on(bk(2, "p"), "C")
+			return Input{Policies: toB, Backups: []Backup{b1, b2}, Nodes: []Node{node("A", b1), node("B"), {AgentID: "C"}},
+				StagingKeep: 10, Databases: []string{"shop"}}
+		}, false, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := tt.in()
+			in.Now = t0.Add(48 * time.Hour)
+			p := Compute(in)
+			if hasAction(p.Kept, lastGood) != tt.kept {
+				t.Errorf("kept %+v", p.Kept)
+			}
+			if deleted := hasAction(p.Deletes, Action{id(1), "A", "no policy sends it here any more"}); deleted != tt.delete {
+				t.Errorf("deletes %+v", p.Deletes)
+			}
+			if tt.kept && !hasAction(p.Deletes, Action{id(0), "A", "no policy sends it here any more"}) {
+				t.Errorf("the older backup should still go: %+v", p.Deletes)
+			}
+		})
+	}
+}
+
+func TestLastGoodLeavesPolicyReasonsAlone(t *testing.T) {
+	b1, b2 := on(bk(1, "p"), "A"), on(bk(2, "p"), "A")
+	p := Compute(Input{Policies: []Policy{{Name: "p", Keep: 1}}, Backups: []Backup{b1, b2}, Nodes: []Node{node("A", b1, b2)},
+		StagingKeep: 10, Databases: []string{"shop"}, Now: t0.Add(48 * time.Hour)})
+	want := Plan{Deletes: []Action{{id(1), "A", "p keeps only the newest 1"}}}
+	if !reflect.DeepEqual(p, want) {
+		t.Errorf("got %+v", p)
+	}
+}
