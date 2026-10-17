@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { when, until, upFor, ago, bytes, plural } from './format.js'
+import { when, until, upFor, ago, bytes, plural, exportName } from './format.js'
 
 const now = new Date(2026, 9, 17, 10, 27)
 
@@ -45,4 +45,9 @@ test('a long name is shortened to fit its box', async () => {
   assert.equal(fit('PC-1', 18), 'PC-1')
   assert.equal(fit('ACCOUNTING-BACKUP-WORKSTATION-02', 18), 'ACCOUNTING-BACKUP…')
   assert.equal(fit('ACCOUNTING-BACKUP-WORKSTATION-02', 18).length, 18)
+})
+
+test('exportName matches the agent\'s download name', () => {
+  const at = new Date(2026, 9, 14, 0, 20, 0).toISOString()
+  assert.equal(exportName({ database: 'shop', created_at: at }), 'shop_2026-10-14_00-20-00')
 })

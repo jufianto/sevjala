@@ -95,7 +95,9 @@ func (c *Controller) Restore(ctx context.Context, req localapi.RestoreRequest) (
 			"%q cannot be a database name here: use letters, digits, _, $ or - (not first), at most 64", target)
 	}
 	if req.Replace && !req.DryRun && req.Confirm != target {
-		return localapi.Restore{}, localapi.ConfirmRequired(fmt.Sprintf("not confirmed: type the database name, %s, to replace it", target), target, 0, nil)
+		return localapi.Restore{}, localapi.ConfirmRequired(fmt.Sprintf(
+			"this replaces the live database %s with backup %s (made %s); Sevjala backs %s up first, and it is unavailable until loading ends",
+			target, b.BackupID, b.CreatedAt.Local().Format("2006-01-02 15:04"), target), target, 0, nil)
 	}
 	_, _, exists, err := dump.Schema(ctx, tools, conn, target)
 	switch {

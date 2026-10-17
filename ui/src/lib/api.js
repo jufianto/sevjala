@@ -30,3 +30,11 @@ export async function api(method, path, body) {
 }
 
 export const get = (path) => api('GET', path)
+
+// every runs fn now and then every ms while the page is visible; it returns
+// the stop function an $effect wants.
+export function every(ms, fn) {
+  fn()
+  const t = setInterval(() => document.visibilityState === 'visible' && fn(), ms)
+  return () => clearInterval(t)
+}

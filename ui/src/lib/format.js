@@ -57,3 +57,11 @@ export function upFor(s) {
 
 // fit shortens a name to n characters so it stays inside its box.
 export const fit = (s, n) => (s.length <= n ? s : s.slice(0, n - 1) + '…')
+
+// exportName is the agent's download name without its extension:
+// <database>_<yyyy-mm-dd_hh-mm-ss>, in this PC's time.
+export function exportName(m) {
+  const t = new Date(m.created_at)
+  const day = `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`
+  return `${m.database}_${day}_${pad(t.getHours())}-${pad(t.getMinutes())}-${pad(t.getSeconds())}`
+}

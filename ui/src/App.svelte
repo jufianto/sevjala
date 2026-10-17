@@ -4,10 +4,14 @@
   import Verdict from './Verdict.svelte'
   import Dashboard from './Dashboard.svelte'
   import BackupPCs from './BackupPCs.svelte'
+  import Backups from './Backups.svelte'
+  import Restore from './Restore.svelte'
   import { parse } from './lib/route.js'
 
   const nav = [
     ['', 'Dashboard'],
+    ['backups', 'Backups'],
+    ['restore', 'Restore'],
     ['pcs', 'Backup PCs'],
   ]
 
@@ -57,7 +61,11 @@
   <Verdict {v} />
 
   {#if st && !live.down}
-    {#if controller && route.page === 'pcs'}
+    {#if controller && route.page === 'backups'}
+      <Backups status={st} agents={live.agents} now={live.now} />
+    {:else if controller && route.page === 'restore'}
+      <Restore params={route.params} now={live.now} />
+    {:else if controller && route.page === 'pcs'}
       <BackupPCs status={st} agents={live.agents} now={live.now} />
     {:else}
       <Dashboard status={st} now={live.now} />

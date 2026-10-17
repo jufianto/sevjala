@@ -3,6 +3,7 @@ package coord
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -118,7 +119,7 @@ func TestReplaceAnswersConfirmRequired(t *testing.T) {
 	backupAt(t, ctrl, tick0, store.BackupCreated)
 	_, err := ctrl.Restore(context.Background(), localapi.RestoreRequest{Backup: "latest", Replace: true})
 	e, ok := localapi.AsConfirm(err)
-	if !ok || e.Word != "shop" {
+	if !ok || e.Word != "shop" || !strings.Contains(e.Msg, "backs shop up first") || !strings.Contains(e.Msg, "unavailable until loading ends") {
 		t.Errorf("err %v", err)
 	}
 }
