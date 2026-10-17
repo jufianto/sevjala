@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jufianto/sevjala/config"
+	"github.com/jufianto/sevjala/lanapi"
 	"github.com/jufianto/sevjala/localapi"
 	"github.com/jufianto/sevjala/logx"
 	"github.com/jufianto/sevjala/manage"
@@ -89,4 +90,12 @@ func (c *Controller) StillManager(agentID string) bool {
 	defer cancel()
 	a, err := c.Store.Agent(ctx, agentID)
 	return err == nil && a.Manager
+}
+
+// unmanage tells a removed manager it is one no more: no poll will reach it
+// again, and without this it would keep offering the controller's dashboard.
+func (c *Controller) unmanage(ctx context.Context, a store.Agent) {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	_, _ = c.LAN.PollStatus(ctx, net.JoinHostPort(a.LastIP, strconv.Itoa(a.Port)), a.FP, lanapi.Hello{Host: c.Host})
 }

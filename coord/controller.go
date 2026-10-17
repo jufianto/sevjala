@@ -256,6 +256,9 @@ func (c *Controller) RemoveAgent(ctx context.Context, agent string, force bool, 
 	c.mu.Unlock()
 	c.Log.InfoContext(ctx, "agent removed", logx.Event(logx.EventAgentRemoved), "agent_id", a.AgentID, "hostname", a.Hostname,
 		"only_copies", len(only))
+	if a.Manager {
+		c.unmanage(ctx, a)
+	}
 	if a.Manager && c.OnManagersChanged != nil {
 		c.OnManagersChanged()
 	}

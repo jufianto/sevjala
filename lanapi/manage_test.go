@@ -134,3 +134,14 @@ func TestManageOnAnOldNode(t *testing.T) {
 		t.Errorf("old node: %v", err)
 	}
 }
+
+func TestAPairingForgetsTheOldControllersHello(t *testing.T) {
+	n, _ := startManagedNode(t)
+	old := controller(t)
+	pair(t, old, n)
+	if _, err := old.PollStatus(context.Background(), n.srv.Addr(), n.id.FP, Hello{Manager: true, Host: "SERVER-01"}); err != nil {
+		t.Fatal(err)
+	}
+	pair(t, controller(t), n)
+	wantManager(t, n.srv, "", false, false)
+}

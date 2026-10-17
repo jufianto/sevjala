@@ -136,3 +136,41 @@ func TestManagerRunsControllerCommands(t *testing.T) {
 		return c == http.StatusForbidden
 	})
 }
+
+func TestRemovingAManagerTellsTheNode(t *testing.T) {
+	ctrl, ctrlDir := startAgent(t, config.RoleController)
+	node, nodeDir := startAgent(t, config.RoleNode)
+	ctx := context.Background()
+	cc, nc := localapi.NewClient(localapi.Endpoint(ctrlDir)), localapi.NewClient(localapi.Endpoint(nodeDir))
+	nodeSt, _ := nc.Status(ctx)
+	code, _ := nc.Code(ctx)
+	if _, err := cc.AddAgent(ctx, node.lan.Addr()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cc.Pair(ctx, nodeSt.AgentID, code.Code, nodeSt.FP); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ctrl.ctrl.SetManager(localapi.WithAdmin(ctx, true), nodeSt.AgentID, true); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the controller answers through the relay", func() bool {
+		c, _ := relay(t, nodeDir, http.MethodGet, "/status", nil)
+		return c == http.StatusOK
+	})
+
+	if _, err := cc.RemoveAgent(ctx, nodeSt.AgentID, false, ""); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	c, out := relay(t, nodeDir, http.MethodGet, "/status", nil)
+	for c != http.StatusForbidden && time.Since(start) < 5*time.Second {
+		time.Sleep(50 * time.Millisecond)
+		c, out = relay(t, nodeDir, http.MethodGet, "/status", nil)
+	}
+	if c != http.StatusForbidden || !strings.Contains(out["error"].(string), "this PC is not a manager of") || time.Since(start) > 5*time.Second {
+		t.Errorf("after removal, after %s: %d %v", time.Since(start).Round(time.Second), c, out)
+	}
+	if st, _ := nc.Status(ctx); st.Controller == nil || st.Controller.Manager {
+		t.Errorf("node still a manager: %+v", st.Controller)
+	}
+}

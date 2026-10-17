@@ -134,7 +134,9 @@ API, as a non-administrator caller whose account is `<X-Sevjala-By> via <manager
 at a time and drops a link the controller closed; the controller closes a link idle for 5 min and
 redials lost links with a 1 s → 15 s backoff, logging `manager_link_failed` once per failure
 streak (a 404 says the node is an older build: "update Sevjala on <PC>"). Turning a manager off,
-or removing the PC, closes its links at once. The node never dials.
+or removing the PC, closes its links at once; removing it also sends the node one last poll
+with `X-Sevjala-Manager: 0` (3 s, best effort), since no later poll will reach it. A new
+pairing on the node forgets the previous controller's hello. The node never dials.
 
 ### `PUT /backups/{id}` (since M2)
 

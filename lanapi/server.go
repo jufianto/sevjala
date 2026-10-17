@@ -188,6 +188,7 @@ func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.Lock()
 	s.controller = &p
+	s.hello = nil // a new controller says for itself whether this PC manages it
 	s.mu.Unlock()
 	s.opt.Log.Info("paired with controller", logx.Event(logx.EventPairSucceeded),
 		"controller_id", p.AgentID, "fp", p.FP, "remote", r.RemoteAddr)
