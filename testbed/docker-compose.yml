@@ -1,0 +1,32 @@
+# The Mac side of the testbed: a MariaDB replica of the Windows controller's
+# sevtest database, and the same web app reading it. Both listen on 127.0.0.1
+# only; the replica connects out to Windows. Guide: docs/smoke-tests.md, "Testbed".
+services:
+  replica:
+    image: mariadb:10.4
+    environment:
+      MARIADB_ROOT_PASSWORD: testbed-root
+      MARIADB_DATABASE: sevtest
+      MARIADB_USER: app
+      MARIADB_PASSWORD: testbed-app
+    command:
+      - --server-id=2
+      - --relay-log=relay-bin
+      - --read-only=1
+      - --replicate-do-db=sevtest
+      - --character-set-server=utf8mb4
+    ports: ["127.0.0.1:3317:3306"]
+    volumes:
+      - replica-data:/var/lib/mysql
+      - ./replica-init.sql:/docker-entrypoint-initdb.d/replica-init.sql:ro
+  app:
+    build: ./app
+    environment:
+      DB_HOST: replica
+      DB_USER: app
+      DB_PASSWORD: testbed-app
+      APP_LABEL: Mac (replica)
+    ports: ["127.0.0.1:8088:80"]
+    depends_on: [replica]
+volumes:
+  replica-data:

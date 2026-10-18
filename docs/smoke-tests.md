@@ -5,6 +5,39 @@ transcript into the milestone's PR. Pending ones are listed in [PROGRESS.md](./P
 For a first guided run on one Windows PC and one Mac, start with
 [test-walkthrough.md](./test-walkthrough.md).
 
+## Still to do — the whole list (2026-10-18)
+
+Every milestone's code is done; these runs on real machines are not. Each line points to the
+section with the exact steps. Work top to bottom: the first two unblock most of the rest.
+
+1. **Network path between the PCs.** Over Tailscale, packets from the Windows controller to the
+   Mac node larger than about 250 bytes are lost (2026-10-18), so the controller's TLS handshake
+   to the Mac fails ("closed the connection: try again") and the Mac shows offline. Fix the path
+   first (see [Testbed](#testbed--a-500-mb-database-and-replication-by-hand), step 0).
+2. **Update the Mac node** to the current build (`sudo sevjala update --from <mac binary>`); it
+   runs 0.3.0-alpha.3+1, without managers.
+3. **Testbed:** a 500 MB database backed up, restored and replicated by hand
+   ([Testbed](#testbed--a-500-mb-database-and-replication-by-hand)).
+4. **Managers** from the Mac to the Windows controller, all six steps
+   ([Managers](#managers--control-the-controller-from-a-backup-pc-ad-21-d-096d-101)).
+5. **M7 as a normal user** on the Windows controller: CLI items 1–3 and every screen
+   ([M7](#m7--every-operation-from-the-dashboard-d-089d-094)).
+6. **M6 dashboard:** Windows `sevjala ui` from an ordinary prompt and the tray; the Mac node's
+   dashboard and its `open.html` launch ([M6](#m6--dashboard)).
+7. **Where a backup came from:** the node dashboard's controller card; a node paired with a second
+   controller keeps the first one's backups as `(former)` ([section](#where-a-backup-came-from-d-086)).
+8. **M5 leftovers:** tray colours (green → yellow → red → grey → green), update with the tray
+   running, uninstall, pipe squatting (optional). Item 2 there is out of date: since M7 only
+   `db set --dumper` and `restore --file` ask for administrator rights ([M5](#m5--operator-comfort)).
+9. **M4 on a node:** restore a backup only a node holds, a damaged node copy, Ctrl-C while
+   loading, restore from an exported file, replace and failed replace on a scratch database
+   ([M4](#m4--restore)).
+10. **M3:** 48 h unattended with the scheduled policies and retention ([M3](#m3--unattended)).
+11. **M1/M2 with three PCs:** discover, pair and a first backup verified on every node
+    ([M1](#m1--discover-pair-ping-across-two-pcs), [M2](#m2--first-backup-to-three-pcs)).
+12. **Windows 7:** P0 install on a Windows 7 VM, the tray icon and menu, and the dashboard in
+    Chrome 109 / Firefox 115 ([P0](#windows-7-vm-and-windows-11), M5 item 7, M6 item 4, M7 item 4).
+
 ## Installer — double-click setup (Windows)
 
 Covered without Windows: the wizard's steps (choices, copy, install, PATH, pairing, update,
@@ -557,3 +590,108 @@ Still to do:
    answers "SERVER-01 has not connected to this PC for …" after about 20 s.
 6. **Firewall:** no new inbound rule on the database PC; on the manager PC, only the existing
    Sevjala port is open.
+
+## Testbed — a 500 MB database and replication by hand
+
+What it checks: Sevjala backs up, copies and restores a realistic 500 MB database, and a
+MariaDB replica on another PC follows the controller's database. Sevjala does not set up or
+watch replication (AD-17; that is [ADR 0001](./adr/0001-replication-setup-and-monitor.md),
+Phase 3): here it is done by hand, next to Sevjala, to learn what an operator goes through.
+
+Layout: the Windows controller (XAMPP MariaDB 10.1) is the **primary**; the Mac runs a MariaDB
+10.4 **replica** in Docker, plus the same small web app on both (add and list notes; on the
+replica it shows how far behind it is and refuses writes). Files are in [`testbed/`](../testbed/):
+`app/` (PHP 5.6 and 8), `sql/schema.sql`, `sql/seed-500mb.sql`, `docker-compose.yml`.
+Replace `<WINDOWS-IP>` and `<MAC-IP>` with the addresses each PC has for the other (the
+Tailscale ones when they are not on the same LAN).
+
+Tested on macOS (2026-10-18) with a MariaDB 10.1 container as the primary: replication ran
+(IO and SQL threads Yes, 0 s behind), 20 000 seeded rows arrived with equal `CHECKSUM TABLE`,
+a note added on the primary's app appeared on the replica's, and the replica's app refused a
+write ("running with the --read-only option"); the app passes `php -l` on PHP 5.6.
+
+0. **Network check (from the Mac).** Copy the testbed to the Windows PC as `C:\sevtest` (or with
+   `scp -r testbed <user>@<WINDOWS-IP>:C:/sevtest`), then fetch a file back:
+   `scp <user>@<WINDOWS-IP>:C:/sevtest/sql/seed-500mb.sql /tmp/` must finish in a second. If it
+   hangs, large packets from Windows to the Mac are lost (as on 2026-10-18 over a direct IPv6
+   Tailscale path): restart Tailscale on both PCs, check `tailscale ping <WINDOWS-IP>`, and repeat
+   until the copy works. Replication and Sevjala's own traffic both need this.
+1. **Binary log on Windows.** Stop MySQL in the XAMPP Control Panel. In
+   `C:\xampp\mysql\bin\my.ini`, in the `[mysqld]` part, `server-id = 1` is already there; change
+   `#log-bin=mysql-bin` (the first one, near "Replication Master Server") to:
+
+   ```ini
+   log-bin=mysql-bin
+   binlog_format=ROW
+   expire_logs_days=3
+   ```
+
+   Start MySQL again. (`bind-address` stays commented, so MySQL listens on every address.)
+2. **Firewall on Windows** (administrator prompt), only the Mac may connect:
+   `netsh advfirewall firewall add rule name="Sevjala testbed MariaDB" dir=in action=allow protocol=TCP localport=3306 remoteip=<MAC-IP>`
+3. **Replication user and starting point** (`C:\xampp\mysql\bin\mysql.exe -u root -p`), before
+   `sevtest` exists, so the replica sees everything from its first statement:
+
+   ```sql
+   CREATE USER 'repl'@'<MAC-IP>' IDENTIFIED BY '<pick a password>';
+   GRANT REPLICATION SLAVE ON *.* TO 'repl'@'<MAC-IP>';
+   SHOW MASTER STATUS;
+   ```
+
+   Note `File` (e.g. `mysql-bin.000001`) and `Position`.
+4. **Replica on the Mac**, in `testbed/`:
+
+   ```sh
+   docker compose -p sevtest up -d --build
+   docker exec -it sevtest-replica-1 mariadb -uroot -ptestbed-root
+   ```
+
+   ```sql
+   CHANGE MASTER TO MASTER_HOST='<WINDOWS-IP>', MASTER_PORT=3306, MASTER_USER='repl',
+     MASTER_PASSWORD='<the password>', MASTER_LOG_FILE='<File>', MASTER_LOG_POS=<Position>;
+   START SLAVE;
+   SHOW SLAVE STATUS\G
+   ```
+
+   **Expect:** `Slave_IO_Running: Yes`, `Slave_SQL_Running: Yes`, `Seconds_Behind_Master: 0`.
+   `Connecting` with `Last_IO_Error` "Can't connect" means the firewall or address; "Access
+   denied" means the user's host or password. The app is at http://127.0.0.1:8088 on the Mac.
+5. **Database, app user and app on Windows** (`mysql.exe -u root -p`):
+
+   ```sql
+   SOURCE C:/sevtest/sql/schema.sql
+   CREATE USER 'app'@'localhost' IDENTIFIED BY '<pick a password>';
+   GRANT SELECT, INSERT ON sevtest.* TO 'app'@'localhost';
+   ```
+
+   Create `C:\sevtest\app\config.local.php` with `<?php $cfg['password'] = '<that password>';`,
+   then start the app in a Command Prompt and leave it open:
+   `C:\xampp\php\php.exe -S 127.0.0.1:8088 -t C:\sevtest\app` → http://127.0.0.1:8088 on Windows.
+   Add a note there: within a second or two it is on the Mac's page, which says
+   `read-only`, `IO running, SQL running, behind by 0 s`. Adding a note on the Mac's page is
+   refused.
+6. **500 MB.** On Windows: `mysql.exe -u root -p sevtest < C:\sevtest\sql\seed-500mb.sql`
+   (minutes; it prints `notes 500000` and `size_mb` around 500–600). Meanwhile refresh the Mac's
+   page: the count rises and `behind by` grows, then returns to 0 when it has caught up.
+   **Check:** `CHECKSUM TABLE sevtest.notes;` gives the same number on both (slow on 500 MB; run
+   it when both are idle).
+7. **Sevjala backs it up.** On the Windows controller: `sevjala status` lists the databases it
+   backs up; add `sevtest` to them (`db set --db` replaces the list):
+   `sevjala db set --db <the current ones>,sevtest`, then `sevjala backup now --db sevtest`.
+   **Expect:** a backup of a few hundred MB (the notes are random hex, so gzip roughly halves
+   them) verified on every backup PC (`sevjala backups list`), and in the dashboard's Backups
+   screen.
+8. **Restore it.** `sevjala restore latest --db sevtest --into sevtest_check`, then
+   `SELECT COUNT(*) FROM sevtest_check.notes;` equals the count in `sevtest`, and
+   `CHECKSUM TABLE sevtest.notes, sevtest_check.notes;` matches (with no writes in between).
+   The restore runs on the primary only: `sevtest_check` is not replicated
+   (`--replicate-do-db=sevtest`). Drop it when done.
+9. **Replication outage.** Stop the replica (`docker compose -p sevtest stop replica`), add a few
+   notes on Windows, start it again: it catches up and the counts match. Stop MySQL on Windows
+   instead: the Mac's page shows `IO Connecting` (or `No`) with the error, and recovers by itself
+   after MySQL starts.
+
+Clean up: on the Mac `docker compose -p sevtest down -v`; on Windows remove the firewall rule
+(`netsh advfirewall firewall delete rule name="Sevjala testbed MariaDB"`), `DROP DATABASE
+sevtest; DROP USER 'repl'@'<MAC-IP>', 'app'@'localhost';`, take `sevtest` out of `db set --db`,
+and comment the three `my.ini` lines again (then `RESET MASTER;` frees the binary logs).
