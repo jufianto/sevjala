@@ -204,11 +204,14 @@ func renderHeld(w io.Writer, held []inventory.Manifest, sources []inventory.Sour
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "BACKUP\tDATABASE\tFROM\tCREATED\tSIZE\tTAGS")
+	var total int64
 	for _, m := range held {
+		total += m.Size
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", m.BackupID, m.Database, from[m.SourceAgent], m.CreatedAt.Local().Format("2006-01-02 15:04"),
 			inventory.HumanBytes(m.Size), strings.Join(m.Tags, ","))
 	}
 	tw.Flush()
+	fmt.Fprintf(w, "in all: %s, %s on this PC\n", plural(len(held), "backup"), inventory.HumanBytes(total))
 	fmt.Fprintln(w, "\ncopy one out: sevjala backups export <BACKUP> --to <FOLDER>")
 }
 

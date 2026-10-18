@@ -44,7 +44,9 @@ section with the exact steps. Work top to bottom: the first two unblock most of 
 . **Dump tool by folder** (D-105): on the Windows controller `sevjala db set --dumper "C:\xampp\mysql\bin"`
     (a UAC prompt) saves `...\mysqldump.exe`; a wrong folder says which; the Database screen from
     `sevjala ui` in an administrator prompt saves a folder, from an ordinary prompt it is refused
-    with "needs administrator rights".
+. **Space used** (D-106): `sevjala backups list` on the controller ends with SPACE USED (controller,
+    each backup PC, in all); compare each PC's size with its store folder on disk. On the Mac node the
+    list ends with "in all: …".
 
 ## Installer — double-click setup (Windows)
 

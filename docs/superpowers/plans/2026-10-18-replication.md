@@ -508,7 +508,7 @@
   - `[controller.replica]`/`[node.replica]`;
   - the seed files;
   - the `replica-repl`/`replica-db` secrets.
-- [ ] **Step 2:** `decisions.md` from the next free D number (D-106 at the time of writing), one row per spec "Calls I made" item that the owner did not overrule. Each row gives the date 2026-10-18 and the reason from the spec.
+- [ ] **Step 2:** `decisions.md` from the next free D number (D-107 at the time of writing), one row per spec "Calls I made" item that the owner did not overrule. Each row gives the date 2026-10-18 and the reason from the spec.
 - [ ] **Step 3:** `smoke-tests.md`:
   - a "Replication" section on the two real PCs: `replica local` on the backup PC (XAMPP and Docker), `replica setup`, the insert through the testbed app showing on the replica, MySQL restart on the replica, `replica resync` after a deliberate 1062, `promote`, `remove`;
   - the Testbed section's manual replication steps are replaced by a pointer to this section; the 500 MB data and app steps stay;

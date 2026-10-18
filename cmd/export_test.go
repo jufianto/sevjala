@@ -116,6 +116,7 @@ func TestRenderHeld(t *testing.T) {
 		"BK-20261001-002000-0001  shop      OLD-PC (former)    2026-10-01 00:20  1.0 KiB  daily\n" +
 		"BK-20261002-002000-0002  hr        5e5e0000 (former)  2026-10-02 00:20  1.0 KiB  daily\n" +
 		"BK-20261014-002000-30D3  shop      SERVER-01          2026-10-14 00:20  2.0 KiB  daily\n" +
+		"in all: 3 backups, 4.0 KiB on this PC\n" +
 		"\ncopy one out: sevjala backups export <BACKUP> --to <FOLDER>\n"
 	if b.String() != want {
 		t.Errorf("got\n%s\nwant\n%s", b.String(), want)

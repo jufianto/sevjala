@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jufianto/sevjala/inventory"
 	"github.com/jufianto/sevjala/localapi"
 )
 
@@ -153,5 +154,30 @@ func TestWatchBackupStopsWhenNothingMoves(t *testing.T) {
 	out.Reset()
 	if ok, err := watchBackups(context.Background(), script(steps...), []localapi.BackupJob{{BackupID: id}}, &out, time.Millisecond); !ok || err != nil {
 		t.Errorf("long transfer: ok = %v, err = %v\n%s", ok, err, out.String())
+	}
+}
+
+func TestRenderSpace(t *testing.T) {
+	held := []inventory.Manifest{{BackupID: "BK-1", Size: 300 << 20}, {BackupID: "BK-2", Size: 200 << 20}}
+	bs := []localapi.Backup{
+		{BackupID: "BK-1", Size: 300 << 20, Copies: []localapi.BackupCopy{
+			{AgentID: "a1", Hostname: "Office PC", State: "verified"}, {AgentID: "a2", Hostname: "BACKUP-PC-2", State: "verified"}}},
+		{BackupID: "BK-2", Size: 200 << 20, Copies: []localapi.BackupCopy{
+			{AgentID: "a1", Hostname: "Office PC", State: "verified"}, {AgentID: "a2", Hostname: "BACKUP-PC-2", State: "pending"}}},
+		{BackupID: "BK-0", Size: 1 << 30, Copies: []localapi.BackupCopy{{AgentID: "a1", Hostname: "Office PC", State: "deleted"}}},
+	}
+	var b bytes.Buffer
+	renderSpace(&b, "SERVER-01", nil, nil)
+	if b.Len() != 0 {
+		t.Errorf("no backups: %q", b.String())
+	}
+	renderSpace(&b, "SERVER-01", held, bs)
+	want := "\nSPACE USED ON           BACKUPS  SIZE\n" +
+		"SERVER-01 (controller)  2        500.0 MiB\n" +
+		"BACKUP-PC-2             1        300.0 MiB\n" +
+		"Office PC               2        500.0 MiB\n" +
+		"in all                  5        1.3 GiB\n"
+	if b.String() != want {
+		t.Errorf("got\n%s\nwant\n%s", b.String(), want)
 	}
 }

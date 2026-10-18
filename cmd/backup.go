@@ -170,7 +170,8 @@ func newBackupsCmd(g *globals) *cobra.Command {
 		Use:   "list",
 		Short: "List backups and where their copies are",
 		Long: `On the controller: every backup and where its copies are. COPIES counts the backup PCs
-holding a verified copy; --matrix shows one column per PC.
+holding a verified copy; --matrix shows one column per PC. SPACE USED totals the disk the
+backups take on the controller (its own copy of the newest) and on each backup PC.
 On a backup PC: the backups this PC holds.`,
 		Example: `  sevjala backups list
   sevjala backups list --matrix
@@ -203,8 +204,15 @@ On a backup PC: the backups this PC holds.`,
 			if err != nil {
 				return err
 			}
+			held, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) ([]inventory.Manifest, error) {
+				return cl.Held(ctx)
+			})
+			if err != nil {
+				return err
+			}
 			if matrix {
 				renderMatrix(c.OutOrStdout(), bs, runtime.GOOS)
+				renderSpace(c.OutOrStdout(), st.Hostname, held, bs)
 				return nil
 			}
 			ps, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) ([]localapi.Policy, error) {
@@ -218,6 +226,7 @@ On a backup PC: the backups this PC holds.`,
 				order[i] = p.Name
 			}
 			renderBackups(c.OutOrStdout(), bs, order)
+			renderSpace(c.OutOrStdout(), st.Hostname, held, bs)
 			return nil
 		},
 	}
@@ -324,4 +333,52 @@ func renderMatrix(w io.Writer, bs []localapi.Backup, goos string) {
 	tw.Flush()
 	fmt.Fprintf(w, "\n%s verified  %s pending  %s failed  %s offline  ! corrupt  - no copy (deleted or not planned)\n",
 		marks["verified"], marks["pending"], marks["failed"], marks["offline"])
+}
+
+// renderSpace totals the disk the backups take: the controller's own copy
+// (the newest per database, from held) and each backup PC's verified copies.
+func renderSpace(w io.Writer, host string, held []inventory.Manifest, bs []localapi.Backup) {
+	if len(held) == 0 && len(bs) == 0 {
+		return
+	}
+	type row struct {
+		name  string
+		n     int
+		bytes int64
+	}
+	ctrl := row{name: host + " (controller)"}
+	for _, m := range held {
+		ctrl.n++
+		ctrl.bytes += m.Size
+	}
+	byAgent := map[string]*row{}
+	for _, b := range bs {
+		for _, c := range b.Copies {
+			if c.State != "verified" {
+				continue
+			}
+			r := byAgent[c.AgentID]
+			if r == nil {
+				r = &row{name: c.Hostname}
+				byAgent[c.AgentID] = r
+			}
+			r.n++
+			r.bytes += b.Size
+		}
+	}
+	rows := []row{ctrl}
+	for _, r := range byAgent {
+		rows = append(rows, *r)
+	}
+	slices.SortFunc(rows[1:], func(a, b row) int { return strings.Compare(strings.ToLower(a.name), strings.ToLower(b.name)) })
+	total := row{name: "in all"}
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "\nSPACE USED ON\tBACKUPS\tSIZE")
+	for _, r := range rows {
+		fmt.Fprintf(tw, "%s\t%d\t%s\n", r.name, r.n, inventory.HumanBytes(r.bytes))
+		total.n += r.n
+		total.bytes += r.bytes
+	}
+	fmt.Fprintf(tw, "%s\t%d\t%s\n", total.name, total.n, inventory.HumanBytes(total.bytes))
+	tw.Flush()
 }
