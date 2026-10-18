@@ -78,7 +78,7 @@
   <section class="grid">
     <article class="card">
       <div class="label">This backup PC holds</div>
-      <h3>{plural(status.store?.backups ?? 0, 'backup', 'backups')}</h3>
+      <h3>{plural(status.store?.backups ?? 0, 'backup', 'backups')}{#if status.store?.bytes} · {bytes(status.store.bytes)}{/if}</h3>
       {#each status.store?.sources ?? [] as s}
         <p>
           {s.backups} from <strong>{sourceName(s)}</strong>{#if !s.current}

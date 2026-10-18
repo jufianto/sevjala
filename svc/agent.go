@@ -251,6 +251,9 @@ func (a *Agent) status() localapi.Status {
 			info.Problems = append(info.Problems, err.Error())
 		} else {
 			info.Backups, info.Problems = len(inv.Backups), append(info.Problems, inv.Problems...)
+			for _, c := range inv.Backups {
+				info.Bytes += c.Size
+			}
 		}
 		var current string
 		if lan := a.lanUp.Load(); lan != nil {

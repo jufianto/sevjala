@@ -401,7 +401,7 @@ loaded.
 | `data_dir` | string | absolute data dir |
 | `agent_id` | string | since M1 |
 | `fp` | string | since M1 |
-| `store` | object | node only, since M2: `{"path","free_bytes","backups":N,"problems":[…]}`; `sources` since 0.3.0-alpha.4: `[{"agent_id","hostname","backups":N,"current":bool}]`, the controllers its backups came from, the paired one (`current`) first. A pairing replaces the controller and keeps the old one's backups, which nothing deletes |
+| `store` | object | node only, since M2: `{"path","free_bytes","backups":N,"bytes":N,"problems":[…]}` (`bytes`, the size of the backups held, since D-106); `sources` since 0.3.0-alpha.4: `[{"agent_id","hostname","backups":N,"current":bool}]`, the controllers its backups came from, the paired one (`current`) first. A pairing replaces the controller and keeps the old one's backups, which nothing deletes |
 | `hostname` | string | since M5 |
 | `health` | object | since M5, `Health` below; omitted while the agent starts |
 | `controller` | object | node only, paired, since 0.3.0-alpha.4: `{"agent_id","hostname","paired_at"}`; `hostname` is empty until a backup from it carries one. Since managers: `manager` (the latest poll said this PC is a manager), `links` (manager links waiting idle), `last_contact` (the last request from the controller); `hostname` also comes from the poll's `X-Sevjala-Controller-Host` |

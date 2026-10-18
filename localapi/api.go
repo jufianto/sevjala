@@ -265,6 +265,7 @@ type StoreInfo struct {
 	Path      string   `json:"path"`
 	FreeBytes int64    `json:"free_bytes"`
 	Backups   int      `json:"backups"`
+	Bytes     int64    `json:"bytes"` // the size of the backups it holds
 	Problems  []string `json:"problems"`
 	// Sources are the controllers the backups came from, the paired one first.
 	Sources []inventory.Source `json:"sources,omitempty"`

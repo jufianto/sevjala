@@ -219,4 +219,7 @@ func TestNodeAgentNamesItsControllers(t *testing.T) {
 	}) {
 		t.Errorf("store %+v", st.Store)
 	}
+	if want := int64(2 * len("-- BK-20261001-010000-0001")); st.Store.Bytes != want {
+		t.Errorf("store bytes %d, want %d", st.Store.Bytes, want)
+	}
 }
