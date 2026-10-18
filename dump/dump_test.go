@@ -45,7 +45,7 @@ func TestFindTools(t *testing.T) {
 	join := filepath.Join
 	tests := []struct {
 		name, goos, configured string
-		files                  []string
+		files, dirs            []string
 		path                   map[string]string
 		want                   Tools
 		wantErr                string
@@ -53,7 +53,18 @@ func TestFindTools(t *testing.T) {
 		{name: "configured", goos: "linux", configured: "/opt/m/bin/mysqldump",
 			files: []string{"/opt/m/bin/mysqldump", join("/opt/m/bin", "mysql")},
 			want:  Tools{"/opt/m/bin/mysqldump", join("/opt/m/bin", "mysql")}},
-		{name: "configured missing", goos: "linux", configured: "/nope/mysqldump", wantErr: "--dumper"},
+		{name: "configured missing", goos: "linux", configured: "/nope/mysqldump", wantErr: "/nope/mysqldump does not exist on this PC"},
+		{name: "configured folder", goos: "windows", configured: `D:\xampp88\mysql\bin`, dirs: []string{`D:\xampp88\mysql\bin`},
+			files: []string{join(`D:\xampp88\mysql\bin`, "mysqldump.exe"), join(`D:\xampp88\mysql\bin`, "mysql.exe")},
+			want:  Tools{join(`D:\xampp88\mysql\bin`, "mysqldump.exe"), join(`D:\xampp88\mysql\bin`, "mysql.exe")}},
+		{name: "configured folder, mariadb names", goos: "linux", configured: "/opt/m/bin", dirs: []string{"/opt/m/bin"},
+			files: []string{join("/opt/m/bin", "mariadb-dump"), join("/opt/m/bin", "mariadb")},
+			want:  Tools{join("/opt/m/bin", "mariadb-dump"), join("/opt/m/bin", "mariadb")}},
+		{name: "configured folder without a dumper", goos: "windows", configured: `D:\tools`, dirs: []string{`D:\tools`},
+			wantErr: `D:\tools has no mysqldump.exe or mariadb-dump.exe`},
+		{name: "configured without .exe", goos: "windows", configured: "D:/m/bin/mysqldump",
+			files: []string{"D:/m/bin/mysqldump.exe", join("D:/m/bin", "mysql.exe")},
+			want:  Tools{"D:/m/bin/mysqldump.exe", join("D:/m/bin", "mysql.exe")}},
 		{name: "xampp windows", goos: "windows",
 			files: []string{join(`C:\xampp\mysql\bin`, "mysqldump.exe"), join(`C:\xampp\mysql\bin`, "mysql.exe")},
 			want:  Tools{join(`C:\xampp\mysql\bin`, "mysqldump.exe"), join(`C:\xampp\mysql\bin`, "mysql.exe")}},
@@ -73,7 +84,7 @@ func TestFindTools(t *testing.T) {
 				return "", errors.New("not found")
 			}
 			exists := func(p string) bool { return slices.Contains(tt.files, p) }
-			got, err := findTools(tt.configured, tt.goos, lookPath, exists)
+			got, err := findTools(tt.configured, tt.goos, lookPath, exists, func(p string) bool { return slices.Contains(tt.dirs, p) })
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("err = %v, want %q", err, tt.wantErr)

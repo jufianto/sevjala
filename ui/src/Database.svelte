@@ -13,7 +13,15 @@
   async function load() {
     try {
       cfg = await get('/db')
-      form = { host: cfg.host, port: cfg.port, user: cfg.user, password: '', noPassword: false, databases: [...cfg.databases] }
+      form = {
+        host: cfg.host,
+        port: cfg.port,
+        user: cfg.user,
+        password: '',
+        noPassword: false,
+        databases: [...cfg.databases],
+        dumper: cfg.dumper ?? '',
+      }
       err = ''
     } catch (e) {
       err = e.message
@@ -48,6 +56,7 @@
     else if (form.password) s.password = form.password
     const dbs = [...form.databases].sort()
     if (dbs.join() !== [...cfg.databases].sort().join()) s.databases = dbs
+    if (form.dumper.trim() !== (cfg.dumper ?? '')) s.dumper = form.dumper.trim()
     if (!Object.keys(s).length) {
       note = 'Nothing changed.'
       return
@@ -101,10 +110,14 @@
       </fieldset>
 
       <label>
-        Dump tool
-        <input value={cfg.dumper || 'found automatically'} readonly />
+        Dump tool: mysqldump, or the folder holding it
+        <input bind:value={form.dumper} placeholder="found automatically (XAMPP, then PATH)" autocomplete="off" spellcheck="false" />
       </label>
-      <p class="muted">Changing the dump tool needs an administrator: run <code>sevjala db set --dumper &lt;path&gt;</code> {adminWhere(live.via, live.status?.hostname)}.</p>
+      <p class="muted">
+        A folder such as <code>C:\xampp\mysql\bin</code> is enough; leave it empty to find it automatically. Changing it
+        needs administrator rights: open this dashboard with <code>sevjala ui</code> {adminWhere(live.via, live.status?.hostname)},
+        or run <code>sevjala db set --dumper "&lt;folder&gt;"</code> there.
+      </p>
 
       <div class="toolbar"><button class="primary" disabled={busy || needsPassword}>{busy ? 'Testing…' : 'Save'}</button></div>
     </form>

@@ -328,7 +328,7 @@ on a node`); a LAN failure behind a route is 502. Bodies are capped at 4 KiB.
 | `DELETE /agents/{agent}[?force=true[&confirm=<hostname>]]` | controller | — | `Agent` removed. 409 while a policy sends only to it; while it holds the only verified copy of a configured database (no other PC and not the controller's own copy holds one; `force` does not help, M7); without `force` while a live backup's only verified copy is on it; with `force`, `confirm_required` until `confirm` is its hostname (M7). Drops its copy records and its policy destinations; nothing is sent to the node. |
 | `GET /db` (M7) | controller | — | `DBConfig` |
 | `POST /db/detect` (M2) | controller | — | `Detection` |
-| `PUT /db` (M2) | controller | `DBSettings`; tested against the server before anything is saved | `Detection` |
+| `PUT /db` (M2) | controller | `DBSettings`; tested against the server before anything is saved. `dumper` may name the program, the same path without `.exe`, or the folder holding `mysqldump` or `mariadb-dump`; the program found is what is saved, `""` saves automatic (D-105). 400 `<path> does not exist on this PC; …` or `<folder> has no mysqldump.exe or mariadb-dump.exe; …` | `Detection` |
 | `POST /backup/now` (M2) | controller | `{"db":"<name or empty for all configured>","tags":["…"]}` | `{"backups":[{"backup_id","database"}]}`; 409 while that database is dumping |
 | `GET /backups` (M2) | controller | `?all=1` (M3) includes expired backups | `{"backups":[Backup…]}`, newest first |
 | `GET /backups/{id}` (M2) | controller | — | `Backup`; 404 unknown |

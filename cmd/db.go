@@ -84,7 +84,7 @@ system keyring, never in a file.`,
 	fl.StringVar(&f.host, "host", "", "`HOST` of the MySQL server (default 127.0.0.1)")
 	fl.IntVar(&f.port, "port", 0, "`PORT` of the MySQL server (default 3306)")
 	fl.StringVar(&f.user, "user", "", "MySQL `USER` (default root)")
-	fl.StringVar(&f.dumper, "dumper", "", "`FILE`: full path to mysqldump (default: XAMPP, then PATH)")
+	fl.StringVar(&f.dumper, "dumper", "", "`PATH` to mysqldump or the folder holding it, like C:\\xampp\\mysql\\bin; \"\" finds it again (default: XAMPP, then PATH)")
 	fl.StringSliceVar(&f.dbs, "db", nil, "`NAMES` of the databases to back up, comma separated")
 	fl.BoolVar(&f.password, "password", false, "prompt for the password")
 	fl.BoolVar(&f.passwordStdin, "password-stdin", false, "read the password from the first line of stdin")

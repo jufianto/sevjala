@@ -79,6 +79,9 @@ func (c *Controller) SetDatabase(ctx context.Context, s localapi.DBSettings) (lo
 	if err != nil {
 		return localapi.Detection{}, err
 	}
+	if db.Dumper != "" {
+		db.Dumper = d.Dumper // the program, when a folder or a path without .exe was given
+	}
 	for _, name := range db.Databases {
 		if !slices.ContainsFunc(d.Databases, func(x localapi.DBDatabase) bool { return x.Name == name }) {
 			return localapi.Detection{}, localapi.Errorf(http.StatusBadRequest, "database %s does not exist on %s:%d", name, db.Host, db.Port)

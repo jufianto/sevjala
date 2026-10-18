@@ -281,3 +281,22 @@ func TestSetDatabaseRefusesBeforeSaving(t *testing.T) {
 		})
 	}
 }
+
+func TestSetDatabaseSavesTheDumpProgramFound(t *testing.T) {
+	dumptest.Use(t, dumptest.OK)
+	ctrl := newController(t)
+	dir := filepath.Dir(os.Args[0])
+	if _, err := ctrl.SetDatabase(context.Background(), localapi.DBSettings{Dumper: &dir}); err != nil {
+		t.Fatal(err)
+	}
+	if got := ctrl.config().Controller.Database.Dumper; got != os.Args[0] {
+		t.Errorf("saved %q, want the program %q", got, os.Args[0])
+	}
+	auto := ""
+	if _, err := ctrl.SetDatabase(context.Background(), localapi.DBSettings{Dumper: &auto}); err != nil {
+		t.Fatal(err)
+	}
+	if got := ctrl.config().Controller.Database.Dumper; got != "" {
+		t.Errorf("automatic saved as %q", got)
+	}
+}

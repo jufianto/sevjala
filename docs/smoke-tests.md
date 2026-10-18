@@ -41,7 +41,10 @@ section with the exact steps. Work top to bottom: the first two unblock most of 
 . **Names** (D-103): on the controller `sevjala agents name <the Mac> "Mac backup"`; `agents`
     shows `Mac backup (<computer name>)`, `ping "mac backup"` reaches it, the dashboard's Backup PCs
     diagram and details show the name, Rename… there changes it and "Use its computer name"
-    clears it; `sevjala discover` afterwards does not undo it.
+. **Dump tool by folder** (D-105): on the Windows controller `sevjala db set --dumper "C:\xampp\mysql\bin"`
+    (a UAC prompt) saves `...\mysqldump.exe`; a wrong folder says which; the Database screen from
+    `sevjala ui` in an administrator prompt saves a folder, from an ordinary prompt it is refused
+    with "needs administrator rights".
 
 ## Installer — double-click setup (Windows)
 

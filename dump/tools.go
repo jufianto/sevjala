@@ -29,10 +29,10 @@ func xamppBin(goos string) string {
 // mysqldump or mariadb-dump on PATH) and the mysql client next to it, which
 // detection and restore use instead of a Go MySQL driver.
 func FindTools(configured string) (Tools, error) {
-	return findTools(configured, runtime.GOOS, exec.LookPath, fileExists)
+	return findTools(configured, runtime.GOOS, exec.LookPath, fileExists, dirExists)
 }
 
-func findTools(configured, goos string, lookPath func(string) (string, error), exists func(string) bool) (Tools, error) {
+func findTools(configured, goos string, lookPath func(string) (string, error), exists, isDir func(string) bool) (Tools, error) {
 	exe := func(name string) string {
 		if goos == "windows" {
 			return name + ".exe"
@@ -43,10 +43,11 @@ func findTools(configured, goos string, lookPath func(string) (string, error), e
 	var dumper string
 	switch {
 	case configured != "":
-		if !exists(configured) {
-			return Tools{}, fmt.Errorf("dumper %s does not exist; fix it with 'sevjala db set --dumper <path>'", configured)
+		p, err := configuredDumper(configured, xampp, exe, exists, isDir)
+		if err != nil {
+			return Tools{}, err
 		}
-		dumper = configured
+		dumper = p
 	case exists(filepath.Join(xampp, exe("mysqldump"))):
 		dumper = filepath.Join(xampp, exe("mysqldump"))
 	default:
@@ -74,7 +75,31 @@ func findTools(configured, goos string, lookPath func(string) (string, error), e
 	return Tools{}, fmt.Errorf("mysql client not found next to %s or on PATH", dumper)
 }
 
+// configuredDumper accepts the dump program itself, the same path without
+// .exe, or the folder holding it (an XAMPP mysql\bin).
+func configuredDumper(p, example string, exe func(string) string, exists, isDir func(string) bool) (string, error) {
+	switch {
+	case exists(p):
+		return p, nil
+	case exe(p) != p && filepath.Ext(p) == "" && exists(exe(p)):
+		return exe(p), nil
+	case isDir(p):
+		for _, name := range []string{"mysqldump", "mariadb-dump"} {
+			if f := filepath.Join(p, exe(name)); exists(f) {
+				return f, nil
+			}
+		}
+		return "", fmt.Errorf("%s has no %s or %s; give the folder holding them, like %s", p, exe("mysqldump"), exe("mariadb-dump"), example)
+	}
+	return "", fmt.Errorf("%s does not exist on this PC; give the path to %s or the folder holding it, like %s", p, exe("mysqldump"), example)
+}
+
 func fileExists(p string) bool {
 	fi, err := os.Stat(p)
 	return err == nil && !fi.IsDir()
+}
+
+func dirExists(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && fi.IsDir()
 }
