@@ -16,6 +16,8 @@ func TestControllerFlagOnlyWithControllerCommands(t *testing.T) {
 		{"--controller", "service", "status"},
 		{"--controller", "agents", "manager", "PC-1", "on"},
 		{"code", "--controller"},
+		{"-c", "service", "status"},
+		{"code", "-c"},
 	} {
 		var out, errOut bytes.Buffer
 		code := run(append(args, "--data-dir", t.TempDir()), &out, &errOut)

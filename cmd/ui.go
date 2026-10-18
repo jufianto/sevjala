@@ -41,9 +41,9 @@ func newUICmd(g *globals) *cobra.Command {
 and the backup PCs drawn as a diagram, updating by itself. Only this PC can open it
 (127.0.0.1, with a link that works once); it needs no administrator rights and stops by
 itself a minute after its browser tab is closed. On a backup PC the controller made a
-manager, --controller opens the controller's dashboard instead.`,
+manager, -c (--controller) opens the controller's dashboard instead.`,
 		Example: `  sevjala ui
-  sevjala ui --controller      (on a manager: the controller's dashboard)
+  sevjala ui -c                (on a manager: the controller's dashboard)
   sevjala ui --no-browser      (print the link instead of opening a browser)`,
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {

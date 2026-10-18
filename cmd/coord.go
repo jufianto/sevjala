@@ -265,7 +265,7 @@ only to that PC, and, without --force, while some backup exists only there.`,
 	c.AddCommand(&cobra.Command{
 		Use:   "manager <agent> on|off",
 		Short: "Let a backup PC run controller commands and open its dashboard (controller)",
-		Long: `A manager runs 'sevjala --controller <command>' and 'sevjala ui --controller' as if it
+		Long: `A manager runs 'sevjala -c <command>' and 'sevjala ui -c' (-c is short for --controller) as if it
 were on this controller, over the link the controller already keeps to it. Anything that
 needs administrator rights here still has to be done on this PC. Needs administrator
 rights.`,
@@ -283,7 +283,7 @@ rights.`,
 				return err
 			}
 			if a.Manager {
-				fmt.Fprintf(c.OutOrStdout(), "%s is now a manager: from it, 'sevjala --controller <command>' and 'sevjala ui --controller' control this controller.\n"+
+				fmt.Fprintf(c.OutOrStdout(), "%s is now a manager: from it, 'sevjala -c <command>' and 'sevjala ui -c' (-c = --controller) control this controller.\n"+
 					"Undo: sevjala agents manager %s off\n", a.Hostname, a.Hostname)
 			} else {
 				fmt.Fprintf(c.OutOrStdout(), "%s is no longer a manager; its open links were closed.\n", a.Hostname)

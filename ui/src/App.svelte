@@ -64,7 +64,7 @@
     <div class="lost card">
       This page lost its connection to <code>sevjala ui</code>. It stops by itself a minute after its tab is
       closed; open the dashboard again with
-      {#if live.via}<code>sevjala ui --controller</code> (or the tray's “Open controller dashboard”).{:else}<code
+      {#if live.via}<code>sevjala ui -c</code> (or the tray's “Open controller dashboard”).{:else}<code
           >sevjala ui</code
         > (or the tray's “Open dashboard”).{/if}
     </div>

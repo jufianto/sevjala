@@ -103,7 +103,7 @@
       <p class="muted">The controller sends the backups here and checks on this PC every 15 seconds.</p>
       {#if status.controller?.manager}
         <p>
-          This PC can manage {controllerName(status)}: open its dashboard with <code>sevjala ui --controller</code> or the tray
+          This PC can manage {controllerName(status)}: open its dashboard with <code>sevjala ui -c</code> or the tray
           menu.
         </p>
       {/if}

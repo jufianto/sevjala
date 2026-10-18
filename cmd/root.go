@@ -88,7 +88,7 @@ do ask for them. New here? Start with: sevjala setup`,
 	}
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.PersistentFlags().StringVar(&g.dataDirFlag, "data-dir", "", "`FOLDER` holding Sevjala's data (default: $SEVJALA_DATA_DIR, else the OS default)")
-	root.PersistentFlags().BoolVar(&g.controller, "controller", false,
+	root.PersistentFlags().BoolVarP(&g.controller, "controller", "c", false,
 		"run the command on the controller, from a backup PC it made a manager")
 	root.PersistentPreRunE = func(c *cobra.Command, _ []string) error { return checkControllerFlag(c, g) }
 	root.PersistentFlags().Bool(elevatedMarker[2:], false, "")

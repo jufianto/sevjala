@@ -95,8 +95,8 @@ records which account made each change. Everything the commands do on the contro
 done in the dashboard: `sevjala ui`.
 
 **Managers:** an administrator on the controller can make a backup PC a manager
-(`sevjala agents manager <pc> on`). On that PC, `sevjala --controller <command>` (status, agents,
-backup, restore, policy, …) and `sevjala ui --controller` (or the tray's "Open controller
+(`sevjala agents manager <pc> on`). On that PC, `sevjala -c <command>` (short for `--controller`: status, agents,
+backup, restore, policy, …) and `sevjala ui -c` (or the tray's "Open controller
 dashboard") work as if you sat at the controller, over the connections the controller already
 opens: the backup PC still never connects out, and nothing new listens on the database PC.
 Steps that need administrator rights are still done on the controller itself.
