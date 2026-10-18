@@ -30,8 +30,8 @@ not invent approval requirements or ask again about decisions already made.
   operator intervention.
 - Scope boundaries: no cloud, no Internet, except `sevjala update`, which downloads a release
   from GitHub only when an operator runs it (AD-18). Sevjala never implements database replication
-  itself. Replication monitoring, PITR, self-heal, notifications, encryption and PostgreSQL are
-  Phase 3 (AD-17).
+  itself: it sets up and watches MariaDB's own replication (AD-22). PITR, self-heal,
+  notifications, encryption and PostgreSQL are Phase 3 (AD-17).
 
 ## Engineering boundaries
 
@@ -55,7 +55,8 @@ not invent approval requirements or ask again about decisions already made.
 
 ## Non-negotiables
 
-- Nodes never initiate LAN connections; Nodes never delete without an authenticated `DELETE`.
+- Nodes never initiate LAN connections (MariaDB's own replica connection excepted, AD-24);
+  Nodes never delete without an authenticated `DELETE`.
 - No backup is reported `verified` before hash match and atomic rename.
 - Keep the CLI usable without the tray or UI; they are clients, not requirements.
 - Every milestone meets the blueprint's "Definition of done", including `docs/protocol.md`

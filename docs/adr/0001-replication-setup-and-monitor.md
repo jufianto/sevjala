@@ -1,7 +1,7 @@
 # 0001 Replication: Sevjala sets up and watches MariaDB's own replication
 
-**Status:** Proposed, deferred to Phase 3 (after M7). Owner decision 2026-10-17: keep the
-blueprint's order; come back to this after the browser UI.
+**Status:** Accepted 2026-10-18: the owner chose C, built as one milestone after M7 and managers
+(first proposed 2026-10-17 and deferred until after the browser UI).
 **Date:** 2026-10-17
 
 ## Context
@@ -60,3 +60,20 @@ B or A could ship first as a cheaper step, since they reuse M4 unchanged.
 - If the replica is off longer than the log expiry, it cannot catch up; `resync` re-seeds
   it from a fresh dump.
 - Two-way replication (both PCs writable) is out of scope.
+
+## Accepted with (2026-10-18)
+
+The owner chose C as one milestone, and answered the open points:
+
+- The replica is a paired backup PC with its own MariaDB (XAMPP, a service or Docker).
+- Plain MariaDB traffic on port 3306, limited by a firewall rule to the replica's address.
+- Sevjala edits `my.ini` and keeps a copy; the operator restarts MySQL.
+- A fresh seed dump, not a backup.
+- The databases in Sevjala's list are replicated.
+- Promotion only touches MariaDB, guided.
+- Alert thresholds are the defaults.
+
+The exceptions above became AD-22 (setup and watching), AD-23 (credentials) and AD-24
+(MariaDB's own connection) in the blueprint. The full design is in the
+[replication spec](../superpowers/specs/2026-10-18-replication-design.md), and the build steps
+are in the [plan](../superpowers/plans/2026-10-18-replication.md).

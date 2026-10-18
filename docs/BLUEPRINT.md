@@ -34,7 +34,8 @@ minimal operator intervention.
 
 **Design principle kept from the PRD**: replication, backup creation, backup
 distribution, and monitoring are separate capabilities that interact but are never one
-undifferentiated feature. Sevjala never implements database replication itself.
+undifferentiated feature. Sevjala never implements database replication itself: it sets up and
+watches MariaDB's own (AD-22).
 
 ## Architecture decisions
 
@@ -44,9 +45,9 @@ needs a new row and a reason.
 | ID | Decision | Why |
 |---|---|---|
 | AD-01 | One binary, one agent codebase; role (`controller` / `node`) is config, not a build | Shared discovery, identity, pairing, TLS; trivial cross-platform; a node can be promoted later |
-| AD-02 | The Controller is the only initiator on the LAN; Nodes are passive HTTPS servers | Collapses heartbeat, inventory report, ACK, and push/pull into one call pattern; Nodes never need the Controller's address |
+| AD-02 | **Amended** by AD-24 (the replica PC's MariaDB connects to the server's MariaDB; Sevjala's agent still never dials): The Controller is the only initiator on the LAN; Nodes are passive HTTPS servers | Collapses heartbeat, inventory report, ACK, and push/pull into one call pattern; Nodes never need the Controller's address |
 | AD-03 | Push model: Controller `PUT`s backups to Nodes | Controller owns the schedule and the file; Nodes stay dumb stores |
-| AD-04 | Single LAN protocol: HTTP/1.1 over mutual TLS on one TCP port; UDP broadcast only for discovery | Go stdlib only; one port to open in firewalls; no custom framing |
+| AD-04 | **Amended** by AD-24 (MariaDB replication traffic on the MySQL port): Single LAN protocol: HTTP/1.1 over mutual TLS on one TCP port; UDP broadcast only for discovery | Go stdlib only; one port to open in firewalls; no custom framing |
 | AD-05 | Discovery = UDP subnet broadcast + manual add fallback; no mDNS/multicast | Windows 7 has no mDNS; multicast is unreliable on cheap switches |
 | AD-06 | Pairing = self-signed cert per agent, pinned fingerprints, bootstrapped by a 6-digit code | No CA, no token rotation; TLS from day one at zero cost |
 | AD-07 | State: Controller store is authoritative for *expected*; each Node's directory listing is the truth for *actual*; reconciliation = diff | Nodes need no database; reinstall a Node and it recovers from its folder |
@@ -59,11 +60,14 @@ needs a new row and a reason.
 | AD-14 | **Amended** by AD-21 (a manager opens the controller's dashboard through its links): UI = browser dashboard on `127.0.0.1` served by an on-demand `sevjala ui` process that reverse-proxies to the pipe; Svelte 5 + Vite, embedded in the binary | No native toolkit; nothing listens when not in use; not reachable from the LAN |
 | AD-15 | Toolchain: stock Go for win10+/macOS/Linux; XTLS/go-win7 patched SDK for Windows 7 builds (amd64 + 386), pinned by checksum | Modern Go on Windows 7; one source tree |
 | AD-16 | Service management via `kardianos/service`; tray via `fyne.io/systray` | Windows Service / launchd / systemd behind one interface; pure-Go tray on Windows |
-| AD-17 | Replication monitoring, PITR, self-heal, notifications are Phase 3 | Keep the MVP to discover, pair, back up, verify, retain, restore |
+| AD-17 | **Amended** by AD-22 (replication setup and monitoring moved out of Phase 3): Replication monitoring, PITR, self-heal, notifications are Phase 3 | Keep the MVP to discover, pair, back up, verify, retain, restore |
 | AD-18 | **Amended** 2026-10-14 ([D-055](./decisions.md)): the only Internet use is `sevjala update`, run by hand: it downloads the newest GitHub release for the PC, checks it against the release's `checksums.txt`, and swaps the installed binary. The agent never contacts the Internet; `update --from FILE` covers offline PCs | Copying a new exe to every PC by hand is the main chore of keeping a fleet current; an operator-run download keeps the service LAN-only |
 | AD-19 | Accepted 2026-10-17 ([D-064](./decisions.md)): a restore reads its backup file twice, once to check size and sha256 and once to load it; a node copy or an exported file is first copied into `staging/<id>.restore.part` while hashing, and that copy is loaded. The exception to AD-11 is restore only. | A damaged file must never be partly loaded into a database before the damage is known; one extra read (about 1-2 s per 120 MB) is the price |
 | AD-20 | Accepted 2026-10-17 ([D-066](./decisions.md)), amends AD-13; **amended** 2026-10-17 for M7 ([D-089](./decisions.md), owner approved); **amended** by AD-21 (marking a backup PC as manager is admin-only; a request that came over a manager link is never an administrator's): the local API is open to every interactive account on the PC (Windows interactive users, macOS/Linux members of group `sevjala`, root/SYSTEM); system and service accounts other than root/SYSTEM are refused as before. Administrator rights are required only (a) where the OS requires them: setup, update, uninstall, service install/start/stop/uninstall, firewall, start-at-login and Start menu entries; and (b) where the request would make the service run, read or execute something the caller supplies: `db set --dumper` (a program) and `restore --file` (a file of SQL the service runs with the stored database password); those answer 403 `admin_required` and the CLI re-runs the command elevated (UAC, `sudo`). Everything else is a normal-user action. Destructive actions need typed confirmation; every change is logged with the caller's account; retention and removals never leave a configured database without a verified copy | Daily work, and every screen of the dashboard, must not need an Administrator prompt; XAMPP itself does not. Admin stays only where the OS needs it or where it would hand the caller the service's own rights |
 | AD-21 | Accepted 2026-10-17 ([D-096](./decisions.md)), amends AD-14 and AD-20: an administrator on the controller marks a paired node as a **manager**. The controller keeps a few spare connections to each online manager, opened like every other LAN call (controller dials, mutual TLS, pinned certificates), then switched with HTTP `Upgrade: sevjala-manage`; on a switched connection the node sends HTTP requests and the controller answers them with its local API, as a non-admin caller labelled with the manager. The node's local API relays `/controller/…` through those links; `sevjala --controller …` and `sevjala ui --controller` use that relay. Admin-only actions are refused from a manager. | Control from another desk without breaking AD-02 (nodes never initiate) or opening anything new on the database PC; the pairing certificates already authenticate both ends. |
+| AD-22 | Accepted 2026-10-18 ([ADR 0001](./adr/0001-replication-setup-and-monitor.md), [spec](./superpowers/specs/2026-10-18-replication-design.md)), amends AD-17: Sevjala sets up and watches MariaDB's own replication, one direction, the controller's MariaDB as primary and one read-only replica on one paired backup PC. Sevjala enables the binary log in the server's `my.ini` (the operator restarts MySQL), creates the replication user, seeds the replica with one consistent dump of all of Sevjala's databases (sent over the LAN API, sha256-checked before it is loaded, as AD-19), starts it with GTID and watches it every poll. Promotion is manual. Sevjala itself copies no change. | Changes reach a second PC within seconds without Sevjala implementing replication; the office gets setup, alarms and repair without a database admin |
+| AD-23 | Accepted 2026-10-18 ([spec](./superpowers/specs/2026-10-18-replication-design.md)): the replica PC's agent keeps a login for its own MySQL in its OS keyring (`[node.replica]`, `keyring:replica-db`). The replication password is random, kept in the controller's keyring (`keyring:replica-repl`), sent once to the node over mutual TLS, and stored by MariaDB in its own `master.info` on the replica, outside any keyring. | A node needs database access to load the seed and read its replica state; MariaDB has no other place for the password |
+| AD-24 | Accepted 2026-10-18 ([spec](./superpowers/specs/2026-10-18-replication-design.md)), amends AD-02 and AD-04 for MariaDB's own traffic only: the replica's MariaDB connects to the server's MariaDB on its MySQL port (3306), outside Sevjala's mTLS. Sevjala limits it with a Windows firewall rule that admits only the replica PC's address and a replication user bound to that address. Sevjala's agent on the node still never dials. | MariaDB replication needs that connection; MariaDB TLS would need certificates the office cannot manage, and the LAN is the trust boundary already |
 
 ## Components
 
@@ -533,7 +537,8 @@ on-disk format.
 | M5 Operator comfort | `fyne.io/systray` tray with state colour + menu, `doctor`, `status` one-screen | A non-engineer can tell protection is healthy from the tray alone |
 | M6 UI shell | `sevjala ui` proxy, token + Host guard, SSE, Svelte 5 scaffold, Dashboard + Agents screens, tray "Open dashboard" | Dashboard matches `sevjala status` live |
 | M7 UI screens | Backups matrix, Restore picker, Logs, Settings (policies, pairing approvals) | Every CLI operation is doable from the browser |
-| P3 Beyond MVP | Replication monitor + screen, PITR via binlogs, self-heal between nodes, notifications, resumable transfer, file encryption, PostgreSQL | Each shipped as its own ADR + milestone |
+| Replication (AD-22..AD-24) | `replica local`, `replica setup \| status \| resync \| promote \| remove`; replica health in status, tray and a dashboard card on both PCs | On two PCs: `replica setup` turns a paired backup PC into a read-only replica; a row inserted on the server appears there within 5 s; a replica stopped by an error turns the controller's status red within one poll and `replica resync` brings it back |
+| P3 Beyond MVP | Replication monitor + screen (moved forward: Replication row above, AD-22), PITR via binlogs, self-heal between nodes, notifications, resumable transfer, file encryption, PostgreSQL | Each shipped as its own ADR + milestone |
 
 ## Agent handoff
 
@@ -563,6 +568,7 @@ today.
 | M4 | Backup engine (restore), Security model (restore row) |
 | M5 | Components (tray), Coordination (local API) |
 | M6–M7 | Components (UI proxy), Security (UI proxy row), Toolchain (frontend rules) |
+| Replication | ADR 0001, AD-22..AD-24, Backup engine (detection, dump, restore), Coordination (`/status` polling, local API), Security model |
 
 ### Definition of done, every milestone
 

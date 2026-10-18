@@ -16,4 +16,4 @@ choices go in [decisions.md](../decisions.md) instead.
 
 | # | Decision | Status |
 |---|---|---|
-| [0001](./0001-replication-setup-and-monitor.md) | Replication: Sevjala sets up and watches MariaDB's own replication (primary → read-only replica) | Proposed, deferred to Phase 3 |
+| [0001](./0001-replication-setup-and-monitor.md) | Replication: Sevjala sets up and watches MariaDB's own replication (primary → read-only replica) | Accepted 2026-10-18 (AD-22..AD-24) |
