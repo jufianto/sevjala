@@ -74,6 +74,15 @@ func NewHandler(b Backend) http.Handler {
 			reply(w, a, err)
 		}
 	})
+	mux.HandleFunc("PUT /agents/{agent}/name", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Name string `json:"name"`
+		}
+		if decode(w, r, &req) {
+			a, err := b.SetName(r.Context(), r.PathValue("agent"), req.Name)
+			reply(w, a, err)
+		}
+	})
 	mux.HandleFunc("POST /db/detect", func(w http.ResponseWriter, r *http.Request) {
 		d, err := b.DetectDatabase(r.Context())
 		reply(w, d, err)

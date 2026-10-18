@@ -194,3 +194,44 @@ func TestSetManager(t *testing.T) {
 		t.Errorf("unknown agent: %v", err)
 	}
 }
+
+func TestSetName(t *testing.T) {
+	s, _ := open(t)
+	ctx := context.Background()
+	for _, a := range []Agent{agent("n1", "192.168.1.21"), agent("n2", "BACKUP-PC-2")} {
+		if err := s.UpsertAgent(ctx, a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.SetName(ctx, "n1", "Office PC"); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := s.Agent(ctx, "n1")
+	if a.Hostname != "Office PC" || a.ComputerName != "192.168.1.21" {
+		t.Errorf("named: %+v", a)
+	}
+	if as, _ := s.Agents(ctx); len(as) != 2 || as[0].Hostname != "BACKUP-PC-2" || as[1].Hostname != "Office PC" {
+		t.Errorf("not sorted by the shown name: %+v", as)
+	}
+	if err := s.UpdateAddress(ctx, "n1", "STOCK-PC", "10.0.0.9", 17891); err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := s.Agent(ctx, "n1"); a.Hostname != "Office PC" || a.ComputerName != "STOCK-PC" {
+		t.Errorf("rediscovery replaced the name: %+v", a)
+	}
+	if err := s.UpsertAgent(ctx, agent("n1", "STOCK-PC")); err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := s.Agent(ctx, "n1"); a.Hostname != "Office PC" {
+		t.Errorf("pairing again dropped the name: %+v", a)
+	}
+	if err := s.SetName(ctx, "n1", ""); err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := s.Agent(ctx, "n1"); a.Hostname != "STOCK-PC" || a.ComputerName != "STOCK-PC" {
+		t.Errorf("cleared: %+v", a)
+	}
+	if err := s.SetName(ctx, "nope", "x"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown agent: %v", err)
+	}
+}

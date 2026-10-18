@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"runtime"
+	"strings"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -198,7 +199,8 @@ func newAgentsCmd(g *globals) *cobra.Command {
 what is wrong when it is not online.`,
 		Example: `  sevjala agents
   sevjala agents add 192.168.1.21
-  sevjala agents remove 78ce929d`,
+  sevjala agents remove 78ce929d
+  sevjala agents name 78ce929d "Office PC"`,
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			as, err := callAgent(g, 5*time.Second, func(ctx context.Context, cl *localapi.Client) ([]localapi.Agent, error) {
@@ -262,6 +264,40 @@ only to that PC, and, without --force, while some backup exists only there.`,
 	remove.Flags().BoolVar(&force, "force", false, "remove even if some backups have their only copy on that PC")
 	remove.Flags().StringVar(&confirm, "confirm", "", "with --force, the PC's `NAME` again, instead of typing it at the prompt")
 	c.AddCommand(remove)
+	var clearName bool
+	name := &cobra.Command{
+		Use:   "name <agent> <new name>",
+		Short: "Give a backup PC the name every screen and command shows (controller)",
+		Long: `Shows this name instead of the one the PC reports, here and in the dashboard, and lets
+you type it wherever a PC is asked for. Quote a name with spaces. --clear goes back to
+the PC's own name.`,
+		Example: `  sevjala agents name 78ce929d "Office PC"
+  sevjala agents name "Office PC" --clear`,
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(c *cobra.Command, args []string) error {
+			if clearName == (len(args) == 2) || (len(args) == 2 && strings.TrimSpace(args[1]) == "") {
+				return usagef("give the new name, or --clear to go back to the PC's own name")
+			}
+			newName := ""
+			if len(args) == 2 {
+				newName = args[1]
+			}
+			a, err := callAgent(g, 15*time.Second, func(ctx context.Context, cl *localapi.Client) (localapi.Agent, error) {
+				return cl.SetName(ctx, args[0], newName)
+			})
+			if err != nil {
+				return err
+			}
+			if a.ComputerName != "" {
+				fmt.Fprintf(c.OutOrStdout(), "%s is now shown as %q (its computer name: %s).\n", shortID(a.AgentID), a.Hostname, a.ComputerName)
+			} else {
+				fmt.Fprintf(c.OutOrStdout(), "%s is shown by its computer name again: %s\n", shortID(a.AgentID), a.Hostname)
+			}
+			return nil
+		},
+	}
+	name.Flags().BoolVar(&clearName, "clear", false, "go back to the name the PC reports")
+	c.AddCommand(name)
 	c.AddCommand(&cobra.Command{
 		Use:   "manager <agent> on|off",
 		Short: "Let a backup PC run controller commands and open its dashboard (controller)",
@@ -284,7 +320,7 @@ rights.`,
 			}
 			if a.Manager {
 				fmt.Fprintf(c.OutOrStdout(), "%s is now a manager: from it, 'sevjala -c <command>' and 'sevjala ui -c' (-c = --controller) control this controller.\n"+
-					"Undo: sevjala agents manager %s off\n", a.Hostname, a.Hostname)
+					"Undo: sevjala agents manager %s off\n", a.Hostname, shortID(a.AgentID))
 			} else {
 				fmt.Fprintf(c.OutOrStdout(), "%s is no longer a manager; its open links were closed.\n", a.Hostname)
 			}
@@ -300,7 +336,7 @@ func renderAgents(w io.Writer, as []localapi.Agent) {
 		return
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "AGENT\tHOSTNAME\tADDRESS\tSTATE\tMANAGER\tFREE\tLAST SEEN\tPROBLEM")
+	fmt.Fprintln(tw, "AGENT\tNAME\tADDRESS\tSTATE\tMANAGER\tFREE\tLAST SEEN\tPROBLEM")
 	for _, a := range as {
 		seen, free := "never", "-"
 		if !a.LastSeen.IsZero() {
@@ -313,7 +349,11 @@ func renderAgents(w io.Writer, as []localapi.Agent) {
 		if a.Manager {
 			manager = "yes"
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", shortID(a.AgentID), a.Hostname, a.Addr, a.State, manager, free, seen, a.Problem)
+		name := a.Hostname
+		if a.ComputerName != "" {
+			name += " (" + a.ComputerName + ")"
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", shortID(a.AgentID), name, a.Addr, a.State, manager, free, seen, a.Problem)
 	}
 	tw.Flush()
 }

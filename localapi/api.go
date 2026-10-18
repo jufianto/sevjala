@@ -103,18 +103,19 @@ type Discovered struct {
 }
 
 type Agent struct {
-	AgentID   string    `json:"agent_id"`
-	Hostname  string    `json:"hostname"`
-	Addr      string    `json:"addr"`
-	Role      string    `json:"role"`
-	Version   string    `json:"version"`
-	FP        string    `json:"fp"`
-	PairedAt  time.Time `json:"paired_at"`
-	LastSeen  time.Time `json:"last_seen,omitzero"`
-	State     string    `json:"state"`
-	FreeBytes int64     `json:"free_bytes"`
-	Problem   string    `json:"problem,omitempty"` // why the last poll warned or failed
-	Manager   bool      `json:"manager"`
+	AgentID      string    `json:"agent_id"`
+	Hostname     string    `json:"hostname"`
+	Addr         string    `json:"addr"`
+	Role         string    `json:"role"`
+	Version      string    `json:"version"`
+	FP           string    `json:"fp"`
+	PairedAt     time.Time `json:"paired_at"`
+	LastSeen     time.Time `json:"last_seen,omitzero"`
+	State        string    `json:"state"`
+	FreeBytes    int64     `json:"free_bytes"`
+	Problem      string    `json:"problem,omitempty"` // why the last poll warned or failed
+	Manager      bool      `json:"manager"`
+	ComputerName string    `json:"computer_name,omitempty"` // what the PC calls itself, when Hostname is the name it was given
 }
 
 type Ping struct {
@@ -136,6 +137,7 @@ type Backend interface {
 	Ping(ctx context.Context, agent string) (Ping, error)
 	RemoveAgent(ctx context.Context, agent string, force bool, confirm string) (Agent, error)
 	SetManager(ctx context.Context, agent string, on bool) (Agent, error)
+	SetName(ctx context.Context, agent, name string) (Agent, error)
 	DetectDatabase(ctx context.Context) (Detection, error)
 	SetDatabase(ctx context.Context, s DBSettings) (Detection, error)
 	BackupNow(ctx context.Context, db string, tags []string) ([]BackupJob, error)

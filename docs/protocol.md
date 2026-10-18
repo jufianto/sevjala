@@ -324,6 +324,7 @@ on a node`); a LAN failure behind a route is 502. Bodies are capped at 4 KiB.
 | `POST /pair` (M1) | controller | `{"agent":"<agent>","code":"123456","fp":"<at least 16 hex>"}` (`fp` since M2: `sha256:`, spaces, `-` and `:` ignored, any case; must prefix the discovered fingerprint, else 409 before anything is sent) | `Agent` |
 | `POST /agents/{agent}/ping` (M1) | controller | — | `{"agent":Agent,"rtt_ms":4,"uptime_s":7380,"health":"healthy"}` |
 | `PUT /agents/{agent}/manager` (managers) | controller | `{"manager":true|false}` | `Agent` (with `manager`). Administrator only (`admin_required`); 409 for the controller itself (`<host> is the controller; only a backup PC can be a manager`); event `manager_set` |
+| `PUT /agents/{agent}/name` (names) | controller | `{"name":"Office PC"}`; `""` clears | `Agent`. The name is trimmed, at most 40 characters, printable only (400). 409 when another backup PC already has it as its name or computer name, when it is the controller's hostname, or for the controller itself (`<host> is the controller; only a backup PC can be renamed`). Any user; event `agent_renamed` |
 | `DELETE /agents/{agent}[?force=true[&confirm=<hostname>]]` | controller | — | `Agent` removed. 409 while a policy sends only to it; while it holds the only verified copy of a configured database (no other PC and not the controller's own copy holds one; `force` does not help, M7); without `force` while a live backup's only verified copy is on it; with `force`, `confirm_required` until `confirm` is its hostname (M7). Drops its copy records and its policy destinations; nothing is sent to the node. |
 | `GET /db` (M7) | controller | — | `DBConfig` |
 | `POST /db/detect` (M2) | controller | — | `Detection` |
@@ -344,7 +345,8 @@ on a node`); a LAN failure behind a route is 502. Bodies are capped at 4 KiB.
 | anything else | | | 404 `not found` |
 
 `Discovered`: `{"agent_id","hostname","addr":"ip:port","role","version","os","fp","paired":bool}`.
-`Agent`: `{"agent_id","hostname","addr","role","version","fp","paired_at","last_seen","state","free_bytes","problem"}`
+`Agent`: `{"agent_id","hostname","addr","role","version","fp","paired_at","last_seen","state","free_bytes","problem","manager","computer_name"}`
+(`hostname` is the name the operator gave it, else what the PC reports; `computer_name` (names) is what the PC reports, present only when it differs.)
 (`last_seen` omitted when never seen; `state` `online|warning|offline|error` and `free_bytes`
 from the last poll, `problem` why it warned or failed, both since M3). `<agent>` is an exact agent_id, else a hostname (any
 case), else a unique agent_id prefix of at least 4 characters; ambiguity is 409 listing the
@@ -531,3 +533,8 @@ Copy states add `corrupt` (the node reports it corrupt or with another sha256, o
 `verified`, else `partial`; `expired` (no copy and no staging file left) is set by
 reconciliation and is undone only when a node shows a verified copy again. Agents' `state` is `online`, `warning`, `offline` or
 `error`, with `free_bytes` and `last_seen` from the last answered poll.
+
+Version 4 (M4) seeds the `pre-restore` policy (`''`, keep 5). Version 5 (managers) adds
+`agents.manager INTEGER NOT NULL DEFAULT 0`. Version 6 (names) adds
+`agents.name TEXT NOT NULL DEFAULT ''`: the operator's name for the PC, shown and matched as its
+hostname when set; discovery keeps updating `hostname`, and pairing again keeps `name`.

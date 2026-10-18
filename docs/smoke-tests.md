@@ -38,7 +38,10 @@ section with the exact steps. Work top to bottom: the first two unblock most of 
 11. **M1/M2 with three PCs:** discover, pair and a first backup verified on every node
     ([M1](#m1--discover-pair-ping-across-two-pcs), [M2](#m2--first-backup-to-three-pcs)).
 12. **Windows 7:** P0 install on a Windows 7 VM, the tray icon and menu, and the dashboard in
-    Chrome 109 / Firefox 115 ([P0](#windows-7-vm-and-windows-11), M5 item 7, M6 item 4, M7 item 4).
+. **Names** (D-103): on the controller `sevjala agents name <the Mac> "Mac backup"`; `agents`
+    shows `Mac backup (<computer name>)`, `ping "mac backup"` reaches it, the dashboard's Backup PCs
+    diagram and details show the name, Rename… there changes it and "Use its computer name"
+    clears it; `sevjala discover` afterwards does not undo it.
 
 ## Installer — double-click setup (Windows)
 

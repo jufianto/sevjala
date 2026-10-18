@@ -88,6 +88,10 @@ func (f *fakeBackend) SetManager(_ context.Context, agent string, on bool) (Agen
 	return Agent{AgentID: agent, Manager: on}, f.err
 }
 
+func (f *fakeBackend) SetName(_ context.Context, agent, name string) (Agent, error) {
+	return Agent{AgentID: agent, Hostname: name}, f.err
+}
+
 func (f *fakeBackend) RemoveAgent(_ context.Context, agent string, force bool, confirm string) (Agent, error) {
 	f.mu.Lock()
 	f.gotForce, f.gotConfirm = force, confirm
@@ -207,6 +211,9 @@ func TestRoutesRoundTrip(t *testing.T) {
 	f.mu.Unlock()
 	if a, err := c.SetManager(ctx, "BACKUP PC/1", true); err != nil || a.AgentID != "BACKUP PC/1" || !a.Manager {
 		t.Errorf("SetManager: %+v %v", a, err)
+	}
+	if a, err := c.SetName(ctx, "BACKUP PC/1", "Office / stock"); err != nil || a.AgentID != "BACKUP PC/1" || a.Hostname != "Office / stock" {
+		t.Errorf("SetName: %+v %v", a, err)
 	}
 }
 

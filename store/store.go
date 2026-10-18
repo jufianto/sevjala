@@ -3,6 +3,7 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -74,21 +75,23 @@ var migrations = []string{
 		('daily', '0 1 * * *', 30), ('monthly', '0 1 1 * *', 12), ('manual', '', 10)`,
 	`INSERT OR IGNORE INTO policies (name, cron, keep) VALUES ('pre-restore', '', 5)`,
 	`ALTER TABLE agents ADD COLUMN manager INTEGER NOT NULL DEFAULT 0`,
+	`ALTER TABLE agents ADD COLUMN name TEXT NOT NULL DEFAULT ''`,
 }
 
 type Agent struct {
-	AgentID   string
-	Hostname  string
-	LastIP    string
-	Port      int
-	FP        string
-	Role      string
-	Version   string
-	PairedAt  time.Time
-	LastSeen  time.Time
-	State     string
-	FreeBytes int64
-	Manager   bool // may run controller commands over manager links (AD-21)
+	AgentID      string
+	Hostname     string // the name shown: the operator's name for it, else ComputerName
+	ComputerName string // what the PC calls itself; discovery keeps it current
+	LastIP       string
+	Port         int
+	FP           string
+	Role         string
+	Version      string
+	PairedAt     time.Time
+	LastSeen     time.Time
+	State        string
+	FreeBytes    int64
+	Manager      bool // may run controller commands over manager links (AD-21)
 }
 
 type Store struct{ db *sql.DB }
@@ -151,7 +154,7 @@ func (s *Store) UpsertAgent(ctx context.Context, a Agent) error {
 }
 
 func (s *Store) Agents(ctx context.Context) ([]Agent, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+agentCols+`, manager FROM agents ORDER BY hostname, agent_id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+agentCols+`, manager, name FROM agents ORDER BY COALESCE(NULLIF(name, ''), hostname), agent_id`)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +171,7 @@ func (s *Store) Agents(ctx context.Context) ([]Agent, error) {
 }
 
 func (s *Store) Agent(ctx context.Context, id string) (Agent, error) {
-	a, err := scanAgent(s.db.QueryRowContext(ctx, `SELECT `+agentCols+`, manager FROM agents WHERE agent_id = ?`, id))
+	a, err := scanAgent(s.db.QueryRowContext(ctx, `SELECT `+agentCols+`, manager, name FROM agents WHERE agent_id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Agent{}, fmt.Errorf("agent %s: %w", id, ErrNotFound)
 	}
@@ -193,11 +196,12 @@ type scanner interface{ Scan(dest ...any) error }
 
 func scanAgent(r scanner) (Agent, error) {
 	var a Agent
-	var paired, seen string
-	if err := r.Scan(&a.AgentID, &a.Hostname, &a.LastIP, &a.Port, &a.FP, &a.Role, &a.Version,
-		&paired, &seen, &a.State, &a.FreeBytes, &a.Manager); err != nil {
+	var paired, seen, name string
+	if err := r.Scan(&a.AgentID, &a.ComputerName, &a.LastIP, &a.Port, &a.FP, &a.Role, &a.Version,
+		&paired, &seen, &a.State, &a.FreeBytes, &a.Manager, &name); err != nil {
 		return Agent{}, err
 	}
+	a.Hostname = cmp.Or(name, a.ComputerName)
 	var err error
 	if a.PairedAt, err = parseTime(paired); err != nil {
 		return Agent{}, err
@@ -235,6 +239,11 @@ func (s *Store) SetAgentState(ctx context.Context, id, state string) error {
 
 func (s *Store) SetManager(ctx context.Context, id string, on bool) error {
 	return s.update(ctx, id, `UPDATE agents SET manager = ? WHERE agent_id = ?`, on, id)
+}
+
+// SetName sets the name shown for agent id; "" goes back to its computer name.
+func (s *Store) SetName(ctx context.Context, id, name string) error {
+	return s.update(ctx, id, `UPDATE agents SET name = ? WHERE agent_id = ?`, name, id)
 }
 
 // OnlyCopies lists the live backups whose only verified copy is on agent id.

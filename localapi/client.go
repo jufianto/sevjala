@@ -94,6 +94,11 @@ func (c *Client) SetManager(ctx context.Context, agent string, on bool) (Agent, 
 	return a, c.do(ctx, http.MethodPut, "/agents/"+url.PathEscape(agent)+"/manager", map[string]bool{"manager": on}, &a)
 }
 
+func (c *Client) SetName(ctx context.Context, agent, name string) (Agent, error) {
+	var a Agent
+	return a, c.do(ctx, http.MethodPut, "/agents/"+url.PathEscape(agent)+"/name", map[string]string{"name": name}, &a)
+}
+
 func (c *Client) Agents(ctx context.Context) ([]Agent, error) {
 	var l list[Agent]
 	return l.Agents, c.do(ctx, http.MethodGet, "/agents", nil, &l)

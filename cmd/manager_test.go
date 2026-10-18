@@ -66,3 +66,17 @@ func TestRenderOverviewViaManager(t *testing.T) {
 		t.Errorf("error view %v\n%s", ok, b.String())
 	}
 }
+
+func TestAgentsNameTakesANameOrClear(t *testing.T) {
+	for _, args := range [][]string{
+		{"agents", "name", "PC-1"},
+		{"agents", "name", "PC-1", "Office PC", "--clear"},
+		{"agents", "name", "PC-1", "  "},
+	} {
+		var out, errOut bytes.Buffer
+		if code := run(append(args, "--data-dir", t.TempDir()), &out, &errOut); code != 2 ||
+			!strings.Contains(errOut.String(), "give the new name, or --clear") {
+			t.Errorf("%v: exit %d, stderr %q", args, code, errOut.String())
+		}
+	}
+}

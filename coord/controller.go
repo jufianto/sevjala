@@ -315,9 +315,13 @@ func (c *Controller) remember(ds ...localapi.Discovered) {
 }
 
 func toAPI(a store.Agent) localapi.Agent {
-	return localapi.Agent{AgentID: a.AgentID, Hostname: a.Hostname, Addr: net.JoinHostPort(a.LastIP, strconv.Itoa(a.Port)),
+	out := localapi.Agent{AgentID: a.AgentID, Hostname: a.Hostname, Addr: net.JoinHostPort(a.LastIP, strconv.Itoa(a.Port)),
 		Role: a.Role, Version: a.Version, FP: a.FP, PairedAt: a.PairedAt, LastSeen: a.LastSeen, State: a.State,
 		FreeBytes: a.FreeBytes, Manager: a.Manager}
+	if a.Hostname != a.ComputerName {
+		out.ComputerName = a.ComputerName
+	}
+	return out
 }
 
 // lastCopies lists the configured databases whose only verified backup copies

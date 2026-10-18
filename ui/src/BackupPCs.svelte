@@ -13,7 +13,12 @@
 
   let picked = $state('')
   const sel = $derived(nodes.find((a) => a.agent_id === picked))
-  const toggle = (id) => (picked = picked === id ? '' : id)
+  let renaming = $state(null) // the name being typed, while the rename form is open
+  function toggle(id) {
+    picked = picked === id ? '' : id
+    renaming = null
+  }
+  const typed = (name) => (/\s/.test(name) ? `"${name}"` : name)
 
   let msg = $state('')
   let bad = $state(false)
@@ -67,6 +72,13 @@
       }
     })
   }
+
+  const rename = (a, name) =>
+    act(async () => {
+      const r = await api('PUT', `/agents/${encodeURIComponent(a.agent_id)}/name`, { name })
+      renaming = null
+      say(r.computer_name ? `${r.computer_name} is now shown as ${r.hostname}.` : `${r.hostname} is shown by its computer name again.`)
+    })
 
   function askRemove(a) {
     if (confirm(`Remove ${a.hostname}? Backups stop going to it; the backup files on it stay there.`)) remove(a)
@@ -168,6 +180,7 @@
   <section class="card details">
     <h3>{sel.hostname}</h3>
     <dl>
+      {#if sel.computer_name}<dt>Computer name</dt><dd>{sel.computer_name}</dd>{/if}
       <dt>State</dt><dd>{sel.state}{sel.problem ? `: ${sel.problem}` : ''}</dd>
       <dt>Last answered</dt><dd>{when(sel.last_seen, now)}</dd>
       <dt>Copies waiting</dt><dd>{waiting[sel.agent_id] ?? 0}</dd>
@@ -178,15 +191,26 @@
       <dt>Manager</dt>
       <dd>
         {sel.manager ? 'yes' : 'no'} · an administrator changes it on {status.hostname} with
-        <code>sevjala agents manager {sel.hostname || sel.agent_id.slice(0, 8)} {sel.manager ? 'off' : 'on'}</code>
+        <code>sevjala agents manager {typed(sel.hostname || sel.agent_id.slice(0, 8))} {sel.manager ? 'off' : 'on'}</code>
       </dd>
       <dt>Agent id</dt><dd><code>{sel.agent_id}</code></dd>
     </dl>
     <div class="toolbar">
       <button class="plain" onclick={() => check(sel)} disabled={busy}>Check</button>
+      <button class="plain" onclick={() => (renaming = sel.hostname)} disabled={busy}>Rename…</button>
       <button class="plain" onclick={() => askRemove(sel)} disabled={busy}>Remove…</button>
       {#if forceable}<button class="danger" onclick={() => remove(sel, true)} disabled={busy}>Remove anyway</button>{/if}
     </div>
+    {#if renaming !== null}
+      <form class="toolbar" onsubmit={(e) => (e.preventDefault(), rename(sel, renaming))}>
+        <input bind:value={renaming} maxlength="40" aria-label="New name for {sel.hostname}" />
+        <button class="primary" disabled={busy || !renaming.trim()}>Save name</button>
+        {#if sel.computer_name}
+          <button class="plain" type="button" onclick={() => rename(sel, '')} disabled={busy}>Use its computer name</button>
+        {/if}
+        <button class="plain" type="button" onclick={() => (renaming = null)}>Cancel</button>
+      </form>
+    {/if}
   </section>
 {/if}
 
