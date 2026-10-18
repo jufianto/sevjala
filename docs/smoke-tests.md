@@ -10,10 +10,12 @@ For a first guided run on one Windows PC and one Mac, start with
 Every milestone's code is done; these runs on real machines are not. Each line points to the
 section with the exact steps. Work top to bottom: the first two unblock most of the rest.
 
-1. **Network path between the PCs.** Over Tailscale, packets from the Windows controller to the
-   Mac node larger than about 250 bytes are lost (2026-10-18), so the controller's TLS handshake
-   to the Mac fails ("closed the connection: try again") and the Mac shows offline. Fix the path
-   first (see [Testbed](#testbed--a-500-mb-database-and-replication-by-hand), step 0).
+1. **Network path between the PCs** — found and fixed 2026-10-18: with Cloudflare WARP on, the
+   Windows PC's Tailscale traffic went through WARP's tunnel, which dropped every packet from
+   Windows larger than about 250 bytes; the controller's TLS handshake to the Mac failed ("closed
+   the connection: try again") and the Mac showed offline. With WARP off the Mac answered at once.
+   Keep WARP off on the controller (or keep Tailscale out of it) and recheck with step 0 of the
+   [Testbed](#testbed--a-500-mb-database-and-replication-by-hand) after any VPN change.
 2. **Update the Mac node** to the current build (`sudo sevjala update --from <mac binary>`); it
    runs 0.3.0-alpha.3+1, without managers.
 3. **Testbed:** a 500 MB database backed up, restored and replicated by hand
@@ -605,6 +607,16 @@ replica it shows how far behind it is and refuses writes). Files are in [`testbe
 Replace `<WINDOWS-IP>` and `<MAC-IP>` with the addresses each PC has for the other (the
 Tailscale ones when they are not on the same LAN).
 
+Done on the real PCs (2026-10-18, Windows controller with XAMPP MariaDB 10.1.38 as primary, the
+Mac replica in Docker over Tailscale, WARP off): steps 1–9. `my.ini` got the three lines and
+MySQL restarted; the replica connected (IO and SQL Yes, 0 s behind); a note added on the Windows
+app appeared on the Mac's page; the 500 MB seed took about 3 minutes on Windows and the replica
+stayed 0 s behind throughout: 500 001 rows, 531 MB, the same `CHECKSUM TABLE` on both. Sevjala:
+`db set --db <app db>,sevtest`, `backup now --db sevtest` made a 259.8 MiB backup, verified on the
+Mac node; the monthly policy also backed `sevtest` up at once (D-033: no backup with its tag yet).
+`restore latest --db sevtest --into sevtest_check` took 1 min 43 s and gave 500 001 rows with the
+same checksum. Replica stopped, three notes written, replica started: it caught up at once.
+
 Tested on macOS (2026-10-18) with a MariaDB 10.1 container as the primary: replication ran
 (IO and SQL threads Yes, 0 s behind), 20 000 seeded rows arrived with equal `CHECKSUM TABLE`,
 a note added on the primary's app appeared on the replica's, and the replica's app refused a
@@ -613,9 +625,9 @@ write ("running with the --read-only option"); the app passes `php -l` on PHP 5.
 0. **Network check (from the Mac).** Copy the testbed to the Windows PC as `C:\sevtest` (or with
    `scp -r testbed <user>@<WINDOWS-IP>:C:/sevtest`), then fetch a file back:
    `scp <user>@<WINDOWS-IP>:C:/sevtest/sql/seed-500mb.sql /tmp/` must finish in a second. If it
-   hangs, large packets from Windows to the Mac are lost (as on 2026-10-18 over a direct IPv6
-   Tailscale path): restart Tailscale on both PCs, check `tailscale ping <WINDOWS-IP>`, and repeat
-   until the copy works. Replication and Sevjala's own traffic both need this.
+   hangs, large packets from Windows to the Mac are lost: on 2026-10-18 the cause was Cloudflare
+   WARP on the Windows PC carrying Tailscale's traffic; turn WARP (or another VPN) off, check
+   `tailscale ping <WINDOWS-IP>`, and repeat until the copy works. Replication and Sevjala's own traffic both need this.
 1. **Binary log on Windows.** Stop MySQL in the XAMPP Control Panel. In
    `C:\xampp\mysql\bin\my.ini`, in the `[mysqld]` part, `server-id = 1` is already there; change
    `#log-bin=mysql-bin` (the first one, near "Replication Master Server") to:
