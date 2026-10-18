@@ -65,6 +65,10 @@ sevjala retention run --dry-run        # what would be deleted or sent, and why
 sevjala backups list --all             # includes expired backups
 ```
 
+On a backup PC (administrator, the PC's name typed to confirm): `sevjala backups remove --from
+<controller>` deletes the backups a controller sent (`--all`: every one; or name backup ids), and
+`sevjala disconnect` makes it forget its controller; its backups stay until removed.
+
 Restore (controller): into a new database by default, so the live one is never touched. Step by
 step: [docs/restore-guide.md](docs/restore-guide.md).
 
@@ -82,7 +86,7 @@ Every command explains itself with examples: `sevjala <command> --help`.
 | Group | Commands |
 |---|---|
 | Install & status | `status`, `ui` (dashboard in the browser), `tray`, `setup`, `update [--from FILE]`, `service install/start/stop/status/uninstall`, `doctor`, `version` |
-| Connect PCs | `discover`, `code` (on the backup PC), `pair`, `agents`, `agents add/remove`, `agents name <pc> "<name>"`, `ping`, `agents manager <pc> on\|off` |
+| Connect PCs | `discover`, `code` (on the backup PC), `pair`, `agents`, `agents add/remove`, `agents name <pc> "<name>"`, `ping`, `agents manager <pc> on\|off`, on a backup PC `disconnect` |
 | Database | `db detect`, `db set` |
 | Backups | `backup now`, `backups list [--matrix]`, `backups export <backup\|latest\|all> --to FOLDER` (copy out; the copy belongs to you), `restore <backup\|latest> [--into NAME \| --replace-production]`, `restore --file PATH`, `restore --status` |
 | Schedules & cleanup | `policy list/add/set/remove`, `retention run [--dry-run]` |

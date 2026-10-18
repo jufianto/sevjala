@@ -46,7 +46,10 @@ section with the exact steps. Work top to bottom: the first two unblock most of 
     `sevjala ui` in an administrator prompt saves a folder, from an ordinary prompt it is refused
 . **Space used** (D-106): `sevjala backups list` on the controller ends with SPACE USED (controller,
     each backup PC, in all); compare each PC's size with its store folder on disk. On the Mac node the
-    list ends with "in all: …".
+. **Disconnect and remove on a backup PC** (AD-25, D-107): on the Mac `sudo sevjala backups remove
+    --from <former controller>` removes only those (count and size shown, name typed); `sudo sevjala
+    disconnect` leaves the backups, the controller then shows the Mac as rejected, `sevjala -c status`
+    is refused; `sudo sevjala backups remove --all` empties it; `sevjala code` and `pair` bring it back.
 
 ## Installer — double-click setup (Windows)
 

@@ -449,6 +449,18 @@ func writeError(w http.ResponseWriter, code int, msg string) {
 
 func (s *Server) Paired() bool { return s.controllerFP() != "" }
 
+// Forget unpairs this node: the controller it trusted fails the handshake from
+// now on, as any stranger does.
+func (s *Server) Forget() error {
+	if err := identity.ForgetController(s.opt.DataDir); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.controller, s.hello, s.contact = nil, nil, time.Time{}
+	s.mu.Unlock()
+	return nil
+}
+
 // ControllerContact is when the paired controller last called; zero until it
 // calls after this start.
 // Controller is the paired controller, or nil.

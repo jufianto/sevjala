@@ -138,6 +138,8 @@ type Backend interface {
 	RemoveAgent(ctx context.Context, agent string, force bool, confirm string) (Agent, error)
 	SetManager(ctx context.Context, agent string, on bool) (Agent, error)
 	SetName(ctx context.Context, agent, name string) (Agent, error)
+	Disconnect(ctx context.Context, confirm string) (Disconnected, error)
+	RemoveHeld(ctx context.Context, r RemoveHeld) (HeldRemoved, error)
 	DetectDatabase(ctx context.Context) (Detection, error)
 	SetDatabase(ctx context.Context, s DBSettings) (Detection, error)
 	BackupNow(ctx context.Context, db string, tags []string) ([]BackupJob, error)
@@ -379,4 +381,26 @@ type Restore struct {
 	Error           string    `json:"error,omitempty"`
 	StartedAt       time.Time `json:"started_at"`
 	FinishedAt      time.Time `json:"finished_at,omitzero"`
+}
+
+// Disconnected is what POST /disconnect did on a backup PC (blueprint AD-25).
+type Disconnected struct {
+	Controller string `json:"controller"` // the controller it forgot: its name, else its agent id
+	Backups    int    `json:"backups"`    // what this PC still holds
+}
+
+// RemoveHeld asks a backup PC to delete backups it holds: by id, every one
+// from one controller (agent id, prefix or name), or all of them.
+type RemoveHeld struct {
+	IDs     []string `json:"ids,omitempty"`
+	From    string   `json:"from,omitempty"`
+	All     bool     `json:"all,omitempty"`
+	Confirm string   `json:"confirm,omitempty"`
+}
+
+type HeldRemoved struct {
+	Removed []string `json:"removed"`
+	Bytes   int64    `json:"bytes"`
+	Resend  int      `json:"resend"`           // removed backups the paired controller sends again
+	Failed  []string `json:"failed,omitempty"` // "<id>: why"
 }

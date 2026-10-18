@@ -174,3 +174,40 @@ func TestRemovingAManagerTellsTheNode(t *testing.T) {
 		t.Errorf("node still a manager: %+v", st.Controller)
 	}
 }
+
+func TestDisconnectedNodeRejectsItsController(t *testing.T) {
+	_, ctrlDir := startAgent(t, config.RoleController)
+	node, nodeDir := startAgent(t, config.RoleNode)
+	ctx := context.Background()
+	cc, nc := localapi.NewClient(localapi.Endpoint(ctrlDir)), localapi.NewClient(localapi.Endpoint(nodeDir))
+	nodeSt, err := nc.Status(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, err := nc.Code(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cc.AddAgent(ctx, node.lan.Addr()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cc.Pair(ctx, nodeSt.AgentID, code.Code, nodeSt.FP); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cc.Ping(ctx, nodeSt.AgentID); err != nil {
+		t.Fatalf("ping while paired: %v", err)
+	}
+
+	if err := node.forget(); err != nil {
+		t.Fatal(err)
+	}
+	if st, err := nc.Status(ctx); err != nil || st.Controller != nil {
+		t.Errorf("node still names a controller: %+v %v", st.Controller, err)
+	}
+	if _, err := cc.Ping(ctx, nodeSt.AgentID); err == nil || !strings.Contains(err.Error(), "rejected this controller's certificate") {
+		t.Errorf("ping after disconnect: %v", err)
+	}
+	if c, _ := relay(t, nodeDir, http.MethodGet, "/status", nil); c == http.StatusOK {
+		t.Error("the relay still answers")
+	}
+}

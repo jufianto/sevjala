@@ -18,6 +18,8 @@ func TestControllerFlagOnlyWithControllerCommands(t *testing.T) {
 		{"code", "--controller"},
 		{"-c", "service", "status"},
 		{"code", "-c"},
+		{"-c", "disconnect"},
+		{"-c", "backups", "remove", "--all"},
 	} {
 		var out, errOut bytes.Buffer
 		code := run(append(args, "--data-dir", t.TempDir()), &out, &errOut)
@@ -76,6 +78,20 @@ func TestAgentsNameTakesANameOrClear(t *testing.T) {
 		var out, errOut bytes.Buffer
 		if code := run(append(args, "--data-dir", t.TempDir()), &out, &errOut); code != 2 ||
 			!strings.Contains(errOut.String(), "give the new name, or --clear") {
+			t.Errorf("%v: exit %d, stderr %q", args, code, errOut.String())
+		}
+	}
+}
+
+func TestBackupsRemoveTakesOneChoice(t *testing.T) {
+	for _, args := range [][]string{
+		{"backups", "remove"},
+		{"backups", "remove", "--all", "--from", "OLD-PC"},
+		{"backups", "remove", "BK-20261014-002000-30D3", "--all"},
+	} {
+		var out, errOut bytes.Buffer
+		if code := run(append(args, "--data-dir", t.TempDir()), &out, &errOut); code != 2 ||
+			!strings.Contains(errOut.String(), "give backup ids, --from <controller> or --all") {
 			t.Errorf("%v: exit %d, stderr %q", args, code, errOut.String())
 		}
 	}

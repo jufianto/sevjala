@@ -68,6 +68,7 @@ needs a new row and a reason.
 | AD-22 | Accepted 2026-10-18 ([ADR 0001](./adr/0001-replication-setup-and-monitor.md), [spec](./superpowers/specs/2026-10-18-replication-design.md)), amends AD-17: Sevjala sets up and watches MariaDB's own replication, one direction, the controller's MariaDB as primary and one read-only replica on one paired backup PC. Sevjala enables the binary log in the server's `my.ini` (the operator restarts MySQL), creates the replication user, seeds the replica with one consistent dump of all of Sevjala's databases (sent over the LAN API, sha256-checked before it is loaded, as AD-19), starts it with GTID and watches it every poll. Promotion is manual. Sevjala itself copies no change. | Changes reach a second PC within seconds without Sevjala implementing replication; the office gets setup, alarms and repair without a database admin |
 | AD-23 | Accepted 2026-10-18 ([spec](./superpowers/specs/2026-10-18-replication-design.md)): the replica PC's agent keeps a login for its own MySQL in its OS keyring (`[node.replica]`, `keyring:replica-db`). The replication password is random, kept in the controller's keyring (`keyring:replica-repl`), sent once to the node over mutual TLS, and stored by MariaDB in its own `master.info` on the replica, outside any keyring. | A node needs database access to load the seed and read its replica state; MariaDB has no other place for the password |
 | AD-24 | Accepted 2026-10-18 ([spec](./superpowers/specs/2026-10-18-replication-design.md)), amends AD-02 and AD-04 for MariaDB's own traffic only: the replica's MariaDB connects to the server's MariaDB on its MySQL port (3306), outside Sevjala's mTLS. Sevjala limits it with a Windows firewall rule that admits only the replica PC's address and a replication user bound to that address. Sevjala's agent on the node still never dials. | MariaDB replication needs that connection; MariaDB TLS would need certificates the office cannot manage, and the LAN is the trust boundary already |
+| AD-25 | Accepted 2026-10-18 ([D-107](./decisions.md)), amends the Deletion rule and the non-negotiable "Nodes never delete without an authenticated `DELETE`": a node also deletes backups it holds when an administrator **on that node** runs `sevjala backups remove` (ids, `--from <controller>` or `--all`) and types the PC's name; each deletion is logged with `by` and the reason. `sevjala disconnect` (administrator, on the node, typed name) makes it forget its controller. Nothing on the LAN can trigger either; the controller's authenticated `DELETE` stays the only remote way | A backup PC that served a controller which will never come back (a former one, or one that is gone) must be cleanable without uninstalling; the guarantee that matters, no deletion from the network, is unchanged |
 
 ## Components
 
@@ -385,7 +386,7 @@ destructive runs without a typed confirmation.
 | UI proxy | Binds 127.0.0.1 on a random port; one-time token in the launch URL exchanged for a session cookie; rejects requests whose `Host` is not `127.0.0.1:<port>`; CORS disabled |
 | Secrets | DB password and pairing secrets in the OS keyring; never in config, logs, or `/status` |
 | Backup files | SHA-256 verified on receipt and before restore; optional AES-256-GCM file encryption is Phase 3 |
-| Deletion | Nodes delete only on an authenticated `DELETE` with a reason, and log it; retention has `--dry-run` |
+| Deletion | Nodes delete only on an authenticated `DELETE` with a reason, or at an administrator's request on the node itself (AD-25), and log it; retention has `--dry-run` |
 | Restore | New database by default; replacing production requires `--replace-production` plus typing the database name, and a pre-restore dump is taken first |
 | Logs | Rotating, persistent, record every event in PRD section 25; never contain secrets |
 
@@ -586,7 +587,7 @@ today.
 ### Non-negotiables for the implementing agent
 
 - Nodes never initiate LAN connections; Nodes never delete without an authenticated
-  `DELETE`.
+  `DELETE`, except at an administrator's request on the node itself (AD-25).
 - No backup is reported `verified` before hash match and atomic rename.
 - Secrets never appear in config files, logs, `/status`, or test fixtures.
 - Pure Go and `CGO_ENABLED=0` for every Windows asset.

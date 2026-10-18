@@ -606,3 +606,25 @@ func TestControllerContactIsRecorded(t *testing.T) {
 		t.Errorf("contact %v", got)
 	}
 }
+
+func TestForgetUnpairs(t *testing.T) {
+	n := startNode(t)
+	c := controller(t)
+	pair(t, c, n)
+	if err := n.srv.Forget(); err != nil {
+		t.Fatal(err)
+	}
+	if n.srv.Paired() || n.srv.Controller() != nil {
+		t.Error("still paired")
+	}
+	if _, err := c.Status(context.Background(), n.srv.Addr(), n.id.FP); !errors.Is(err, ErrRejected) {
+		t.Errorf("the forgotten controller: %v", err)
+	}
+	if p, err := identity.LoadController(n.dir); p != nil || err != nil {
+		t.Errorf("saved peer %+v %v", p, err)
+	}
+	pair(t, c, n)
+	if _, err := c.Status(context.Background(), n.srv.Addr(), n.id.FP); err != nil {
+		t.Errorf("paired again: %v", err)
+	}
+}

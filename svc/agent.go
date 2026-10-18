@@ -104,7 +104,7 @@ func (a *Agent) start() error {
 			return err
 		}
 		codes = pairing.New(time.Now)
-		backend.Node = &coord.Node{AgentID: id.AgentID, FP: id.FP, Codes: codes, Store: a.inv, Log: a.log}
+		backend.Node = &coord.Node{AgentID: id.AgentID, FP: id.FP, Codes: codes, Store: a.inv, Log: a.log, Forget: a.forget}
 	case config.RoleController:
 		if a.store, err = store.Open(filepath.Join(a.DataDir, store.FileName)); err != nil {
 			return err
@@ -293,6 +293,14 @@ func (a *Agent) status() localapi.Status {
 		st.Health = &h
 	}
 	return st
+}
+
+func (a *Agent) forget() error {
+	lan := a.lanUp.Load()
+	if lan == nil {
+		return errors.New("the network side of this agent is not running yet; try again in a moment")
+	}
+	return lan.Forget()
 }
 
 func (a *Agent) relayState() manage.RelayState {

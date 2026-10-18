@@ -120,3 +120,19 @@ func TestControllerPeerRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestForgetController(t *testing.T) {
+	dir := t.TempDir()
+	if err := SaveController(dir, Peer{AgentID: "c1", FP: "sha256:ab"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ForgetController(dir); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := LoadController(dir); p != nil || err != nil {
+		t.Errorf("after forget: %+v %v", p, err)
+	}
+	if err := ForgetController(dir); err != nil {
+		t.Errorf("forgetting twice: %v", err)
+	}
+}

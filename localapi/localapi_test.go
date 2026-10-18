@@ -92,6 +92,14 @@ func (f *fakeBackend) SetName(_ context.Context, agent, name string) (Agent, err
 	return Agent{AgentID: agent, Hostname: name}, f.err
 }
 
+func (f *fakeBackend) Disconnect(_ context.Context, confirm string) (Disconnected, error) {
+	return Disconnected{Controller: confirm}, f.err
+}
+
+func (f *fakeBackend) RemoveHeld(_ context.Context, r RemoveHeld) (HeldRemoved, error) {
+	return HeldRemoved{Removed: append(r.IDs, r.From, r.Confirm), Resend: map[bool]int{true: 1}[r.All]}, f.err
+}
+
 func (f *fakeBackend) RemoveAgent(_ context.Context, agent string, force bool, confirm string) (Agent, error) {
 	f.mu.Lock()
 	f.gotForce, f.gotConfirm = force, confirm
@@ -214,6 +222,13 @@ func TestRoutesRoundTrip(t *testing.T) {
 	}
 	if a, err := c.SetName(ctx, "BACKUP PC/1", "Office / stock"); err != nil || a.AgentID != "BACKUP PC/1" || a.Hostname != "Office / stock" {
 		t.Errorf("SetName: %+v %v", a, err)
+	}
+	if d, err := c.Disconnect(ctx, "BACKUP-PC-1"); err != nil || d.Controller != "BACKUP-PC-1" {
+		t.Errorf("Disconnect: %+v %v", d, err)
+	}
+	if r, err := c.RemoveHeld(ctx, RemoveHeld{IDs: []string{"BK-1"}, From: "OLD-PC", All: true, Confirm: "BACKUP-PC-1"}); err != nil ||
+		strings.Join(r.Removed, ",") != "BK-1,OLD-PC,BACKUP-PC-1" || r.Resend != 1 {
+		t.Errorf("RemoveHeld: %+v %v", r, err)
 	}
 }
 

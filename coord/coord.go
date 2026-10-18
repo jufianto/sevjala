@@ -86,6 +86,7 @@ type Node struct {
 	Codes   *pairing.Codes
 	Store   *inventory.Store
 	Log     *slog.Logger
+	Forget  func() error // unpairs this node (lanapi.Server.Forget)
 }
 
 func (n *Node) Code() (localapi.Code, error) {

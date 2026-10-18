@@ -56,7 +56,8 @@ not invent approval requirements or ask again about decisions already made.
 ## Non-negotiables
 
 - Nodes never initiate LAN connections (MariaDB's own replica connection excepted, AD-24);
-  Nodes never delete without an authenticated `DELETE`.
+  Nodes never delete without an authenticated `DELETE`, except at an administrator's request
+  on the node itself (`sevjala backups remove`, AD-25).
 - No backup is reported `verified` before hash match and atomic rename.
 - Keep the CLI usable without the tray or UI; they are clients, not requirements.
 - Every milestone meets the blueprint's "Definition of done", including `docs/protocol.md`

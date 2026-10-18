@@ -263,3 +263,13 @@ func (c *Client) Database(ctx context.Context) (DBConfig, error) {
 	var d DBConfig
 	return d, c.do(ctx, http.MethodGet, "/db", nil, &d)
 }
+
+func (c *Client) Disconnect(ctx context.Context, confirm string) (Disconnected, error) {
+	var d Disconnected
+	return d, c.do(ctx, http.MethodPost, "/disconnect", map[string]string{"confirm": confirm}, &d)
+}
+
+func (c *Client) RemoveHeld(ctx context.Context, r RemoveHeld) (HeldRemoved, error) {
+	var out HeldRemoved
+	return out, c.do(ctx, http.MethodPost, "/held/remove", r, &out)
+}

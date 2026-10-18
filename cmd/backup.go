@@ -232,7 +232,7 @@ On a backup PC: the backups this PC holds.`,
 	}
 	list.Flags().BoolVar(&matrix, "matrix", false, "one column per node")
 	list.Flags().BoolVar(&all, "all", false, "include expired backups (no copy left anywhere)")
-	c.AddCommand(list, newBackupsExportCmd(g))
+	c.AddCommand(list, newBackupsExportCmd(g), newBackupsRemoveCmd(g))
 	return c
 }
 

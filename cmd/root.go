@@ -64,12 +64,15 @@ func (g *globals) client(endpoint string) *localapi.Client {
 // remoteCommands run on the controller's local API (ui: its dashboard) and so work with --controller.
 var remoteCommands = []string{"status", "discover", "pair", "agents", "ping", "db", "backup", "backups", "restore", "policy", "retention", "ui"}
 
+// localOnly are subcommands of remoteCommands that act on this PC only.
+var localOnly = []string{"sevjala agents manager", "sevjala backups remove"}
+
 func checkControllerFlag(c *cobra.Command, g *globals) error {
 	if !g.controller {
 		return nil
 	}
 	path := strings.Fields(c.CommandPath())
-	if len(path) > 1 && slices.Contains(remoteCommands, path[1]) && c.CommandPath() != "sevjala agents manager" {
+	if len(path) > 1 && slices.Contains(remoteCommands, path[1]) && !slices.Contains(localOnly, c.CommandPath()) {
 		return nil
 	}
 	return usagef("--controller works with: %s", strings.Join(remoteCommands, ", "))
@@ -99,7 +102,7 @@ do ask for them. New here? Start with: sevjala setup`,
 		cmds      []*cobra.Command
 	}{
 		{"install", "Install & status:", []*cobra.Command{newStatusCmd(g), newUICmd(g), newTrayCmd(g), newSetupCmd(g), newUpdateCmd(g), newServiceCmd(g), newDoctorCmd(g), newVersionCmd()}},
-		{"connect", "Connect PCs:", []*cobra.Command{newDiscoverCmd(g), newCodeCmd(g), newPairCmd(g), newAgentsCmd(g), newPingCmd(g)}},
+		{"connect", "Connect PCs:", []*cobra.Command{newDiscoverCmd(g), newCodeCmd(g), newPairCmd(g), newAgentsCmd(g), newPingCmd(g), newDisconnectCmd(g)}},
 		{"database", "Database:", []*cobra.Command{newDBCmd(g)}},
 		{"backups", "Backups:", []*cobra.Command{newBackupCmd(g), newBackupsCmd(g), newRestoreCmd(g)}},
 		{"schedule", "Schedules & cleanup:", []*cobra.Command{newPolicyCmd(g), newRetentionCmd(g)}},

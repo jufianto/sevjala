@@ -159,6 +159,22 @@ func NewHandler(b Backend) http.Handler {
 		}
 		reply(w, heldList{Backups: ms}, err)
 	})
+	mux.HandleFunc("POST /held/remove", func(w http.ResponseWriter, r *http.Request) {
+		var req RemoveHeld
+		if decode(w, r, &req) {
+			out, err := b.RemoveHeld(r.Context(), req)
+			reply(w, out, err)
+		}
+	})
+	mux.HandleFunc("POST /disconnect", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Confirm string `json:"confirm"`
+		}
+		if decode(w, r, &req) {
+			d, err := b.Disconnect(r.Context(), req.Confirm)
+			reply(w, d, err)
+		}
+	})
 	mux.HandleFunc("GET /held/{id}", func(w http.ResponseWriter, r *http.Request) {
 		m, rc, err := b.OpenHeld(r.Context(), r.PathValue("id"))
 		if err != nil {

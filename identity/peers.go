@@ -54,3 +54,12 @@ func SaveController(dataDir string, c Peer) error {
 	}
 	return writeFile(filepath.Join(Dir(dataDir), peersFile), append(raw, '\n'), 0o600)
 }
+
+// ForgetController unpairs the node; it is not an error when it was not paired.
+func ForgetController(dataDir string) error {
+	err := os.Remove(filepath.Join(Dir(dataDir), peersFile))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	return err
+}
