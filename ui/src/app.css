@@ -1,3 +1,10 @@
+@font-face {
+  font-family: 'Sevjala Wordmark';
+  src: url('./fonts/plus-jakarta-sans-600-wordmark.woff2') format('woff2');
+  font-weight: 600;
+  font-display: swap;
+}
+
 :root {
   --bg: #f6f7f9;
   --card: #ffffff;
@@ -13,6 +20,7 @@
   --grey: #6b7280;
   --grey-bg: #eef0f3;
   --accent: #2457c5;
+  --brand-ink: #14233b;
   color-scheme: light;
 }
 
@@ -32,6 +40,7 @@
     --grey: #9aa3b2;
     --grey-bg: #252c37;
     --accent: #7aa2ff;
+    --brand-ink: #ffffff;
     color-scheme: dark;
   }
 }
@@ -68,6 +77,15 @@ button {
 
 .muted {
   color: var(--muted);
+}
+
+/* The product name only: Plus Jakarta Sans Semibold, tracked like the lockup. */
+.wordmark {
+  font-family: 'Sevjala Wordmark', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-weight: 600;
+  font-kerning: none;
+  letter-spacing: -0.012em;
+  color: var(--brand-ink);
 }
 
 code {
