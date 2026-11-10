@@ -424,6 +424,8 @@ XTLS/go-win7 patched SDK for the Windows 7 assets.
 - Frontend (Phase 2): Node LTS, Svelte 5, Vite; `build.target = ['chrome109',
   'firefox115']`; output embedded via `//go:embed dist` in `ui/embed.go` (**Amended**,
   see [D-001](./decisions.md)).
+- Brand: palette in `brand/tokens.json`, artwork and builder in `brand/kit/`, rules in
+  [reference/brand.md](./reference/brand.md) (D-108).
 
 **CI (GitHub Actions)**: `test` (unit + integration with a MariaDB service container),
 `build` matrix above, `smoke-win7` manual job that installs the service on a Windows 7 VM
