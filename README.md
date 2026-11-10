@@ -1,4 +1,9 @@
-# Sevjala
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/kit/svg/sevjala-horizontal-white.svg">
+    <img src="brand/kit/svg/sevjala-horizontal-navy.svg" alt="Sevjala" width="400">
+  </picture>
+</h1>
 
 LAN-first database backup for MySQL/MariaDB (XAMPP first), shipped as one Go binary for
 Windows 7+, macOS and Linux. A Controller on the database server dumps, verifies and pushes
