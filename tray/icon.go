@@ -23,7 +23,7 @@ var colors = map[string]color.NRGBA{
 //go:embed brand.png
 var brandPNG []byte
 
-// brandImage is the Sevjala icon at iconSize.
+// brandImage is the Sevjala app tile at iconSize, made by make brand.
 var brandImage = sync.OnceValue(func() *image.NRGBA {
 	src, err := png.Decode(bytes.NewReader(brandPNG))
 	img := image.NewNRGBA(image.Rect(0, 0, iconSize, iconSize))
@@ -34,7 +34,7 @@ var brandImage = sync.OnceValue(func() *image.NRGBA {
 })
 
 // The status dot sits in the bottom-right corner, ringed in white so it
-// stands out on the blue.
+// stands out on the navy tile.
 const (
 	dotX, dotY = iconSize - 8, iconSize - 8
 	dotR       = 6.5

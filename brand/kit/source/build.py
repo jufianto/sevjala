@@ -1,7 +1,8 @@
 """Sevjala brand-kit builder. Run from the repository root: make brand.
 
 Reads brand/tokens.json and the hand-authored geometry, and regenerates every file in
-brand/kit/ (SVGs, PNG previews, review sheets, the guide PDF). A second run without
+brand/kit/ (SVGs, PNG previews, review sheets, the guide PDF) and the icons the app ships
+(see INSTALLED). A second run without
 edits rewrites the same bytes. After an artwork or guide change, render the PDF
 (pdftoppm), inspect every page, then run with --record-review.
 """
@@ -34,6 +35,12 @@ FONT = SOURCE / 'fonts/PlusJakartaSans-600.ttf'
 REGULAR = SOURCE / 'fonts/PlusJakartaSans-400.ttf'
 DATE = '2026-11-10'
 REVIEW = KIT / 'reference/pdf-review.json'
+# The app tile, downscaled from its 2048px render, wherever the app shows an icon.
+INSTALLED = {
+    'winres/icon.png': 256,     # the exe and Start-menu icon (go-winres)
+    'tray/brand.png': 32,       # the tray; tray/icon.go draws the status dot over it
+    'ui/public/icon.png': 64,   # the dashboard's browser-tab icon
+}
 jobs = []
 
 
@@ -307,6 +314,12 @@ def guide(icons):
     c.showPage(); c.save()
 
 
+def install():
+    app = Image.open(KIT/'png/sevjala-app-icon.png')
+    for path, size in INSTALLED.items():
+        app.resize((size, size), Image.Resampling.LANCZOS).save(REPO/path)
+
+
 def verify():
     """Structural checks; a stale PDF review record fails the build."""
     ns = '{http://www.w3.org/2000/svg}'
@@ -353,11 +366,11 @@ def record_review():
 def main():
     pinned()
     vectors(); render(jobs, 'render-jobs.json')
-    icons = tray_samples(); sheets(icons); guide(icons)
+    icons = tray_samples(); sheets(icons); guide(icons); install()
     if '--record-review' in sys.argv:
         record_review()
     verify()
-    print(f'Built {len(jobs)} SVG/PNG pairs, the review sheets and {KIT.relative_to(REPO)}/sevjala-brand-guide.pdf')
+    print(f'Built {len(jobs)} SVG/PNG pairs, the review sheets, {KIT.relative_to(REPO)}/sevjala-brand-guide.pdf and {", ".join(INSTALLED)}')
 
 
 if __name__ == '__main__':
