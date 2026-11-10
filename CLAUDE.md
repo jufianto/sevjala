@@ -50,7 +50,7 @@ not invent approval requirements or ask again about decisions already made.
   Go version; do not assume versions from a previous session.
 - Edit source, not generated output (`dist/`, `ui/dist/`, `ui/node_modules/`, and the brand
   files `make brand` writes: `brand/kit/` outputs, `winres/icon.png`, `tray/brand.png`,
-  `ui/public/icon.png`, `ui/src/lib/mark.svg`, `ui/src/fonts/`).
+  `ui/public/icon.png`, `ui/public/fonts/OFL.txt`, `ui/src/lib/mark.svg`, `ui/src/fonts/`).
 - Brand: every colour comes from `brand/tokens.json` (enforced by `make brand-check`), marks in
   the UI are tinted by CSS, and only the product name is the wordmark. Rules and which file for
   which job: [docs/reference/brand.md](docs/reference/brand.md); recipes and the brand
