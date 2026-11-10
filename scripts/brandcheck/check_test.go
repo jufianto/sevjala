@@ -59,6 +59,11 @@ func TestMutationsFail(t *testing.T) {
 		{"changed tray dot", "tray/icon.go", "0x2e, 0xa0, 0x43", "0x2e, 0xa0, 0x44", "Green is #2EA044, token tray.green is #2EA043"},
 		{"stale mapping", "ui/src/Confirm.svelte", "background: rgb(0 0 0 / 0.45);", "", "stale mapping: ui/src/Confirm.svelte #00000073"},
 		{"hex in docs that is no token", "docs/new.md", "", "Accent #2457C6.", "#2457C6 is not a token value"},
+		{"named colour after a comment", "ui/src/Verdict.svelte", "<style>", "<style>\n  .x { /* a; note: here */ color: tomato; }", `named colour "tomato"`},
+		{"custom property after a comment", "ui/src/app.css", "--accent: #2457c5;", "/* the accent */ --accent: #2457c6;", "--accent is #2457C6, token ui.light.accent is #2457C5"},
+		{"oklch() colour", "ui/src/Dashboard.svelte", "<style>", "<style>\n  .x { color: oklch(0.5 0.1 200); }", "oklch() colour"},
+		{"stale unchecked entry", "brand/tokens.json", `"path": "testbed/"`, `"path": "testbed-gone/"`, "stale unchecked entry: testbed-gone/"},
+		{"token value not a bare hex", "brand/tokens.json", `"value": "#8A8A8A"`, `"value": "x #8A8A8A"`, "token tray.grey: value"},
 		{"token with no role", "brand/tokens.json", `"role": "Tray: unknown status dot (agent not reachable)"`, `"role": ""`, "token tray.grey has no role"},
 	}
 	for _, tt := range tests {
@@ -103,7 +108,9 @@ func TestNormalize(t *testing.T) {
 			t.Errorf("rgb(%s) = %s %v, want %s", args, got, err, want)
 		}
 	}
-	if _, err := normFunc("hsl", "0 0% 0%"); err == nil {
-		t.Error("hsl() is accepted")
+	for _, kind := range []string{"hsl", "oklch", "color"} {
+		if _, err := normFunc(kind, "0 0% 0%"); err == nil {
+			t.Errorf("%s() is accepted", kind)
+		}
 	}
 }
