@@ -6,7 +6,8 @@ brand/kit/ (SVGs, PNG previews, review sheets, the guide PDF) and the icons the 
 edits rewrites the same bytes. After an artwork or guide change, render the PDF
 (pdftoppm), inspect every page, then run with --record-review.
 """
-from importlib.metadata import version
+from datetime import date
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 import hashlib
 import json
@@ -46,7 +47,7 @@ INSTALLED = {
 # wordmark face cut down to the letters of the name.
 UI_MARK = 'ui/src/lib/mark.svg'
 UI_FONT = 'ui/src/fonts/plus-jakarta-sans-600-wordmark.woff2'
-UI_FONT_LICENSE = 'ui/src/fonts/OFL.txt'
+UI_FONT_LICENSE = 'ui/public/fonts/OFL.txt'  # ships in the binary beside the font
 
 jobs = []
 
@@ -68,8 +69,12 @@ def pinned():
     """Byte-identical output needs the pinned renderer and libraries."""
     for line in (SOURCE / 'requirements.txt').read_text().split():
         name, want = line.split('==')
-        if version(name) != want:
-            sys.exit(f'{name} {version(name)} is installed; requirements.txt pins {want}')
+        try:
+            got = version(name)
+        except PackageNotFoundError:
+            got = 'nothing'
+        if got != want:
+            sys.exit(f'{name}: {got} is installed; requirements.txt pins {want} (pip install -r {SOURCE.relative_to(REPO)}/requirements.txt)')
     want = json.loads((SOURCE / 'package.json').read_text())['dependencies']['@resvg/resvg-js']
     got = SOURCE / 'node_modules/@resvg/resvg-js/package.json'
     if not got.exists() or json.loads(got.read_text())['version'] != want:
@@ -133,7 +138,7 @@ def vectors():
         export(f'sevjala-stacked-{label}', body, 1000, 880, 2048)
     app = f'<rect width="1000" height="1000" rx="210" fill="{NAVY}"/>'
     app += f'<g transform="translate(110 100) scale(.8)">{mark(WHITE, "micro", prefix="app")}</g>'
-    export('sevjala-app-icon', app, title='Sevjala app icon - derived proposal')
+    export('sevjala-app-icon', app, title='Sevjala app icon')
 
 
 def render(batch, name):
@@ -307,7 +312,7 @@ def guide(icons):
             img(icons/f'sevjala-tray-{label}-{size}.png', x, y, 40, 40)
             txt(x+50, y+15, f'{size}px', 10, NAVY if label == 'navy' else WHITE)
     c.showPage()
-    page(7, 'DELIVERY', 'One kit, rebuilt from the repository.', 'brand/kit/source/build.py regenerates every file in brand/kit from brand/tokens.json.')
+    page(7, 'DELIVERY', 'One kit, rebuilt from the repository.', 'brand/kit/source/build.py regenerates the artwork, previews, review sheets and this guide from brand/tokens.json.')
     txt(42, 437, 'What is in the kit', 19, NAVY, True)
     y = paragraph(42, 405, 'svg/ - full, compact and micro marks; outlined wordmarks; horizontal and stacked lockups; app tile.', 355, 12)
     y = paragraph(42, y-14, 'png/ - transparent previews of every SVG, 2048px wide (2400px for wordmarks and horizontal lockups).', 355, 12)
@@ -316,7 +321,7 @@ def guide(icons):
     txt(445, 437, 'Using the identity', 19, NAVY, True)
     y = paragraph(445, 405, 'The product backs up databases to other PCs over the LAN. The USB rod is a visual metaphor; it does not imply that a USB disk is required or that USB backup is the primary workflow.', 350, 12)
     y = paragraph(445, y-20, 'Status colours stay separate from the mark: the tray and the dashboard draw the status as a dot beside it.', 350, 12)
-    paragraph(445, y-20, 'Every colour in the code is a token in brand/tokens.json; make brand-check fails when the code drifts from it.', 350, 12)
+    paragraph(445, y-20, 'Colours in the code map to tokens in brand/tokens.json; make brand-check fails on drift and on a colour with no token.', 350, 12)
     txt(42, 78, 'Source: owner-supplied sevjala.jpg (Flow raster concept) / approved '+DATE, 10, MUTED)
     c.showPage(); c.save()
 
@@ -340,11 +345,14 @@ def install():
     font.flavor = 'woff2'
     (REPO/UI_FONT).parent.mkdir(parents=True, exist_ok=True)
     font.save(REPO/UI_FONT)
+    (REPO/UI_FONT_LICENSE).parent.mkdir(parents=True, exist_ok=True)
     (REPO/UI_FONT_LICENSE).write_bytes((SOURCE/'fonts/OFL.txt').read_bytes())
 
 
 def verify():
     """Structural checks; a stale PDF review record fails the build."""
+    if not __debug__:
+        sys.exit('Run build.py without -O: its checks are asserts.')
     ns = '{http://www.w3.org/2000/svg}'
     svgs = sorted((KIT/'svg').glob('*.svg'))
     assert len(svgs) == 22, len(svgs)
@@ -382,7 +390,7 @@ def verify():
 
 def record_review():
     REVIEW.write_text(json.dumps({
-        'date': DATE, 'sha256': sha(KIT/'sevjala-brand-guide.pdf'), 'pages_reviewed': list(range(1, 8)),
+        'date': date.today().isoformat(), 'sha256': sha(KIT/'sevjala-brand-guide.pdf'), 'pages_reviewed': list(range(1, 8)),
         'method': 'pdftoppm render of every page, checked for clipping, overlap, contrast and layout.'}, indent=2)+'\n')
 
 
