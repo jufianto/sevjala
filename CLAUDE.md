@@ -48,7 +48,13 @@ not invent approval requirements or ask again about decisions already made.
   reason in `docs/decisions.md`.
 - Go modules with the committed `go.sum`. Read `go.mod` and `.tool-versions` for the current
   Go version; do not assume versions from a previous session.
-- Edit source, not generated output (`dist/`, `ui/dist/`, `ui/node_modules/`).
+- Edit source, not generated output (`dist/`, `ui/dist/`, `ui/node_modules/`, and the brand
+  files `make brand` writes: `brand/kit/` outputs, `winres/icon.png`, `tray/brand.png`,
+  `ui/public/icon.png`, `ui/src/lib/mark.svg`, `ui/src/fonts/`).
+- Brand: every colour comes from `brand/tokens.json` (enforced by `make brand-check`), marks in
+  the UI are tinted by CSS, and only the product name is the wordmark. Rules and which file for
+  which job: [docs/reference/brand.md](docs/reference/brand.md); recipes and the brand
+  definition of done: the `sevjala-brand` skill (`.claude/skills/sevjala-brand/SKILL.md`).
 - Secrets (DB password, pairing code) live only in the OS keyring. They never appear in config
   files, logs, `/status`, test fixtures, or commits.
 - Releases go through GoReleaser. A build request alone does not authorize a release.
@@ -76,8 +82,10 @@ Package manager is **Go modules**. Until P0 adds the Makefile, use the Go comman
 | `go test ./...` | Unit tests (`-race` on macOS/Linux only) |
 | `make build-all` / `make build-win7` | Release matrix incl. go-win7 assets (from P0) |
 | `make test-integration` | Two in-process agents on loopback + MariaDB container, needs Docker (from P0/M2) |
+| `make brand-check` | Every colour in the code against `brand/tokens.json` (stdlib Go, CI `brand` workflow) |
+| `make brand` | Rebuild `brand/kit/` and the installed icons, mark and wordmark font; needs Python + Node (see `brand/kit/README.md`) |
 
-Verify order after edits: `go vet ./...` → `golangci-lint run` → `go test ./...` →
+Verify order after edits: `make brand-check` → `go vet ./...` → `golangci-lint run` → `go test ./...` →
 `make build-all` before a milestone PR.
 
 ## Stack quirks
@@ -116,6 +124,8 @@ Verify order after edits: `go vet ./...` → `golangci-lint run` → `go test ./
 - **codebase-memory (cbm-personal store)**: once P0 has code, index this repo and use
   `search_graph` / `trace_path` for call chains across packages.
 - **Playwright MCP** (Phase 2 only): verify the `sevjala ui` dashboard in a real browser.
+- **`sevjala-brand` skill** (`.claude/skills/sevjala-brand/`): load it for any change to a colour,
+  the logo, an icon, a font, the dashboard header or `brand/`.
 - Shell commands are rewritten through `rtk` by the global hook; use `rtk proxy <cmd>` when
   raw output is needed (e.g. a failing test's full log).
 
@@ -123,6 +133,8 @@ Verify order after edits: `go vet ./...` → `golangci-lint run` → `go test ./
 - Make the requested change directly and preserve unrelated work.
 - For code changes, run the verify order above. For documentation-only changes, check
   references and consistency.
+- Review rule: a change that touches anything visual meets the brand definition of done in the
+  `sevjala-brand` skill.
 - Update `docs/PROGRESS.md` and `docs/decisions.md` when a milestone or decision changes.
 - Finish with what changed, what was checked, and any material unfinished work, including the
   exit-criterion transcript for a milestone. Say plainly which manual smokes (real Windows 7
@@ -140,7 +152,8 @@ Verify order after edits: `go vet ./...` → `golangci-lint run` → `go test ./
 | ADR dir | `docs/adr/`, `NNNN-<slug>.md` |
 | Functional spec dir | `docs/superpowers/specs/` |
 | Reference docs | `docs/BLUEPRINT.md`, `docs/protocol.md` |
-| Discipline skills | `go-conventions` once P0 code exists; until then the stack is Go stdlib + the blueprint's libraries |
+| Discipline skills | `go-conventions` once P0 code exists; until then the stack is Go stdlib + the blueprint's libraries; `sevjala-brand` for anything visual |
+| Brand reference | `docs/reference/brand.md`, palette `brand/tokens.json` |
 
 ## Delegation and model routing
 
