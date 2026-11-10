@@ -243,6 +243,9 @@ func (s *Server) static(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if path.Ext(name) == ".woff2" {
+		w.Header().Set("Content-Type", "font/woff2") // in neither Go's MIME table nor every Windows registry
+	}
 	http.ServeFileFS(w, r, s.assets, name)
 }
 

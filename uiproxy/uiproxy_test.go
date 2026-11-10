@@ -21,8 +21,9 @@ import (
 )
 
 var assets = fstest.MapFS{
-	"index.html":    {Data: []byte("<!doctype html><title>Sevjala</title>dashboard-index")},
-	"assets/app.js": {Data: []byte("console.log('app')")},
+	"index.html":     {Data: []byte("<!doctype html><title>Sevjala</title>dashboard-index")},
+	"assets/app.js":  {Data: []byte("console.log('app')")},
+	"assets/w.woff2": {Data: []byte("wOF2")},
 }
 
 // fakeAgent answers on a real local endpoint, as the service would.
@@ -165,6 +166,16 @@ func TestTheLinkOpensASessionOnce(t *testing.T) {
 	resp, body = get(t, other, s.URL())
 	if resp.StatusCode != http.StatusForbidden || !strings.Contains(body, "sevjala ui") {
 		t.Errorf("the link used twice: %d %q", resp.StatusCode, body)
+	}
+}
+
+// Windows has no MIME entry for .woff2; the wordmark font must not go out as octet-stream.
+func TestTheWordmarkFontHasAFontType(t *testing.T) {
+	s, cl, _ := start(t, startAgent(t, &fakeAgent{}), assets, time.Minute)
+	login(t, s, cl)
+	resp, _ := get(t, cl, s.Base()+"/assets/w.woff2")
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "font/woff2" {
+		t.Errorf("%d %q", resp.StatusCode, resp.Header.Get("Content-Type"))
 	}
 }
 
