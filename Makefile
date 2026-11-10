@@ -5,7 +5,7 @@ VERSION ?= $(if $(TAG),$(patsubst v%,%,$(TAG))+$(BUILD),dev)
 LDFLAGS := -s -w -X github.com/jufianto/sevjala/cmd.version=$(VERSION)
 RACE := $(if $(filter windows,$(shell go env GOOS)),,-race)
 
-.PHONY: build build-all build-win7 test test-integration lint release ui
+.PHONY: build build-all build-win7 test test-integration lint release ui brand-check
 
 ui:
 	cd ui && npm ci --no-fund --no-audit && npm run build
@@ -22,6 +22,10 @@ test-integration:
 
 lint:
 	golangci-lint run
+
+# Every colour in the code against brand/tokens.json (docs/reference/brand.md).
+brand-check:
+	go run ./scripts/brandcheck
 
 build-all:
 	SEVJALA_VERSION=$(VERSION) goreleaser release --snapshot --clean
