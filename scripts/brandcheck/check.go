@@ -46,7 +46,9 @@ type use struct {
 var (
 	hexRe     = regexp.MustCompile(`#[0-9A-Fa-f]{3,8}\b`)
 	longHexRe = regexp.MustCompile(`#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})\b`)
-	funcRe    = regexp.MustCompile(`\b(rgba?|hsla?)\(([^)]*)\)`)
+	funcRe    = regexp.MustCompile(`\b(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(([^)]*)\)`)
+	tokenRe   = regexp.MustCompile(`^#(?:[0-9A-F]{6}|[0-9A-F]{8})$`)
+	commentRe = regexp.MustCompile(`(?s)/\*.*?\*/`)
 	goNamedRe = regexp.MustCompile(`(\w+):\s*\{\s*0x([0-9A-Fa-f]{2}),\s*0x([0-9A-Fa-f]{2}),\s*0x([0-9A-Fa-f]{2}),\s*0x([0-9A-Fa-f]{2})\s*\}`)
 	goColorRe = regexp.MustCompile(`color\.N?RGBA\{\s*0x([0-9A-Fa-f]{2}),\s*0x([0-9A-Fa-f]{2}),\s*0x([0-9A-Fa-f]{2}),\s*0x([0-9A-Fa-f]{2})\s*\}`)
 	styleRe   = regexp.MustCompile(`(?s)<style[^>]*>(.*?)</style>`)
@@ -91,10 +93,8 @@ func loadPalette(data []byte) (palette, []string) {
 			probs = append(probs, fmt.Sprintf("token %s has no role", name))
 		case (t.Value == "") == (t.Ref == ""):
 			probs = append(probs, fmt.Sprintf("token %s needs exactly one of value and ref", name))
-		case t.Value != "" && !longHexRe.MatchString(t.Value):
-			probs = append(probs, fmt.Sprintf("token %s: value %q is not #RRGGBB or #RRGGBBAA", name, t.Value))
-		case t.Value != "" && t.Value != strings.ToUpper(t.Value):
-			probs = append(probs, fmt.Sprintf("token %s: write %q in upper case", name, t.Value))
+		case t.Value != "" && !tokenRe.MatchString(t.Value):
+			probs = append(probs, fmt.Sprintf("token %s: value %q is not #RRGGBB or #RRGGBBAA in upper case", name, t.Value))
 		}
 		if _, err := p.resolve(name); err != nil {
 			probs = append(probs, err.Error())
@@ -131,13 +131,14 @@ func (p palette) resolve(name string) (string, error) {
 	}
 }
 
-func (p palette) skipped(file string) bool {
+// skipped reports the unchecked entry that exempts file, if any.
+func (p palette) skipped(file string) (string, bool) {
 	for _, u := range p.Unchecked {
 		if file == u.Path || strings.HasSuffix(u.Path, "/") && strings.HasPrefix(file, u.Path) {
-			return true
+			return u.Path, true
 		}
 	}
-	return false
+	return "", false
 }
 
 // check scans files and reports drift, colours with no token and stale mappings.
@@ -149,8 +150,10 @@ func check(fsys fs.FS, files []string, p palette) (probs []string, uses int) {
 		}
 	}
 	used := make([]bool, len(p.Surfaces))
+	exempt := map[string]bool{}
 	for _, f := range files {
-		if p.skipped(f) {
+		if u, ok := p.skipped(f); ok {
+			exempt[u] = true
 			continue
 		}
 		ext := path.Ext(f)
@@ -186,6 +189,11 @@ func check(fsys fs.FS, files []string, p palette) (probs []string, uses int) {
 	for i, s := range p.Surfaces {
 		if !used[i] {
 			probs = append(probs, fmt.Sprintf("stale mapping: %s %s (token %s) is not in the code", s.File, s.Key, s.Token))
+		}
+	}
+	for _, u := range p.Unchecked {
+		if !exempt[u.Path] {
+			probs = append(probs, fmt.Sprintf("stale unchecked entry: %s matches no file", u.Path))
 		}
 	}
 	sort.Strings(probs)
@@ -255,6 +263,9 @@ func scanLiterals(file, src string, re *regexp.Regexp, funcs bool) ([]use, []str
 	}
 	if funcs {
 		for _, m := range funcRe.FindAllStringSubmatchIndex(src, -1) {
+			if strings.Contains(src[m[4]:m[5]], "var(") {
+				continue // built from custom properties, which are checked where they are set
+			}
 			v, err := normFunc(src[m[2]:m[3]], src[m[4]:m[5]])
 			if err != nil {
 				probs = append(probs, fmt.Sprintf("%s:%d: %v", file, lineAt(src, m[0]), err))
@@ -283,6 +294,14 @@ func scanGo(file, src string) ([]use, []string) {
 // scanCSS keys a custom property by its name (with @dark inside a dark colour-scheme
 // block) and any other colour by its value; named colours are always reported.
 func scanCSS(file, css string, baseLine int) ([]use, []string) {
+	css = commentRe.ReplaceAllStringFunc(css, func(c string) string {
+		return strings.Map(func(r rune) rune {
+			if r == '\n' {
+				return r
+			}
+			return ' '
+		}, c)
+	})
 	var found []use
 	var probs []string
 	var stack []string
@@ -373,7 +392,7 @@ func normHex(lit string) string {
 }
 
 func normFunc(kind, args string) (string, error) {
-	if strings.HasPrefix(kind, "hsl") {
+	if !strings.HasPrefix(kind, "rgb") {
 		return "", fmt.Errorf("%s() colour: write it as hex or rgb() so brand/tokens.json can check it", kind)
 	}
 	parts := strings.FieldsFunc(args, func(r rune) bool { return r == ',' || r == '/' || r == ' ' || r == '\t' })
