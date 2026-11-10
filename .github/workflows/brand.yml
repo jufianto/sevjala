@@ -1,6 +1,6 @@
 name: brand
 
-# Runs on every push and pull request, docs included: Markdown colours are checked too.
+# Runs on every pull request and push to master, docs included: Markdown colours are checked too.
 on:
   push:
     branches: [master]

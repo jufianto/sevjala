@@ -64,11 +64,11 @@ dashboard draw the status as a dot beside the mark, never by recolouring the mar
 
 | Job | File | Made by |
 |---|---|---|
-| Exe and Start-menu icon (Windows) | `winres/icon.png`, 256 px app tile; go-winres builds the exe icon from it at release | `make brand` |
+| Exe and Start-menu icon (Windows) | `winres/icon.png`, 256 px app tile; at release go-winres turns it into the exe's icon at 16, 32, 48, 64 and 256 px | `make brand` |
 | Tray icon | `tray/brand.png`, 32 px app tile; `tray/icon.go` draws the status dot, ringed in white, in its bottom-right corner | `make brand` |
 | Dashboard tab icon | `ui/public/icon.png`, 64 px app tile, linked from `ui/index.html` | `make brand` |
 | Dashboard header mark | `ui/src/lib/mark.svg`, the micro mark painted in `currentColor`, inlined by `App.svelte` | `make brand` |
-| Dashboard wordmark font | `ui/src/fonts/plus-jakarta-sans-600-wordmark.woff2` (only the letters S, e, v, j, a, l) with `OFL.txt` | `make brand` |
+| Dashboard wordmark font | `ui/src/fonts/plus-jakarta-sans-600-wordmark.woff2` (only the letters S, e, v, j, a, l); its licence `ui/public/fonts/OFL.txt` | `make brand` |
 | README heading | `brand/kit/svg/sevjala-horizontal-navy.svg`, and `-white` for GitHub's dark theme, at 400 px | the kit |
 | Anything else (slides, a site, print) | the SVG of the right form and ink from `brand/kit/svg/`; the PNG preview if the tool cannot do SVG masks | the kit |
 
@@ -107,8 +107,10 @@ The other groups in `brand/tokens.json`:
   Internet. It is served as its own file from `/assets/`, because the dashboard's CSP
   (`default-src 'self'`) blocks `data:` fonts; `ui/vite.config.js` sets `assetsInlineLimit: 0`
   for that reason.
-- Licence: SIL Open Font License 1.1, with no reserved font name. The licence ships beside
-  every copy: `brand/kit/source/fonts/OFL.txt` and `ui/src/fonts/OFL.txt`.
+- Licence: SIL Open Font License 1.1, with no reserved font name. The full text sits beside
+  the source fonts (`brand/kit/source/fonts/OFL.txt`) and ships in the binary as
+  `ui/public/fonts/OFL.txt` (served at `/fonts/OFL.txt`); the subset also keeps the copyright
+  and licence URL in its own name table. `uiproxy` serves the font as `font/woff2`.
 
 ## Per surface
 
@@ -146,28 +148,46 @@ replaces `brand/tokens.json`, and those places would read the name from it.
 ## Checks
 
 **`make brand-check`** (`go run ./scripts/brandcheck`, stdlib only) runs in the `brand` CI
-workflow on every push and pull request, documentation included, and its tests run with
-`go test ./...`. It reads tracked files plus new files git does not ignore, and fails on:
+workflow on every pull request and every push to `master`, documentation included, and its
+tests run with `go test ./...`. It reads tracked files plus new files git does not ignore, and
+fails on:
 
 - a colour that differs from its token (drift), naming the file, line, key and token;
 - a colour that no `surfaces` entry maps (a colour with no token);
-- a `surfaces` entry the code no longer has (stale), a token with no role, a broken `ref`;
+- a `surfaces` entry the code no longer has, or an `unchecked` entry that matches no file
+  (both stale); a token with no role, a value that is not upper-case `#RRGGBB`/`#RRGGBBAA`, a
+  broken `ref`;
 - in Markdown, a hex colour that is not the value of some token;
-- an `hsl()` colour (write hex or `rgb()`), and a named CSS colour such as `white` in a colour
-  property of a `.css` file or a `<style>` block.
+- `hsl()`, `hwb()`, `lab()`, `lch()`, `oklab()`, `oklch()` and `color()` colours (write hex or
+  `rgb()`), and a named CSS colour such as `white` in a colour property of a `.css` file or a
+  `<style>` block, comments included.
 
 What it reads: hex colours (3, 4, 6 or 8 digits) and `rgb()`/`rgba()` in `.css`, `.svelte`,
 `.html`, `.php`, `.js`, `.mjs` and `.svg`; in `.css` and in `<style>` blocks, custom properties
 by name, per theme (`@dark` inside `prefers-color-scheme: dark`); in `.go`,
-`Name: {0xRR, 0xGG, 0xBB, 0xAA}` and `color.NRGBA{…}`/`color.RGBA{…}` literals plus any 6- or
-8-digit hex; in `.py` and `.md`, 6- and 8-digit hex. It cannot see colours inside PNGs, colours
-in other file types (JSON, YAML), Go colours written with field names, or named CSS colours in
-inline `style` attributes or outside colour properties. The named exceptions are in `unchecked` in `brand/tokens.json`, each with its reason:
+`Name: {0xRR, 0xGG, 0xBB, 0xAA}` and `color.NRGBA{0x…}`/`color.RGBA{0x…}` literals plus any 6- or
+8-digit hex; in `.py` and `.md`, 6- and 8-digit hex. `rgb()` built from `var(--…)` is skipped:
+the custom properties are checked where they are set.
+
+What it cannot see, so review it by eye:
+
+- colours inside PNGs, and colours in other file types (JSON, YAML);
+- named colours in markup: SVG attributes (`fill="red"`), inline `style` attributes, Svelte
+  `style:` directives, JS strings;
+- Go colours written in decimal or with field names (`color.RGBA{255, 0, 0, 255}`), the
+  `color.White`/`color.Black` variables, and 3-digit hex in Go files;
+- a second use of an already-mapped value in the same file: a colour mapped by its value
+  (`#FFFFFF` in `Dashboard.svelte`) may appear any number of times in that file.
+
+It can also report a hex lookalike that is not a colour: an id or URL fragment made only of the
+letters a to f and digits, three, four, six or eight long (in `url(#…)`, say). Rename the id. The named exceptions are in `unchecked` in `brand/tokens.json`, each
+with its reason:
 the token file itself, the checker's own fixtures, the 2026-11-09 kit notes (a historical
 snapshot) and `testbed/` (a stand-in customer site, not a Sevjala surface).
 
 **`make brand`** rebuilds `brand/kit/` and every file in the "Made by `make brand`" rows. With
 the pinned Python packages and renderer it writes the same bytes, so after a rebuild with no
 edits `git status` stays clean; the builder stops if a package differs from its pin, and stops
-when the guide PDF changed without a recorded review. It needs Python and Node, so CI does not
-run it.
+when the guide PDF changed without a recorded review. `--record-review` only records that
+someone looked at every page; run it after looking, never to get past the gate. The builder
+needs Python and Node, so CI does not run it.

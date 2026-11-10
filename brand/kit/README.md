@@ -26,7 +26,8 @@ git status --short    # empty: a rebuild without edits writes the same bytes
 `build.py` stops if an installed package differs from its pin, since other versions encode
 different bytes. It also stops when the guide PDF changed since its last review: render it with
 `pdftoppm -r 80 -png brand/kit/sevjala-brand-guide.pdf /tmp/guide`, look at all seven pages,
-then run `python3 brand/kit/source/build.py --record-review`.
+then run `python3 brand/kit/source/build.py --record-review`. That flag only records that the
+pages were looked at; it is not a way past the gate.
 
 The fonts are licensed under the SIL Open Font License 1.1 (`source/fonts/OFL.txt`). The
 artwork follows the owner's rights in the original concept; this kit is not a trademark

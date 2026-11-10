@@ -14,7 +14,8 @@ Three facts drive every recipe:
   with a role; `make brand-check` fails on drift and on a colour with no token.
 - `make brand` (`brand/kit/source/build.py`) writes the kit and every installed brand file:
   `winres/icon.png`, `tray/brand.png`, `ui/public/icon.png`, `ui/src/lib/mark.svg`,
-  `ui/src/fonts/*.woff2`. Never hand-edit those; change the source and rebuild.
+  `ui/src/fonts/*.woff2`, `ui/public/fonts/OFL.txt`. Never hand-edit those; change the source and
+  rebuild.
 - Only the product name is the wordmark. Labels, hostnames and running text stay in the UI font.
 
 ## Recipes
@@ -22,7 +23,9 @@ Three facts drive every recipe:
 **Dashboard colour (`ui/`).** Use an existing `var(--…)` from `ui/src/app.css`. For a new one:
 add the token (with a role) to `brand/tokens.json`, add the custom property to both theme blocks
 in `app.css`, map `--name` and `--name@dark` in `surfaces`, run `make brand-check`. Never write a
-hex, `rgb()` or named colour in a component; the check reports it.
+hex, `rgb()` or named colour in a component. The check reports most of them, but not named
+colours in markup (`fill="red"`, `style="…"`, `style:` directives) nor a second use of a value
+already mapped in that file, so read the diff for those ("Checks" in brand.md lists every gap).
 
 **Dashboard mark or wordmark.** The header imports `ui/src/lib/mark.svg?raw` and inlines it; it
 paints in `currentColor`, so tint it with `color: var(--brand-ink)`, never with a baked image or a
