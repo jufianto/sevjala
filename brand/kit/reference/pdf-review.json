@@ -1,0 +1,14 @@
+{
+  "date": "2026-11-10",
+  "sha256": "3f79c9e168f8bebbdf7a15941ce60a6b24b4a17a4f2eabdf3e69446f436a975e",
+  "pages_reviewed": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "method": "pdftoppm render of every page, checked for clipping, overlap, contrast and layout."
+}
