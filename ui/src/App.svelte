@@ -10,6 +10,7 @@
   import Database from './Database.svelte'
   import Logs from './Logs.svelte'
   import { parse } from './lib/route.js'
+  import mark from './lib/mark.svg?raw'
 
   const nav = [
     ['', 'Dashboard'],
@@ -39,11 +40,11 @@
 <header>
   <div class="brand">
     <div class="logo" aria-hidden="true">
-      <img src="/icon.png" width="32" height="32" alt="" />
+      <span class="mark">{@html mark}</span>
       <span class="dot" style:background="var(--{v.color})"></span>
     </div>
     <div>
-      <h1>Sevjala</h1>
+      <h1 class="wordmark">Sevjala</h1>
       {#if st}<div class="muted small">{st.hostname} · {controller ? 'controller (the database PC)' : 'backup PC'}</div>{/if}
     </div>
   </div>
@@ -115,8 +116,14 @@
     width: 32px;
     height: 32px;
   }
-  .logo img {
+  .mark {
     display: block;
+    color: var(--brand-ink);
+  }
+  .mark :global(svg) {
+    display: block;
+    width: 32px;
+    height: 32px;
   }
   .dot {
     position: absolute;

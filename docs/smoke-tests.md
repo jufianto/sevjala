@@ -522,6 +522,24 @@ splash stopped anything Explorer started (the Start menu entry and the Run key a
 stdout; `TestNewConsoleIsTheChildsConsole` reproduced it on the PC). After `sevjala update` the
 running tray restarted itself on the new exe, and "Open status" kept its window open.
 
+## Brand identity: the new icon on real Windows (D-108)
+
+Already covered without real PCs: `go test ./tray/` (the dot sits on the tile, the corner stays
+transparent), `go tool go-winres make` accepts `winres/icon.png`, `make brand-check`, and the
+dashboard header and tab in Chrome on macOS, light and dark.
+
+Still to do, after `sevjala update` with a build from this change:
+
+1. **Exe and Start menu:** Explorer shows the navy tile for `sevjala.exe` at small, medium and
+   large icon sizes, and the Start menu entry "Sevjala" shows it too (Windows may cache the old
+   icon until the next sign-in).
+2. **Tray, Windows 10/11:** the tray icon is the navy tile with the status dot in its corner, on
+   the dark taskbar and with the light theme (Settings → Personalization → Colors); green,
+   yellow, red and grey dots are told apart.
+3. **Tray, Windows 7:** the same on the Aero and the Classic themes.
+4. **Dashboard in a Windows 7 browser (Chrome 109, Firefox 115):** the header shows the mark in
+   navy (white in dark mode) and "Sevjala" in Plus Jakarta Sans; the tab shows the navy tile.
+
 ## M7 — every operation from the dashboard (D-089..D-094)
 
 Exit criterion: every CLI operation on the controller is doable from the browser, by a normal
